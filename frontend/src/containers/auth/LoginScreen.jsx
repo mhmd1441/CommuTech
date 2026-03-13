@@ -69,9 +69,7 @@ export default function LoginScreen({ navigation }) {
       // await authApi.login({ email, password });
 
       await new Promise((r) => setTimeout(r, 1200));
-
-      // Example: navigate to main app
-      // navigation.replace("Main");
+      navigation.replace("CitizenHome");
     } catch (e) {
       setError("Login failed. Please try again.");
     } finally {
@@ -148,7 +146,7 @@ export default function LoginScreen({ navigation }) {
 
           <Pressable
             onPress={() => {
-              // navigation.navigate("ForgotPassword");
+              navigation.navigate("ForgotPassword");
             }}
             style={styles.forgot}
           >
