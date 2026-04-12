@@ -14,7 +14,6 @@ import MyReportsScreen from "./src/containers/citizen/MyReportsScreen";
 import IssueDetailsScreen from "./src/containers/citizen/IssueDetailsScreen";
 import ProfileScreen from "./src/containers/citizen/ProfileScreen";
 import NotificationsScreen from "./src/containers/citizen/NotificationsScreen";
-import NavBarr from "./src/containers/shared/BottomNav.jsx";
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -27,7 +26,6 @@ export default function App() {
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="ForgotPassword"component={ForgotPasswordScreen}/>
           <Stack.Screen name="CitizenHome" component={CitizenHomeScreen} />
-          <Stack.Screen name="CreateIssue" component={CreateIssueScreen} />
           <Stack.Screen name="MyReports" component={MyReportsScreen} />
           <Stack.Screen name="IssueDetails" component={IssueDetailsScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
