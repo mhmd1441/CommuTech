@@ -16,6 +16,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { authApi } from "../../services/api";
 
 const COLORS = {
   navy: "#19405F",
@@ -68,13 +69,14 @@ export default function LoginScreen({ navigation }) {
     try {
       setLoading(true);
 
-      // TODO: Replace with real API call
-      // await authApi.login({ email, password });
+      await authApi.login({
+        email: email.trim(),
+        password,
+      });
 
-      await new Promise((r) => setTimeout(r, 1200));
       navigation.replace("CitizenHome");
     } catch (e) {
-      setError("Login failed. Please try again.");
+      setError(e.message || "Login failed. Please try again.");
     } finally {
       setLoading(false);
     }

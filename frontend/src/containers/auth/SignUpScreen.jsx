@@ -12,6 +12,7 @@ import {
   TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { authApi } from "../../services/api";
 
 const COLORS = {
   navy: "#19405F",
@@ -49,6 +50,7 @@ export default function SignupScreen({ navigation }) {
   const [secure, setSecure] = useState(true);
   const [secure2, setSecure2] = useState(true);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const signupIssues = useMemo(() => {
     const e = email.trim();
@@ -83,10 +85,26 @@ export default function SignupScreen({ navigation }) {
       return;
     }
 
-    // TODO: call your backend API later
-    // await authApi.register({ firstName, lastName, email, phone, gov, address, password })
+    try {
+      setLoading(true);
 
-    navigation.goBack();
+      await authApi.register({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        city: gov,
+        address: address.trim(),
+        password,
+        confirmPassword,
+      });
+
+      navigation.replace("CitizenHome");
+    } catch (e) {
+      setError(e.message || "Could not create account. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onPhoneChange = (val) => {
@@ -243,13 +261,13 @@ export default function SignupScreen({ navigation }) {
 
           <Pressable
             onPress={onSignup}
-            disabled={!canSubmit}
+            disabled={!canSubmit || loading}
             style={[
               styles.signupBtn,
-              !canSubmit && { opacity: 0.55 },
+              (!canSubmit || loading) && { opacity: 0.55 },
             ]}
           >
-            <Text style={styles.signupBtnText}>Create account</Text>
+            <Text style={styles.signupBtnText}>{loading ? "Creating account..." : "Create account"}</Text>
           </Pressable>
 
           <View style={styles.loginRow}>
