@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   RefreshControl,
   StatusBar,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,7 +71,7 @@ const MY_ISSUES = [
   {
     id: '3',
     title: 'Sewage overflow on main road',
-    description: 'Raw sewage spilling onto the road — strong odor and health hazard.',
+    description: 'Raw sewage spilling onto the road - strong odor and health hazard.',
     category: 'Sanitation',
     status: 'resolved',
     priority: 'high',
@@ -101,6 +102,12 @@ const TABS = [
   { id: 'in-progress', label: 'In Progress' },
   { id: 'resolved', label: 'Resolved' },
   { id: 'rejected', label: 'Rejected' },
+];
+
+const SORT_OPTIONS = [
+  { id: 'newest', label: 'Newest first', icon: 'time-outline' },
+  { id: 'priority', label: 'Highest priority', icon: 'flame-outline' },
+  { id: 'status', label: 'Group by status', icon: 'layers-outline' },
 ];
 
 // ─── Issue Card ───────────────────────────────────────────────────────────────
@@ -192,10 +199,28 @@ const StatsBar = ({ issues }) => {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function MyReportsScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('all');
+  const [sortMode, setSortMode] = useState('newest');
+  const [sortModalVisible, setSortModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const filtered =
-    activeTab === 'all' ? MY_ISSUES : MY_ISSUES.filter((i) => i.status === activeTab);
+  const filtered = useMemo(() => {
+    const priorityWeight = { high: 3, medium: 2, low: 1 };
+    const statusWeight = { open: 1, 'in-progress': 2, resolved: 3, rejected: 4 };
+    const base =
+      activeTab === 'all' ? MY_ISSUES : MY_ISSUES.filter((i) => i.status === activeTab);
+
+    return [...base].sort((a, b) => {
+      if (sortMode === 'priority') {
+        return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
+      }
+      if (sortMode === 'status') {
+        return (statusWeight[a.status] || 99) - (statusWeight[b.status] || 99);
+      }
+      return Number(b.id) - Number(a.id);
+    });
+  }, [activeTab, sortMode]);
+
+  const sortLabel = SORT_OPTIONS.find((option) => option.id === sortMode)?.label || 'Newest first';
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -215,10 +240,11 @@ export default function MyReportsScreen({ navigation }) {
           <Text style={styles.headerTitle}>My Reports</Text>
           <Text style={styles.headerSub}>{MY_ISSUES.length} issues submitted</Text>
         </View>
-        <TouchableOpacity style={styles.filterBtn}>
+        <TouchableOpacity style={styles.filterBtn} onPress={() => setSortModalVisible(true)}>
           <Ionicons name="funnel-outline" size={18} color={C.navy} />
         </TouchableOpacity>
       </View>
+      <Text style={styles.sortHint}>Sorted by {sortLabel}</Text>
 
       {/* Stats */}
       <StatsBar issues={MY_ISSUES} />
@@ -270,7 +296,46 @@ export default function MyReportsScreen({ navigation }) {
           </View>
         }
       />
-      <BottomNav navigation={navigation} activeRoute="CitizenHome" />
+      <Modal
+        visible={sortModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setSortModalVisible(false)}
+        >
+          <View style={styles.sortSheet}>
+            <Text style={styles.sheetTitle}>Sort reports</Text>
+            {SORT_OPTIONS.map((option) => {
+              const active = option.id === sortMode;
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[styles.sortOption, active && styles.sortOptionActive]}
+                  onPress={() => {
+                    setSortMode(option.id);
+                    setSortModalVisible(false);
+                  }}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={active ? C.navy : C.muted}
+                  />
+                  <Text style={[styles.sortOptionText, active && styles.sortOptionTextActive]}>
+                    {option.label}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={18} color={C.green} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      <BottomNav navigation={navigation} activeTab="MyReports" />
     </SafeAreaView>
   );
 }
@@ -289,6 +354,14 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 22, fontWeight: '800', color: C.navy, letterSpacing: -0.5 },
   headerSub: { fontSize: 12, color: C.muted, marginTop: 2 },
+  sortHint: {
+    marginHorizontal: 20,
+    marginTop: -8,
+    marginBottom: 10,
+    color: C.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   filterBtn: {
     width: 38,
     height: 38,
@@ -415,4 +488,31 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 15, fontWeight: '700', color: C.text },
   emptyHint: { fontSize: 12, color: C.muted, textAlign: 'center', paddingHorizontal: 40 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  sortSheet: {
+    backgroundColor: C.card,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 8,
+    marginBottom: 92,
+  },
+  sheetTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginBottom: 4 },
+  sortOption: {
+    minHeight: 48,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sortOptionActive: { backgroundColor: C.navy + '10' },
+  sortOptionText: { flex: 1, color: C.muted, fontWeight: '700' },
+  sortOptionTextActive: { color: C.navy, fontWeight: '900' },
 });

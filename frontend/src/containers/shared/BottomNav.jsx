@@ -59,16 +59,18 @@ export default function BottomNav({ navigation, activeTab = "Home" }) {
                 pressed && { opacity: 0.8 },
               ]}
             >
+              {active && <View style={styles.activeRail} />}
               <View
                 style={[
                   styles.iconBox,
                   active && styles.iconBoxActive,
                   tab.accent && !active && styles.iconBoxAccent,
+                  tab.accent && styles.reportIconBox,
                 ]}
               >
                 <Ionicons
                   name={tab.icon}
-                  size={22}
+                  size={tab.accent ? 25 : 21}
                   color={
                     active
                       ? "#FFFFFF"
@@ -78,7 +80,6 @@ export default function BottomNav({ navigation, activeTab = "Home" }) {
                   }
                 />
               </View>
-
               <Text
                 style={[
                   styles.tabLabel,
@@ -109,26 +110,35 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     backgroundColor: COLORS.bg,
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 6,
     justifyContent: "space-around",
     shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
   tabButton: {
     alignItems: "center",
     justifyContent: "center",
     minWidth: 70,
+    position: "relative",
+  },
+  activeRail: {
+    position: "absolute",
+    top: -9,
+    width: 26,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: COLORS.navy,
   },
   iconBox: {
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
@@ -138,8 +148,16 @@ const styles = StyleSheet.create({
   iconBoxActive: {
     backgroundColor: COLORS.navy,
   },
+  reportIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    marginTop: -8,
+  },
   iconBoxAccent: {
     backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
   },
   tabLabel: {
     fontSize: 12,

@@ -9,6 +9,8 @@ import {
   Image,
   Alert,
   StatusBar,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +38,9 @@ const USER = {
   avatar: 'https://i.pravatar.cc/150?img=52',
   joinDate: 'March 2025',
   role: 'Citizen',
+  // Future backend shape:
+  // roles: ['citizen', 'worker'],
+  // canSwitchToWorker: roles.includes('citizen') && roles.includes('worker'),
   stats: {
     submitted: 7,
     resolved: 3,
@@ -100,6 +105,18 @@ const MenuToggle = ({ icon, iconColor = C.navy, label, value, onToggle }) => (
 function ProfileScreen({ navigation }) {
   const [notifEnabled, setNotifEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
+  const [activeModal, setActiveModal] = useState(null);
+  const [personalInfo, setPersonalInfo] = useState({
+    name: USER.name,
+    email: USER.email,
+    phone: USER.phone,
+  });
+  const [district, setDistrict] = useState(USER.district);
+  const [passwordForm, setPasswordForm] = useState({
+    current: '',
+    next: '',
+    confirm: '',
+  });
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -112,6 +129,19 @@ function ProfileScreen({ navigation }) {
     ]);
   };
 
+  // Future worker mode logic, after Laravel auth/roles are connected:
+  //
+  // const canSwitchToWorker =
+  //   authUser?.roles?.includes('citizen') && authUser?.roles?.includes('worker');
+  //
+  // const handleSwitchToWorkerMode = () => {
+  //   // Secure option: ask worker to re-authenticate before opening worker screens.
+  //   navigation.navigate('WorkerLogin');
+  //
+  //   // Simpler option later:
+  //   // navigation.reset({ index: 0, routes: [{ name: 'WorkerHome' }] });
+  // };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
@@ -119,7 +149,7 @@ function ProfileScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity style={styles.editBtn}>
+        <TouchableOpacity style={styles.editBtn} onPress={() => setActiveModal('personal')}>
           <Ionicons name="create-outline" size={18} color={C.navy} />
           <Text style={styles.editText}>Edit</Text>
         </TouchableOpacity>
@@ -136,8 +166,8 @@ function ProfileScreen({ navigation }) {
             </View>
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{USER.name}</Text>
-            <Text style={styles.userEmail}>{USER.email}</Text>
+            <Text style={styles.userName}>{personalInfo.name}</Text>
+            <Text style={styles.userEmail}>{personalInfo.email}</Text>
             <View style={styles.userMeta}>
               <View style={styles.rolePill}>
                 <View style={styles.roleDot} />
@@ -145,7 +175,7 @@ function ProfileScreen({ navigation }) {
               </View>
               <View style={styles.districtPill}>
                 <Ionicons name="location-outline" size={10} color={C.muted} />
-                <Text style={styles.districtText}>{USER.district}</Text>
+                <Text style={styles.districtText}>{district}</Text>
               </View>
             </View>
           </View>
@@ -168,20 +198,36 @@ function ProfileScreen({ navigation }) {
             icon="person-circle-outline"
             label="Personal Info"
             value="Update"
-            onPress={() => {}}
+            onPress={() => setActiveModal('personal')}
           />
+          {/*
+            Future worker-mode entry:
+
+            {canSwitchToWorker && (
+              <>
+                <MenuDivider />
+                <MenuItem
+                  icon="briefcase-outline"
+                  iconColor={C.orange}
+                  label="Switch to Worker Mode"
+                  value="Secure login"
+                  onPress={handleSwitchToWorkerMode}
+                />
+              </>
+            )}
+          */}
           <MenuDivider />
           <MenuItem
             icon="location-outline"
             label="Default District"
-            value={USER.district}
-            onPress={() => {}}
+            value={district}
+            onPress={() => setActiveModal('district')}
           />
           <MenuDivider />
           <MenuItem
             icon="lock-closed-outline"
             label="Change Password"
-            onPress={() => {}}
+            onPress={() => setActiveModal('password')}
           />
         </MenuGroup>
 
@@ -263,9 +309,130 @@ function ProfileScreen({ navigation }) {
 
         {/* Member since */}
         <Text style={styles.memberSince}>Member since {USER.joinDate}</Text>
-        <BottomNav navigation={navigation} activeRoute="CitizenHome" />
         <View style={{ height: 100 }} />
       </ScrollView>
+      <Modal
+        visible={!!activeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActiveModal(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {activeModal === 'personal'
+                  ? 'Personal Info'
+                  : activeModal === 'district'
+                  ? 'Default District'
+                  : 'Change Password'}
+              </Text>
+              <TouchableOpacity style={styles.modalClose} onPress={() => setActiveModal(null)}>
+                <Ionicons name="close" size={20} color={C.navy} />
+              </TouchableOpacity>
+            </View>
+
+            {activeModal === 'personal' && (
+              <View style={styles.modalBody}>
+                <Text style={styles.modalHint}>
+                  Editable view only. Later this will save through the Laravel API.
+                </Text>
+                <Text style={styles.inputLabel}>Full name</Text>
+                <TextInput
+                  value={personalInfo.name}
+                  onChangeText={(name) => setPersonalInfo((prev) => ({ ...prev, name }))}
+                  style={styles.modalInput}
+                />
+                <Text style={styles.inputLabel}>Email</Text>
+                <TextInput
+                  value={personalInfo.email}
+                  onChangeText={(email) => setPersonalInfo((prev) => ({ ...prev, email }))}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={styles.modalInput}
+                />
+                <Text style={styles.inputLabel}>Phone</Text>
+                <TextInput
+                  value={personalInfo.phone}
+                  onChangeText={(phone) => setPersonalInfo((prev) => ({ ...prev, phone }))}
+                  keyboardType="phone-pad"
+                  style={styles.modalInput}
+                />
+              </View>
+            )}
+
+            {activeModal === 'district' && (
+              <View style={styles.modalBody}>
+                {['Hamra, Beirut', 'Achrafieh, Beirut', 'Jounieh', 'Tripoli', 'Saida'].map(
+                  (option) => {
+                    const selected = option === district;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        style={[styles.districtOption, selected && styles.districtOptionActive]}
+                        onPress={() => {
+                          setDistrict(option);
+                          setActiveModal(null);
+                        }}
+                      >
+                        <Ionicons
+                          name={selected ? 'radio-button-on' : 'radio-button-off'}
+                          size={18}
+                          color={selected ? C.navy : C.muted}
+                        />
+                        <Text
+                          style={[
+                            styles.districtOptionText,
+                            selected && styles.districtOptionTextActive,
+                          ]}
+                        >
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                )}
+              </View>
+            )}
+
+            {activeModal === 'password' && (
+              <View style={styles.modalBody}>
+                <Text style={styles.modalHint}>
+                  Frontend view only. Backend validation will confirm the real current password.
+                </Text>
+                <Text style={styles.inputLabel}>Current password</Text>
+                <TextInput
+                  value={passwordForm.current}
+                  onChangeText={(current) => setPasswordForm((prev) => ({ ...prev, current }))}
+                  secureTextEntry
+                  style={styles.modalInput}
+                />
+                <Text style={styles.inputLabel}>New password</Text>
+                <TextInput
+                  value={passwordForm.next}
+                  onChangeText={(next) => setPasswordForm((prev) => ({ ...prev, next }))}
+                  secureTextEntry
+                  style={styles.modalInput}
+                />
+                <Text style={styles.inputLabel}>Confirm new password</Text>
+                <TextInput
+                  value={passwordForm.confirm}
+                  onChangeText={(confirm) => setPasswordForm((prev) => ({ ...prev, confirm }))}
+                  secureTextEntry
+                  style={styles.modalInput}
+                />
+              </View>
+            )}
+
+            {activeModal !== 'district' && (
+              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => setActiveModal(null)}>
+                <Text style={styles.modalPrimaryText}>Done</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+      <BottomNav navigation={navigation} activeTab="Profile" />
     </SafeAreaView>
   );
 }
@@ -400,5 +567,71 @@ const styles = StyleSheet.create({
   menuDivider: { height: 1, backgroundColor: C.border, marginLeft: 60 },
 
   memberSince: { textAlign: 'center', fontSize: 12, color: C.muted, marginTop: 8 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.3)',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: C.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 16,
+    marginBottom: 92,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '800', color: C.text },
+  modalClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.bg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  modalBody: { gap: 9 },
+  modalHint: { color: C.muted, fontSize: 12, fontWeight: '600', lineHeight: 18 },
+  inputLabel: { color: C.muted, fontSize: 12, fontWeight: '800', marginTop: 4 },
+  modalInput: {
+    height: 46,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 12,
+    color: C.text,
+    backgroundColor: '#fff',
+  },
+  districtOption: {
+    minHeight: 48,
+    borderRadius: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    backgroundColor: C.bg,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  districtOptionActive: { backgroundColor: C.navy + '10', borderColor: C.navy + '35' },
+  districtOptionText: { flex: 1, color: C.muted, fontWeight: '700' },
+  districtOptionTextActive: { color: C.navy, fontWeight: '900' },
+  modalPrimaryBtn: {
+    marginTop: 14,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: C.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalPrimaryText: { color: '#fff', fontWeight: '900', fontSize: 15 },
 });
 export default ProfileScreen;

@@ -7,10 +7,13 @@ import {
   Pressable,
   Image,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
   Animated,
   Easing,
+  TouchableWithoutFeedback,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -82,9 +85,11 @@ export default function LoginScreen({ navigation }) {
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={styles.topGlow} />
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.touchArea}>
+          <View style={styles.topGlow} />
 
-      <View style={styles.container}>
+          <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>CommuTech</Text>
           <Text style={styles.subtitle}>Smart Civic Reporting</Text>
@@ -122,7 +127,7 @@ export default function LoginScreen({ navigation }) {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="••••••••"
+              placeholder="Password"
               placeholderTextColor="#94A3B8"
               secureTextEntry={secure}
               autoCapitalize="none"
@@ -165,7 +170,7 @@ export default function LoginScreen({ navigation }) {
             {loading ? (
               <View style={styles.btnRow}>
                 <ActivityIndicator color="#FFFFFF" />
-                <Text style={styles.loginBtnText}>Signing in…</Text>
+                <Text style={styles.loginBtnText}>Signing in...</Text>
               </View>
             ) : (
               <Text style={styles.loginBtnText}>Login</Text>
@@ -200,6 +205,10 @@ export default function LoginScreen({ navigation }) {
 
           <Pressable
             onPress={() => {
+              Alert.alert(
+                "Google sign-in",
+                "Google login needs backend OAuth setup, so it is only a placeholder for now."
+              );
             }}
             style={({ pressed }) => [
               styles.googleBtn,
@@ -211,7 +220,7 @@ export default function LoginScreen({ navigation }) {
           </Pressable>
 
           <View style={styles.signupRow}>
-            <Text style={styles.signupHint}>Don’t have an account?</Text>
+            <Text style={styles.signupHint}>Don't have an account?</Text>
             <Pressable
               onPress={() => {
                 navigation.navigate("Signup");
@@ -222,8 +231,10 @@ export default function LoginScreen({ navigation }) {
           </View>
         </View>
 
-        <Text style={styles.footer}>Built for safer, smarter communities.</Text>
-      </View>
+            <Text style={styles.footer}>Built for safer, smarter communities.</Text>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
@@ -232,6 +243,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: COLORS.bg,
+  },
+  touchArea: {
+    flex: 1,
   },
   topGlow: {
     position: "absolute",

@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   Image,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import BottomNav from "../shared/BottomNav";
@@ -70,6 +71,8 @@ const MOCK_ISSUES = [
 export default function CitizenHomeScreen({ navigation }) {
   const [viewMode, setViewMode] = useState("map");
   const [selectedFilter, setSelectedFilter] = useState("All");
+  const { height } = useWindowDimensions();
+  const mapHeight = Math.max(420, height - 315);
 
   const filteredIssues = useMemo(() => {
     if (selectedFilter === "All") return MOCK_ISSUES;
@@ -200,7 +203,7 @@ export default function CitizenHomeScreen({ navigation }) {
         {/* Content */}
         {viewMode === "map" ? (
           <View style={styles.mapCard}>
-            <View style={styles.mapPlaceholder}>
+            <View style={[styles.mapPlaceholder, { height: mapHeight }]}>
               <Ionicons name="map" size={34} color={COLORS.navy} />
               <Text style={styles.mapTitle}>Map Preview</Text>
               <Text style={styles.mapSub}>
@@ -226,9 +229,10 @@ export default function CitizenHomeScreen({ navigation }) {
               </View>
             </View>
 
-            <Text style={styles.mapUXHint}>
-              UX choice: marker tap should first show a preview, then open full details.
-            </Text>
+            <View style={styles.mapFooter}>
+              <Text style={styles.mapFooterText}>{filteredIssues.length} visible mock markers</Text>
+              <Text style={styles.mapFooterText}>Live map later</Text>
+            </View>
           </View>
         ) : (
           <View style={styles.listWrap}>
@@ -294,7 +298,7 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 16,
     paddingTop: 54,
-    paddingBottom: 110,
+    paddingBottom: 104,
   },
   headerRow: {
     flexDirection: "row",
@@ -380,7 +384,6 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   mapPlaceholder: {
-    height: 360,
     borderRadius: 16,
     backgroundColor: "#EAF1F7",
     alignItems: "center",
@@ -406,6 +409,18 @@ const styles = StyleSheet.create({
   },
   fakeMarker: {
     position: "absolute",
+  },
+  mapFooter: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  mapFooterText: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.muted,
+    fontWeight: "800",
   },
   mapUXHint: {
     marginTop: 12,

@@ -6,8 +6,10 @@ import {
   TextInput,
   Pressable,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -23,16 +25,16 @@ const COLORS = {
   danger: "#B91C1C",
 };
 
-const GOVERNORATES_AR = [
-  "بيروت",
-  "جبل لبنان",
-  "الشمال",
-  "عكار",
-  "البقاع",
-  "بعلبك-الهرمل",
-  "الجنوب",
-  "النبطية",
-  "الهرمل",
+const GOVERNORATES = [
+  "Beirut",
+  "Mount Lebanon",
+  "North Lebanon",
+  "Akkar",
+  "Bekaa",
+  "Baalbek-Hermel",
+  "South Lebanon",
+  "Nabatieh",
+  "Keserwan-Jbeil",
 ];
 
 export default function SignupScreen({ navigation }) {
@@ -48,27 +50,36 @@ export default function SignupScreen({ navigation }) {
   const [secure2, setSecure2] = useState(true);
   const [error, setError] = useState("");
 
-  const canSubmit = useMemo(() => {
+  const signupIssues = useMemo(() => {
     const e = email.trim();
     const phoneDigits = phone.replace(/[^\d]/g, "");
-    const phoneOk = phoneDigits.startsWith("961") && phoneDigits.length >= 11;
-    const passOk = password.length >= 8 && password === confirmPassword;
-    return (
-      firstName.trim().length >= 2 &&
-      lastName.trim().length >= 2 &&
-      e.includes("@") &&
-      gov.length > 0 &&
-      address.trim().length >= 5 &&
-      phoneOk &&
-      passOk
-    );
+    const issues = [];
+
+    if (firstName.trim().length < 2) issues.push("First name must be at least 2 characters.");
+    if (lastName.trim().length < 2) issues.push("Last name must be at least 2 characters.");
+    if (!e.includes("@")) issues.push("Email must be valid.");
+    if (!gov) issues.push("Choose a governorate.");
+    if (address.trim().length < 5) issues.push("Address must be more specific.");
+    if (!phoneDigits.startsWith("961") || phoneDigits.length < 11) {
+      issues.push("Phone must start with +961 and include your number.");
+    }
+    if (password.length < 8) issues.push("Password must be at least 8 characters.");
+    if (password && confirmPassword && password !== confirmPassword) {
+      issues.push("Passwords must match.");
+    }
+
+    return issues;
   }, [firstName, lastName, email, gov, address, phone, password, confirmPassword]);
+
+  const canSubmit = useMemo(() => {
+    return signupIssues.length === 0;
+  }, [signupIssues]);
 
   const onSignup = async () => {
     setError("");
 
     if (!canSubmit) {
-      setError("Please fill all fields correctly.");
+      setError(signupIssues[0] || "Please fill all fields correctly.");
       return;
     }
 
@@ -88,6 +99,7 @@ export default function SignupScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={10}>
@@ -136,10 +148,10 @@ export default function SignupScreen({ navigation }) {
             />
           </View>
 
-          <Text style={[styles.label, { marginTop: 12 }]}>Governorate (المحافظة)</Text>
+          <Text style={[styles.label, { marginTop: 12 }]}>Governorate</Text>
           <View style={styles.dropdown}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {GOVERNORATES_AR.map((g) => {
+              {GOVERNORATES.map((g) => {
                 const active = gov === g;
                 return (
                   <Pressable
@@ -176,7 +188,7 @@ export default function SignupScreen({ navigation }) {
           <TextInput
             value={address}
             onChangeText={setAddress}
-            placeholder="City, area, street, building…"
+            placeholder="City, area, street, building..."
             placeholderTextColor="#94A3B8"
             style={[styles.input, { height: 52 }]}
           />
@@ -217,6 +229,18 @@ export default function SignupScreen({ navigation }) {
 
           {!!error && <Text style={styles.error}>{error}</Text>}
 
+          {signupIssues.length > 0 && (
+            <View style={styles.requirementsBox}>
+              <Text style={styles.requirementsTitle}>Still needed</Text>
+              {signupIssues.slice(0, 4).map((item) => (
+                <View key={item} style={styles.requirementRow}>
+                  <Ionicons name="alert-circle-outline" size={14} color={COLORS.orange} />
+                  <Text style={styles.requirementText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           <Pressable
             onPress={onSignup}
             disabled={!canSubmit}
@@ -240,6 +264,7 @@ export default function SignupScreen({ navigation }) {
           Suggestion: later you can add OTP (SMS) verification for stronger identity.
         </Text>
       </ScrollView>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
@@ -301,6 +326,18 @@ const styles = StyleSheet.create({
   },
   chipText: { fontWeight: "800", color: COLORS.text },
   error: { marginTop: 10, color: COLORS.danger, fontSize: 13, fontWeight: "700" },
+  requirementsBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    backgroundColor: "#FFF7ED",
+    padding: 12,
+    gap: 7,
+  },
+  requirementsTitle: { color: COLORS.text, fontWeight: "900", fontSize: 13 },
+  requirementRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  requirementText: { flex: 1, color: COLORS.muted, fontWeight: "700", fontSize: 12 },
   signupBtn: {
     marginTop: 14,
     height: 52,

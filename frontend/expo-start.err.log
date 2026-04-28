@@ -1,0 +1,4 @@
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@54.0.20 - expected version: ~54.0.34
+  expo-status-bar@3.0.8 - expected version: ~3.0.9
+Your project may not work correctly until you install the expected versions of the packages.

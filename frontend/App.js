@@ -24,8 +24,9 @@ export default function App() {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
-          <Stack.Screen name="ForgotPassword"component={ForgotPasswordScreen}/>
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           <Stack.Screen name="CitizenHome" component={CitizenHomeScreen} />
+          <Stack.Screen name="CreateIssue" component={CreateIssueScreen} />
           <Stack.Screen name="MyReports" component={MyReportsScreen} />
           <Stack.Screen name="IssueDetails" component={IssueDetailsScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
