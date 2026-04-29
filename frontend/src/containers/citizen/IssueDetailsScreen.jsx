@@ -29,8 +29,8 @@ const FALLBACK_ISSUE = {
 };
 
 function statusColor(status) {
-  if (status === "Done" || status === "Resolved") return C.green;
-  if (status === "In Progress" || status === "in-progress") return C.orange;
+  if (status === "Done" || status === "Resolved" || status === "resolved") return C.green;
+  if (status === "In Progress" || status === "in_progress" || status === "in-progress") return C.orange;
   if (status === "Rejected" || status === "rejected") return C.red;
   return C.navy;
 }
@@ -59,7 +59,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
           </Pressable>
         </View>
 
-        <Image source={{ uri: issue.image }} style={styles.heroImage} />
+        <Image source={{ uri: issue.image_url || issue.image }} style={styles.heroImage} />
 
         <View style={styles.card}>
           <View style={styles.metaRow}>
@@ -88,7 +88,9 @@ export default function IssueDetailsScreen({ navigation, route }) {
               <Ionicons name="calendar-outline" size={18} color={C.navy} />
               <View>
                 <Text style={styles.infoLabel}>Reported</Text>
-                <Text style={styles.infoValue}>{issue.date || "Today"}</Text>
+                <Text style={styles.infoValue}>
+                {issue.created_at ? new Date(issue.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : issue.date || "Today"}
+                </Text>
               </View>
             </View>
           </View>
