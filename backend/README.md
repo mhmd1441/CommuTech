@@ -1,61 +1,164 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# CommuTech
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+CommuTech is a civic reporting app.
 
-## About Laravel
+- Citizens use the mobile app to register, login, and report issues.
+- Workers will handle assigned reports.
+- Admins use the private Laravel admin dashboard.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Project Folders
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+```text
+backend/   Laravel API + admin dashboard
+frontend/  Expo React Native mobile app
+Logo/      Project logos
+```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Backend Setup
 
-## Learning Laravel
+```powershell
+cd backend
+composer install
+copy .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan db:seed
+php artisan serve
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Admin dashboard:
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+```text
+http://127.0.0.1:8000/admin/login
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+API base URL:
 
-## Laravel Sponsors
+```text
+http://127.0.0.1:8000/api
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Frontend Setup
 
-### Premium Partners
+```powershell
+cd frontend
+npm install
+npm start
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## API URL For Mobile App
 
-## Contributing
+The API URL is in:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```text
+frontend/src/services/api.js
+```
 
-## Code of Conduct
+Laptop testing:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```js
+export const API_BASE_URL = "http://127.0.0.1:8000/api";
+```
 
-## Security Vulnerabilities
+Real iPhone or Samsung testing:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```js
+export const API_BASE_URL = "http://YOUR_LAPTOP_IP:8000/api";
+```
 
-## License
+Example:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```js
+export const API_BASE_URL = "http://192.168.100.233:8000/api";
+```
+
+When testing on a real phone, run Laravel like this:
+
+```powershell
+php artisan serve --host=0.0.0.0 --port=8000
+```
+
+To find your laptop IP:
+
+```powershell
+ipconfig
+```
+
+Use the Wi-Fi `IPv4 Address`.
+
+## Test Users
+
+Register these from Postman or the mobile app.
+
+### Citizen
+
+```json
+{
+  "firstName": "Mohamad",
+  "lastName": "Moumneh",
+  "email": "mmoumneh14@gmail.com",
+  "phone": "+961 70740676",
+  "city": "Beirut",
+  "address": "Beirut, Malla",
+  "password": "mohamad123",
+  "confirmPassword": "mohamad123"
+}
+```
+
+### Worker
+
+```json
+{
+  "firstName": "Sarah",
+  "lastName": "Alayann",
+  "email": "Sarah@gmail.com",
+  "phone": "+961 71112233",
+  "role": "worker",
+  "city": "Beirut",
+  "address": "Beirut, Verdun",
+  "password": "mohamad123",
+  "confirmPassword": "mohamad123"
+}
+```
+
+### Admin
+
+```json
+{
+  "firstName": "Admin",
+  "lastName": "CommuTech",
+  "email": "admin@gmail.com",
+  "phone": "+961 70111222",
+  "role": "admin",
+  "city": "Beirut",
+  "address": "Beirut, Downtown",
+  "password": "mohamad123",
+  "confirmPassword": "mohamad123"
+}
+```
+
+## Auth API
+
+Register:
+
+```text
+POST /api/auth/register
+```
+
+Login:
+
+```text
+POST /api/auth/login
+```
+
+Logout:
+
+```text
+POST /api/auth/logout
+```
+
+Protected routes need:
+
+```text
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```

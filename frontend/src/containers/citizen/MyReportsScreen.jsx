@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNav from "../shared/BottomNav";
+import api from "../../services/api";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -30,7 +31,9 @@ const C = {
 // ─── Status Config ────────────────────────────────────────────────────────────
 const STATUS_META = {
   open: { label: 'Open', color: C.orange, bg: '#FEF3E2', icon: 'radio-button-on-outline' },
+  pending: { label: 'Pending', color: C.orange, bg: '#FEF3E2', icon: 'radio-button-on-outline' },
   'in-progress': { label: 'In Progress', color: C.navy, bg: '#EFF6FF', icon: 'sync-outline' },
+  in_progress: { label: 'In Progress', color: C.navy, bg: '#EFF6FF', icon: 'sync-outline' },
   resolved: { label: 'Resolved', color: C.green, bg: '#ECFDF5', icon: 'checkmark-circle-outline' },
   rejected: { label: 'Rejected', color: C.red, bg: '#FEF2F2', icon: 'close-circle-outline' },
 };
@@ -120,7 +123,13 @@ const IssueCard = ({ item, onPress }) => {
       {/* Left accent bar */}
       <View style={[styles.cardAccent, { backgroundColor: statusMeta.color }]} />
 
-      <Image source={{ uri: item.image }} style={styles.cardImage} />
+      {item.image_url ? (
+        <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+      ) : (
+        <View style={[styles.cardImage, { backgroundColor: C.border, alignItems: 'center', justifyContent: 'center' }]}>
+          <Ionicons name="image-outline" size={24} color={C.muted} />
+        </View>
+      )}
 
       <View style={styles.cardBody}>
         {/* Top row: title + status */}
@@ -150,7 +159,9 @@ const IssueCard = ({ item, onPress }) => {
             <View style={[styles.priorityDot, { backgroundColor: priorityMeta.color }]} />
             <Text style={[styles.metaText, { color: priorityMeta.color }]}>{priorityMeta.label}</Text>
           </View>
-          <Text style={styles.dateText}>{item.date}</Text>
+          <Text style={styles.dateText}>
+            {item.created_at ? new Date(item.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : ""}
+          </Text>
         </View>
 
         {/* Worker tag (if assigned) */}
@@ -176,8 +187,8 @@ const IssueCard = ({ item, onPress }) => {
 // ─── Stats Bar ────────────────────────────────────────────────────────────────
 const StatsBar = ({ issues }) => {
   const counts = {
-    open: issues.filter((i) => i.status === 'open').length,
-    'in-progress': issues.filter((i) => i.status === 'in-progress').length,
+    open: issues.filter((i) => i.status === 'open' || i.status === 'pending').length,
+    'in-progress': issues.filter((i) => i.status === 'in-progress' || i.status === 'in_progress').length,
     resolved: issues.filter((i) => i.status === 'resolved').length,
   };
   return (
@@ -202,12 +213,31 @@ export default function MyReportsScreen({ navigation }) {
   const [sortMode, setSortMode] = useState('newest');
   const [sortModalVisible, setSortModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [issues, setIssues] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchIssues = useCallback(async () => {
+    try {
+      const { data } = await api.get("/issues", { params: { mine: 1, sort: sortMode } });
+      setIssues(data.data || []);
+    } catch (err) {
+      console.error("Failed to fetch issues:", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [sortMode]);
+
+  React.useEffect(() => {
+    fetchIssues();
+  }, [fetchIssues]);
 
   const filtered = useMemo(() => {
     const priorityWeight = { high: 3, medium: 2, low: 1 };
-    const statusWeight = { open: 1, 'in-progress': 2, resolved: 3, rejected: 4 };
-    const base =
-      activeTab === 'all' ? MY_ISSUES : MY_ISSUES.filter((i) => i.status === activeTab);
+    const statusWeight = { open: 1, pending: 1, 'in-progress': 2, in_progress: 2, resolved: 3, rejected: 4 };
+    const base = activeTab === 'all'
+      ? issues
+      : issues.filter((i) => i.status === activeTab || i.status === activeTab.replace('-', '_'));
 
     return [...base].sort((a, b) => {
       if (sortMode === 'priority') {
@@ -218,15 +248,14 @@ export default function MyReportsScreen({ navigation }) {
       }
       return Number(b.id) - Number(a.id);
     });
-  }, [activeTab, sortMode]);
+  }, [activeTab, sortMode, issues]);
 
   const sortLabel = SORT_OPTIONS.find((option) => option.id === sortMode)?.label || 'Newest first';
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    // TODO: re-fetch from API
-    setTimeout(() => setRefreshing(false), 1200);
-  }, []);
+    fetchIssues();
+  }, [fetchIssues]);
 
   const goToDetail = (issue) => navigation.navigate('IssueDetails', { issue });
 
@@ -238,7 +267,7 @@ export default function MyReportsScreen({ navigation }) {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>My Reports</Text>
-          <Text style={styles.headerSub}>{MY_ISSUES.length} issues submitted</Text>
+          <Text style={styles.headerSub}>{issues.length} issues submitted</Text>
         </View>
         <TouchableOpacity style={styles.filterBtn} onPress={() => setSortModalVisible(true)}>
           <Ionicons name="funnel-outline" size={18} color={C.navy} />
@@ -247,7 +276,7 @@ export default function MyReportsScreen({ navigation }) {
       <Text style={styles.sortHint}>Sorted by {sortLabel}</Text>
 
       {/* Stats */}
-      <StatsBar issues={MY_ISSUES} />
+      <StatsBar issues={issues} />
 
       {/* Tabs */}
       <View style={styles.tabsWrapper}>
