@@ -1,0 +1,5 @@
+PRIVATE_NOTES.md
+*.private.md
+frontend/.expo-smoke/
+.env
+.env.*

@@ -1,17 +1,19 @@
 # CommuTech
 
-CommuTech is a civic reporting app.
+CommuTech is a civic issue reporting platform.
 
-- Citizens use the mobile app to register, login, and report issues.
-- Workers will handle assigned reports.
-- Admins use the private Laravel admin dashboard.
+It includes:
 
-## Project Folders
+- a Laravel backend API
+- a private Laravel admin dashboard
+- an Expo React Native mobile app
+
+## Project Structure
 
 ```text
-backend/   Laravel API + admin dashboard
+backend/   Laravel API and admin dashboard
 frontend/  Expo React Native mobile app
-Logo/      Project logos
+Logo/      Project visual assets
 ```
 
 ## Backend Setup
@@ -26,16 +28,12 @@ php artisan db:seed
 php artisan serve
 ```
 
-Admin dashboard:
+Local backend URLs:
 
 ```text
-http://127.0.0.1:8000/admin/login
-```
-
-API base URL:
-
-```text
-http://127.0.0.1:8000/api
+Admin dashboard: http://127.0.0.1:8000/admin/login
+API base URL:    http://127.0.0.1:8000/api
+Health check:    http://127.0.0.1:8000/api/health
 ```
 
 ## Frontend Setup
@@ -46,120 +44,54 @@ npm install
 npm start
 ```
 
-## API URL For Mobile App
+## Mobile API URL
 
-The API URL is in:
+The mobile app API base URL is configured in:
 
 ```text
 frontend/src/services/api.js
 ```
 
-Laptop testing:
+For local laptop testing:
 
 ```js
 export const API_BASE_URL = "http://127.0.0.1:8000/api";
 ```
-//put my api
 
-Real iPhone or Samsung testing:
+For real-phone testing, use the laptop's local network IPv4 address:
 
 ```js
 export const API_BASE_URL = "http://YOUR_LAPTOP_IP:8000/api";
 ```
 
-Example:
-
-```js
-export const API_BASE_URL = "http://192.168.100.233:8000/api";
-```
-
-When testing on a real phone, run Laravel like this:
+When testing from a real phone, run Laravel with:
 
 ```powershell
 php artisan serve --host=0.0.0.0 --port=8000
 ```
 
-To find your laptop IP:
+## Authentication
 
-```powershell
-ipconfig
-```
+The API uses Laravel Sanctum personal access tokens.
 
-Use the Wi-Fi `IPv4 Address`.
-
-## Test Users
-
-Register these from Postman or the mobile app.
-
-### Citizen
-
-```json
-{
-  "firstName": "Mohamad",
-  "lastName": "Moumneh",
-  "email": "mmoumneh14@gmail.com",
-  "phone": "+961 70740676",
-  "city": "Beirut",
-  "address": "Beirut, Malla",
-  "password": "mohamad123",
-  "confirmPassword": "mohamad123"
-}
-```
-
-### Worker
-
-```json
-{
-  "firstName": "Sarah",
-  "lastName": "Alayann",
-  "email": "Sarah@gmail.com",
-  "phone": "+961 71112233",
-  "role": "worker",
-  "city": "Beirut",
-  "address": "Beirut, Verdun",
-  "password": "mohamad123",
-  "confirmPassword": "mohamad123"
-}
-```
-
-### Admin
-
-```json
-{
-  "firstName": "Admin",
-  "lastName": "CommuTech",
-  "email": "admin@gmail.com",
-  "phone": "+961 70111222",
-  "role": "admin",
-  "city": "Beirut",
-  "address": "Beirut, Downtown",
-  "password": "mohamad123",
-  "confirmPassword": "mohamad123"
-}
-```
-
-## Auth API
-
-Register:
-
-```text
-POST /api/auth/register
-```
-
-Login:
-
-```text
-POST /api/auth/login
-```
-
-Logout:
-
-```text
-POST /api/auth/logout
-```
-
-Protected routes need:
+Protected API requests must include:
 
 ```text
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
+
+The token is a Sanctum Bearer token, not a JWT.
+
+## Private Local Notes
+
+Sensitive local details such as personal test accounts, local IP addresses, demo passwords, and handoff notes should stay outside Git.
+
+Use this ignored local file for that information:
+
+```text
+PRIVATE_NOTES.md
+```
+
+## Ownership
+
+This project is private coursework/final-year-project work. Do not copy, publish, redistribute, or reuse it without permission from the project owner.
