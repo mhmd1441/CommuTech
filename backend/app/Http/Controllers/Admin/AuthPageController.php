@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -11,7 +10,7 @@ class AuthPageController extends Controller
 {
     public function showLogin()
     {
-        if (Auth::check() && Auth::user()->role === User::ROLE_ADMIN) {
+        if (Auth::check() && Auth::user()->isAdmin()) {
             return redirect()->route('admin.dashboard');
         }
 
@@ -36,7 +35,7 @@ class AuthPageController extends Controller
 
         $request->session()->regenerate();
 
-        if (Auth::user()->role !== User::ROLE_ADMIN) {
+        if (! Auth::user()->isAdmin()) {
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();

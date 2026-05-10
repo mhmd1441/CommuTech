@@ -22,9 +22,9 @@ class DashboardPageController extends Controller
         return view('admin.dashboard', [
             'summary' => [
                 'totalUsers' => User::count(),
-                'citizens' => User::where('role', User::ROLE_CITIZEN)->count(),
-                'workers' => User::where('role', User::ROLE_WORKER)->count(),
-                'admins' => User::where('role', User::ROLE_ADMIN)->count(),
+                'citizens' => User::withRole(User::ROLE_CITIZEN)->count(),
+                'workers' => User::withRole(User::ROLE_WORKER)->count(),
+                'admins' => User::withRole(User::ROLE_ADMIN)->count(),
                 'totalIssues' => Issue::count(),
                 'pendingIssues' => Issue::where('status', 'pending')->count(),
                 'inProgressIssues' => Issue::where('status', 'in_progress')->count(),
@@ -39,7 +39,8 @@ class DashboardPageController extends Controller
                 ->latest()
                 ->limit(8)
                 ->get(),
-            'recentUsers' => User::select(['id', 'name', 'email', 'role', 'phone', 'city', 'created_at'])
+            'recentUsers' => User::with('roles')
+                ->select(['id', 'name', 'email', 'role', 'phone', 'city', 'created_at'])
                 ->latest()
                 ->limit(8)
                 ->get(),

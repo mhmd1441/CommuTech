@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import BottomNav from "../shared/BottomNav";
+import api, { getAuthUser } from "../../services/api";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -48,6 +49,20 @@ const USER = {
     points: 140,
   },
 };
+
+const roleLabel = (role) => role.charAt(0).toUpperCase() + role.slice(1);
+
+function getRoleNames(user) {
+  const roleNames = Array.isArray(user?.role_names) ? user.role_names : [];
+  const relationRoles = Array.isArray(user?.roles)
+    ? user.roles.map((role) => (typeof role === 'string' ? role : role.name))
+    : [];
+
+  return [...roleNames, ...relationRoles, user?.role]
+    .filter(Boolean)
+    .map((role) => String(role).toLowerCase())
+    .filter((role, index, roles) => roles.indexOf(role) === index);
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 const StatBox = ({ label, value, color }) => (
@@ -106,6 +121,8 @@ function ProfileScreen({ navigation }) {
   const [notifEnabled, setNotifEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
   const [activeModal, setActiveModal] = useState(null);
+  const [authUser, setAuthUser] = useState(getAuthUser());
+  const [stats, setStats] = useState(USER.stats);
   const [personalInfo, setPersonalInfo] = useState({
     name: USER.name,
     email: USER.email,
@@ -118,6 +135,44 @@ function ProfileScreen({ navigation }) {
     confirm: '',
   });
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProfile = async () => {
+      try {
+        const { data } = await api.get('/me');
+        if (!isMounted) return;
+
+        const user = data.user;
+        setAuthUser(user);
+        setStats({
+          submitted: data.stats?.submitted ?? USER.stats.submitted,
+          resolved: data.stats?.resolved ?? USER.stats.resolved,
+          inProgress: data.stats?.in_progress ?? USER.stats.inProgress,
+          points: data.stats?.points ?? USER.stats.points,
+        });
+        setPersonalInfo({
+          name: user?.name || USER.name,
+          email: user?.email || USER.email,
+          phone: user?.phone || USER.phone,
+        });
+        setDistrict([user?.area, user?.city].filter(Boolean).join(', ') || user?.city || USER.district);
+      } catch (error) {
+        console.error('Failed to load profile:', error);
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const roleNames = useMemo(() => getRoleNames(authUser), [authUser]);
+  const canSwitchToWorker = roleNames.includes('citizen') && roleNames.includes('worker');
+  const displayRole = roleNames.length > 0 ? roleNames.map(roleLabel).join(' / ') : USER.role;
+
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -129,18 +184,9 @@ function ProfileScreen({ navigation }) {
     ]);
   };
 
-  // Future worker mode logic, after Laravel auth/roles are connected:
-  //
-  // const canSwitchToWorker =
-  //   authUser?.roles?.includes('citizen') && authUser?.roles?.includes('worker');
-  //
-  // const handleSwitchToWorkerMode = () => {
-  //   // Secure option: ask worker to re-authenticate before opening worker screens.
-  //   navigation.navigate('WorkerLogin');
-  //
-  //   // Simpler option later:
-  //   // navigation.reset({ index: 0, routes: [{ name: 'WorkerHome' }] });
-  // };
+  const handleSwitchToWorkerMode = () => {
+    navigation.reset({ index: 0, routes: [{ name: 'WorkerHome' }] });
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -171,7 +217,7 @@ function ProfileScreen({ navigation }) {
             <View style={styles.userMeta}>
               <View style={styles.rolePill}>
                 <View style={styles.roleDot} />
-                <Text style={styles.roleText}>{USER.role}</Text>
+                <Text style={styles.roleText}>{displayRole}</Text>
               </View>
               <View style={styles.districtPill}>
                 <Ionicons name="location-outline" size={10} color={C.muted} />
@@ -183,13 +229,13 @@ function ProfileScreen({ navigation }) {
 
         {/* ── Stats ── */}
         <View style={styles.statsCard}>
-          <StatBox label="Submitted" value={USER.stats.submitted} />
+          <StatBox label="Submitted" value={stats.submitted} />
           <View style={styles.statsDiv} />
-          <StatBox label="Resolved" value={USER.stats.resolved} color={C.green} />
+          <StatBox label="Resolved" value={stats.resolved} color={C.green} />
           <View style={styles.statsDiv} />
-          <StatBox label="In Progress" value={USER.stats.inProgress} color={C.orange} />
+          <StatBox label="In Progress" value={stats.inProgress} color={C.orange} />
           <View style={styles.statsDiv} />
-          <StatBox label="Points" value={USER.stats.points} color={C.navy} />
+          <StatBox label="Points" value={stats.points} color={C.navy} />
         </View>
 
         {/* ── Account ── */}
@@ -200,23 +246,6 @@ function ProfileScreen({ navigation }) {
             value="Update"
             onPress={() => setActiveModal('personal')}
           />
-          {/*
-            Future worker-mode entry:
-
-            {canSwitchToWorker && (
-              <>
-                <MenuDivider />
-                <MenuItem
-                  icon="briefcase-outline"
-                  iconColor={C.orange}
-                  label="Switch to Worker Mode"
-                  value="Secure login"
-                  onPress={handleSwitchToWorkerMode}
-                />
-              </>
-            )}
-          */}
-          <MenuDivider />
           <MenuItem
             icon="location-outline"
             label="Default District"
@@ -298,6 +327,18 @@ function ProfileScreen({ navigation }) {
 
         {/* ── Logout ── */}
         <MenuGroup>
+          {canSwitchToWorker && (
+            <>
+              <MenuItem
+                icon="briefcase-outline"
+                iconColor={C.orange}
+                label="Switch to Worker Mode"
+                value="Available"
+                onPress={handleSwitchToWorkerMode}
+              />
+              <MenuDivider />
+            </>
+          )}
           <MenuItem
             icon="log-out-outline"
             iconColor={C.red}

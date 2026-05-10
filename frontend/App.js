@@ -14,6 +14,7 @@ import MyReportsScreen from "./src/containers/citizen/MyReportsScreen";
 import IssueDetailsScreen from "./src/containers/citizen/IssueDetailsScreen";
 import ProfileScreen from "./src/containers/citizen/ProfileScreen";
 import NotificationsScreen from "./src/containers/citizen/NotificationsScreen";
+import WorkerHomeScreen from "./src/containers/worker/WorkerHomeScreen";
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
           <Stack.Screen name="IssueDetails" component={IssueDetailsScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="WorkerHome" component={WorkerHomeScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

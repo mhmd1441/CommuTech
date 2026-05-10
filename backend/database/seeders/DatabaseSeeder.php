@@ -17,14 +17,39 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $admin = User::factory()->create([
+            'name' => 'CommuTech Admin',
+            'first_name' => 'CommuTech',
+            'last_name' => 'Admin',
+            'email' => 'admin@commutech.local',
+            'role' => User::ROLE_ADMIN,
+            'phone' => '+961 70111222',
+            'city' => 'Beirut',
+        ]);
+        $admin->syncRolesByName([User::ROLE_ADMIN]);
+
+        $worker = User::factory()->create([
+            'name' => 'CommuTech Worker',
+            'first_name' => 'CommuTech',
+            'last_name' => 'Worker',
+            'email' => 'worker@commutech.local',
+            'role' => User::ROLE_WORKER,
+            'phone' => '+961 71112233',
+            'city' => 'Beirut',
+        ]);
+        $worker->syncRolesByName([User::ROLE_WORKER]);
+
         $user = User::factory()->create([
             'name' => 'CommuTech Citizen',
+            'first_name' => 'CommuTech',
+            'last_name' => 'Citizen',
             'email' => 'test@example.com',
             'role' => User::ROLE_CITIZEN,
             'phone' => '+961 70123456',
             'city' => 'Beirut',
             'street' => 'Hamra',
         ]);
+        $user->syncRolesByName([User::ROLE_CITIZEN]);
 
         $issues = collect([
             [

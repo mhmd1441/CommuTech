@@ -52,7 +52,11 @@
                             <div class="muted">{{ $user->email }}</div>
                         </td>
                         <td>{{ $user->phone ?? 'N/A' }}</td>
-                        <td><span class="tag {{ $tagClass($user->role) }}">{{ $user->role }}</span></td>
+                        <td>
+                            @foreach ($user->role_names as $userRole)
+                                <span class="tag {{ $tagClass($userRole) }}">{{ $userRole }}</span>
+                            @endforeach
+                        </td>
                         <td>{{ $user->city ?? 'N/A' }}</td>
                         <td>
                             <div class="row-actions">

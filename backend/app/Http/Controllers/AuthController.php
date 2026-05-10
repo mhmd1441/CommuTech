@@ -16,19 +16,21 @@ class AuthController extends Controller
     public function register(RegisterRequest $request)
     {
         $data = $request->validated();
-        $name = $data['name'] ?? trim(($data['first_name'] ?? '').' '.($data['last_name'] ?? ''));
+        $name = trim($data['first_name'].' '.$data['last_name']);
 
         $user = User::create([
-            'name' => $name !== '' ? $name : $data['email'],
+            'name' => $name,
+            'first_name' => $data['first_name'],
+            'last_name' => $data['last_name'],
             'email' => strtolower($data['email']),
-            'role' => $data['role'] ?? User::ROLE_CITIZEN,
+            'role' => User::ROLE_CITIZEN,
             'phone' => $data['phone'] ?? null,
-            'country' => $data['country'] ?? 'Lebanon',
-            'city' => $data['city'] ?? ($data['address'] ?? null),
-            'street' => $data['street'] ?? null,
-            'building' => $data['building'] ?? null,
+            'country' => 'Lebanon',
+            'city' => $data['city'],
             'password' => $data['password'],
         ]);
+
+        $user->syncRolesByName([User::ROLE_CITIZEN]);
 
         CommuTechNotification::create([
             'user_id' => $user->id,
@@ -39,7 +41,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Account created successfully.',
-            'user' => $user,
+            'user' => $user->fresh()->load('roles'),
             'access_token' => $user->createToken('mobile')->plainTextToken,
             'token_type' => 'Bearer',
         ], 201);
@@ -58,7 +60,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Logged in successfully.',
-            'user' => $user,
+            'user' => $user->load('roles'),
             'access_token' => $user->createToken('mobile')->plainTextToken,
             'token_type' => 'Bearer',
         ]);

@@ -32,14 +32,23 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'first_name',
+        'father_name',
+        'last_name',
         'email',
         'role',
         'phone',
         'country',
         'city',
+        'area',
         'street',
         'building',
+        'is_verified',
         'password',
+    ];
+
+    protected $appends = [
+        'role_names',
     ];
 
     /**
@@ -61,7 +70,31 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'is_verified' => 'boolean',
         ];
+    }
+
+    public function roles()
+    {
+        return $this->belongsToMany(Role::class)->withTimestamps();
+    }
+
+    public function scopeWithRole($query, string $role)
+    {
+        return $query->where(function ($query) use ($role) {
+            $query
+                ->where('role', $role)
+                ->orWhereHas('roles', fn ($roles) => $roles->where('name', $role));
+        });
+    }
+
+    public function getRoleNamesAttribute(): array
+    {
+        if ($this->relationLoaded('roles')) {
+            return $this->roles->pluck('name')->values()->all();
+        }
+
+        return array_values(array_filter([$this->role]));
     }
 
     public function issues()
@@ -76,16 +109,53 @@ class User extends Authenticatable
 
     public function isAdmin(): bool
     {
-        return $this->role === self::ROLE_ADMIN;
+        return $this->hasRole(self::ROLE_ADMIN);
     }
 
     public function isWorker(): bool
     {
-        return $this->role === self::ROLE_WORKER;
+        return $this->hasRole(self::ROLE_WORKER);
     }
 
     public function isCitizen(): bool
     {
-        return $this->role === self::ROLE_CITIZEN;
+        return $this->hasRole(self::ROLE_CITIZEN);
+    }
+
+    public function hasRole(string $role): bool
+    {
+        if ($this->role === $role) {
+            return true;
+        }
+
+        if ($this->relationLoaded('roles')) {
+            return $this->roles->contains('name', $role);
+        }
+
+        return $this->roles()->where('name', $role)->exists();
+    }
+
+    public function hasAnyRole(array $roles): bool
+    {
+        return collect($roles)->contains(fn (string $role) => $this->hasRole($role));
+    }
+
+    public function syncRolesByName(array $roles): void
+    {
+        $roles = collect($roles)
+            ->filter(fn ($role) => in_array($role, self::ROLES, true))
+            ->unique()
+            ->values();
+
+        if ($roles->isEmpty()) {
+            $roles = collect([self::ROLE_CITIZEN]);
+        }
+
+        $roleIds = Role::query()
+            ->whereIn('name', $roles)
+            ->pluck('id')
+            ->all();
+
+        $this->roles()->sync($roleIds);
     }
 }

@@ -18,7 +18,8 @@ class UserPageController extends Controller
         ]);
 
         $users = User::query()
-            ->when($data['role'] ?? null, fn ($query, $role) => $query->where('role', $role))
+            ->with('roles')
+            ->when($data['role'] ?? null, fn ($query, $role) => $query->withRole($role))
             ->when($data['search'] ?? null, function ($query, $search) {
                 $query->where(function ($query) use ($search) {
                     $query
@@ -43,6 +44,7 @@ class UserPageController extends Controller
         return view('admin.users.form', [
             'user' => new User,
             'roles' => User::ROLES,
+            'selectedRoles' => [request('role', User::ROLE_CITIZEN)],
             'mode' => 'create',
         ]);
     }
@@ -50,20 +52,30 @@ class UserPageController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'min:2', 'max:160'],
+            'first_name' => ['required', 'string', 'min:2', 'max:80'],
+            'father_name' => ['nullable', 'string', 'min:2', 'max:80'],
+            'last_name' => ['required', 'string', 'min:2', 'max:80'],
             'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
-            'phone' => ['required', 'regex:/^\+961\s?[0-9]{7,8}$/'],
-            'role' => ['required', Rule::in(User::ROLES)],
+            'phone' => ['required', 'regex:/^\+961\s?[0-9]{7,8}$/', 'unique:users,phone'],
+            'roles' => ['required', 'array', 'min:1'],
+            'roles.*' => ['required', Rule::in(User::ROLES)],
             'country' => ['nullable', 'string', 'max:80'],
             'city' => ['nullable', 'string', 'max:80'],
+            'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 
         $data['email'] = strtolower($data['email']);
+        $roles = $data['roles'];
+        unset($data['roles']);
+        $data['name'] = $this->displayName($data);
+        $data['role'] = $this->primaryRole($roles);
+        $data['is_verified'] = $this->isProfileVerified($data);
 
-        User::create($data);
+        $user = User::create($data);
+        $user->syncRolesByName($roles);
 
         return redirect()
             ->route('admin.users.index', ['role' => $data['role']])
@@ -72,34 +84,48 @@ class UserPageController extends Controller
 
     public function edit(User $user)
     {
+        $user->load('roles');
+
         return view('admin.users.form', [
             'user' => $user,
             'roles' => User::ROLES,
+            'selectedRoles' => $user->role_names,
             'mode' => 'edit',
         ]);
     }
 
     public function update(Request $request, User $user)
     {
+        if (blank($request->input('password')) || blank($request->input('password_confirmation'))) {
+            $request->request->remove('password');
+            $request->request->remove('password_confirmation');
+        }
+
         $data = $request->validate([
-            'name' => ['required', 'string', 'min:2', 'max:160'],
+            'first_name' => ['required', 'string', 'min:2', 'max:80'],
+            'father_name' => ['nullable', 'string', 'min:2', 'max:80'],
+            'last_name' => ['required', 'string', 'min:2', 'max:80'],
             'email' => ['required', 'email:rfc', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'phone' => ['required', 'regex:/^\+961\s?[0-9]{7,8}$/'],
-            'role' => ['required', Rule::in(User::ROLES)],
+            'phone' => ['required', 'regex:/^\+961\s?[0-9]{7,8}$/', Rule::unique('users', 'phone')->ignore($user->id)],
+            'roles' => ['required', 'array', 'min:1'],
+            'roles.*' => ['required', Rule::in(User::ROLES)],
             'country' => ['nullable', 'string', 'max:80'],
             'city' => ['nullable', 'string', 'max:80'],
+            'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
-            'password' => ['nullable', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['sometimes', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 
         $data['email'] = strtolower($data['email']);
-
-        if (blank($data['password'] ?? null)) {
-            unset($data['password']);
-        }
+        $roles = $data['roles'];
+        unset($data['roles']);
+        $data['name'] = $this->displayName($data);
+        $data['role'] = $this->primaryRole($roles);
+        $data['is_verified'] = $this->isProfileVerified($data);
 
         $user->update($data);
+        $user->syncRolesByName($roles);
 
         return redirect()
             ->route('admin.users.index', ['role' => $user->fresh()->role])
@@ -118,5 +144,43 @@ class UserPageController extends Controller
         return redirect()
             ->route('admin.users.index', ['role' => $role])
             ->with('status', 'User deleted successfully.');
+    }
+
+    private function displayName(array $data): string
+    {
+        return trim(collect([
+            $data['first_name'] ?? null,
+            $data['father_name'] ?? null,
+            $data['last_name'] ?? null,
+        ])->filter()->implode(' '));
+    }
+
+    private function primaryRole(array $roles): string
+    {
+        if (in_array(User::ROLE_ADMIN, $roles, true)) {
+            return User::ROLE_ADMIN;
+        }
+
+        if (in_array(User::ROLE_CITIZEN, $roles, true)) {
+            return User::ROLE_CITIZEN;
+        }
+
+        return $roles[0] ?? User::ROLE_CITIZEN;
+    }
+
+    private function isProfileVerified(array $data): bool
+    {
+        return collect([
+            $data['first_name'] ?? null,
+            $data['father_name'] ?? null,
+            $data['last_name'] ?? null,
+            $data['email'] ?? null,
+            $data['phone'] ?? null,
+            $data['country'] ?? null,
+            $data['city'] ?? null,
+            $data['area'] ?? null,
+            $data['street'] ?? null,
+            $data['building'] ?? null,
+        ])->every(fn ($value) => filled($value));
     }
 }

@@ -16,10 +16,23 @@ class UpdateUserRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $data = [];
+
         if ($this->has('email')) {
-            $this->merge([
-                'email' => strtolower((string) $this->input('email')),
-            ]);
+            $data['email'] = strtolower((string) $this->input('email'));
+        }
+
+        if ($this->has('roles') || $this->has('role')) {
+            $data['roles'] = $this->input('roles', $this->filled('role') ? [$this->input('role')] : null);
+        }
+
+        if ($data !== []) {
+            $this->merge($data);
+        }
+
+        if (blank($this->input('password')) || blank($this->input('password_confirmation'))) {
+            $this->request->remove('password');
+            $this->request->remove('password_confirmation');
         }
     }
 
@@ -28,12 +41,16 @@ class UpdateUserRequest extends FormRequest
         $userId = $this->route('user')?->id;
 
         return [
-            'name' => ['sometimes', 'string', 'min:2', 'max:160'],
+            'first_name' => ['sometimes', 'string', 'min:2', 'max:80'],
+            'father_name' => ['sometimes', 'nullable', 'string', 'min:2', 'max:80'],
+            'last_name' => ['sometimes', 'string', 'min:2', 'max:80'],
             'email' => ['sometimes', 'email:rfc', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
-            'phone' => ['sometimes', 'regex:/^\+961\s?[0-9]{7,8}$/'],
-            'role' => ['sometimes', Rule::in(User::ROLES)],
+            'phone' => ['sometimes', 'regex:/^\+961\s?[0-9]{7,8}$/', Rule::unique('users', 'phone')->ignore($userId)],
+            'roles' => ['sometimes', 'array', 'min:1'],
+            'roles.*' => ['required', Rule::in(User::ROLES)],
             'country' => ['sometimes', 'nullable', 'string', 'max:80'],
             'city' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'area' => ['sometimes', 'nullable', 'string', 'max:120'],
             'street' => ['sometimes', 'nullable', 'string', 'max:160'],
             'building' => ['sometimes', 'nullable', 'string', 'max:80'],
             'password' => ['sometimes', 'confirmed', Password::min(8)->letters()->numbers()],

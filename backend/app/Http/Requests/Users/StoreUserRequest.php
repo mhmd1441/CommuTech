@@ -18,18 +18,23 @@ class StoreUserRequest extends FormRequest
     {
         $this->merge([
             'email' => strtolower((string) $this->input('email')),
+            'roles' => $this->input('roles', $this->filled('role') ? [$this->input('role')] : null),
         ]);
     }
 
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'min:2', 'max:160'],
+            'first_name' => ['required', 'string', 'min:2', 'max:80'],
+            'father_name' => ['nullable', 'string', 'min:2', 'max:80'],
+            'last_name' => ['required', 'string', 'min:2', 'max:80'],
             'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
-            'phone' => ['required', 'regex:/^\+961\s?[0-9]{7,8}$/'],
-            'role' => ['required', Rule::in(User::ROLES)],
+            'phone' => ['required', 'regex:/^\+961\s?[0-9]{7,8}$/', 'unique:users,phone'],
+            'roles' => ['required', 'array', 'min:1'],
+            'roles.*' => ['required', Rule::in(User::ROLES)],
             'country' => ['nullable', 'string', 'max:80'],
             'city' => ['nullable', 'string', 'max:80'],
+            'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],

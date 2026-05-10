@@ -7,6 +7,7 @@ use App\Http\Controllers\MetaController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WorkerIssueController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => [
@@ -46,6 +47,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', 'index');
         Route::patch('/read-all', 'markAllRead');
         Route::patch('/{notification}/read', 'markRead');
+    });
+
+    Route::prefix('worker')->middleware('role:worker')->group(function () {
+        Route::prefix('issues')->controller(WorkerIssueController::class)->group(function () {
+            Route::get('/assigned', 'assigned');
+            Route::get('/nearby', 'nearby');
+            Route::patch('/{issue}/assign-to-me', 'assignToMe');
+            Route::patch('/{issue}/status', 'updateStatus');
+        });
     });
 
     Route::prefix('admin')->middleware('role:admin')->group(function () {

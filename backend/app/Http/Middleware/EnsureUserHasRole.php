@@ -10,7 +10,7 @@ class EnsureUserHasRole
 {
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        if (! $request->user() || ! in_array($request->user()->role, $roles, true)) {
+        if (! $request->user() || ! $request->user()->hasAnyRole($roles)) {
             if (! $request->expectsJson()) {
                 abort(403);
             }

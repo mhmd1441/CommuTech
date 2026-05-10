@@ -23,11 +23,16 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        $firstName = fake()->firstName();
+        $lastName = fake()->lastName();
+
         return [
-            'name' => fake()->name(),
+            'name' => $firstName.' '.$lastName,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
             'email' => fake()->unique()->safeEmail(),
             'role' => User::ROLE_CITIZEN,
-            'phone' => '+961 '.fake()->numberBetween(70000000, 81999999),
+            'phone' => '+961 '.fake()->unique()->numberBetween(70000000, 81999999),
             'country' => 'Lebanon',
             'city' => fake()->randomElement(['Beirut', 'Jounieh', 'Tripoli', 'Saida']),
             'street' => fake()->streetName(),

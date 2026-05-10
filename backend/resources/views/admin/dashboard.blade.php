@@ -561,7 +561,11 @@
                                     {{ $user->name }}
                                     <div class="muted">{{ $user->email }}</div>
                                 </td>
-                                <td><span class="tag {{ $dashboardTagClass($user->role) }}">{{ $user->role }}</span></td>
+                                <td>
+                                    @foreach ($user->role_names as $userRole)
+                                        <span class="tag {{ $dashboardTagClass($userRole) }}">{{ $userRole }}</span>
+                                    @endforeach
+                                </td>
                                 <td>{{ $user->city ?? 'N/A' }}</td>
                             </tr>
                         @empty

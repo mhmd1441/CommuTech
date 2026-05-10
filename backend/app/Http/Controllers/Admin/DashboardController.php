@@ -15,9 +15,9 @@ class DashboardController extends Controller
         return response()->json([
             'users' => [
                 'total' => User::count(),
-                'citizens' => User::where('role', User::ROLE_CITIZEN)->count(),
-                'workers' => User::where('role', User::ROLE_WORKER)->count(),
-                'admins' => User::where('role', User::ROLE_ADMIN)->count(),
+                'citizens' => User::withRole(User::ROLE_CITIZEN)->count(),
+                'workers' => User::withRole(User::ROLE_WORKER)->count(),
+                'admins' => User::withRole(User::ROLE_ADMIN)->count(),
             ],
             'issues' => [
                 'total' => Issue::count(),
@@ -88,6 +88,7 @@ class DashboardController extends Controller
     public function recentUsers()
     {
         $users = User::query()
+            ->with('roles')
             ->select(['id', 'name', 'email', 'role', 'phone', 'city', 'created_at'])
             ->latest()
             ->limit(10)

@@ -42,7 +42,6 @@ export default function SignupScreen({ navigation }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [gov, setGov] = useState("");
-  const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("+961 ");
   const [password, setPassword] = useState("");
@@ -61,7 +60,6 @@ export default function SignupScreen({ navigation }) {
     if (lastName.trim().length < 2) issues.push("Last name must be at least 2 characters.");
     if (!e.includes("@")) issues.push("Email must be valid.");
     if (!gov) issues.push("Choose a governorate.");
-    if (address.trim().length < 5) issues.push("Address must be more specific.");
     if (!phoneDigits.startsWith("961") || phoneDigits.length < 11) {
       issues.push("Phone must start with +961 and include your number.");
     }
@@ -71,7 +69,7 @@ export default function SignupScreen({ navigation }) {
     }
 
     return issues;
-  }, [firstName, lastName, email, gov, address, phone, password, confirmPassword]);
+  }, [firstName, lastName, email, gov, phone, password, confirmPassword]);
 
   const canSubmit = useMemo(() => {
     return signupIssues.length === 0;
@@ -94,7 +92,6 @@ export default function SignupScreen({ navigation }) {
         email: email.trim(),
         phone: phone.trim(),
         city: gov,
-        address: address.trim(),
         password,
         confirmPassword,
       });
@@ -201,15 +198,6 @@ export default function SignupScreen({ navigation }) {
             />
           </View>
           <Text style={styles.hint}>Format: +961 followed by your number.</Text>
-
-          <Text style={[styles.label, { marginTop: 12 }]}>Address</Text>
-          <TextInput
-            value={address}
-            onChangeText={setAddress}
-            placeholder="City, area, street, building..."
-            placeholderTextColor="#94A3B8"
-            style={[styles.input, { height: 52 }]}
-          />
 
           <Text style={[styles.label, { marginTop: 12 }]}>Password</Text>
           <View style={styles.inputWrap}>

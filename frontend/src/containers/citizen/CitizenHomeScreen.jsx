@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import MapView, { Marker, Callout } from "react-native-maps";
+import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import BottomNav from "../shared/BottomNav";
@@ -36,6 +37,10 @@ const LEBANON_REGION = {
   longitude: 35.8623,
   latitudeDelta: 1.2,
   longitudeDelta: 1.2,
+};
+const USER_REGION_DELTA = {
+  latitudeDelta: 0.015,
+  longitudeDelta: 0.015,
 };
 
 // Fallback coordinates for known cities
@@ -64,10 +69,55 @@ export default function CitizenHomeScreen({ navigation }) {
   const [selectedFilter, setSelectedFilter] = useState("All");
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userRegion, setUserRegion] = useState(null);
+  const [locationStatus, setLocationStatus] = useState("idle");
   const [selectedMarker, setSelectedMarker] = useState(null);
   const { height } = useWindowDimensions();
   const mapHeight = Math.max(420, height - 315);
   const mapRef = useRef(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const centerMapOnUser = async () => {
+      try {
+        setLocationStatus("loading");
+
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (!isMounted) return;
+
+        if (permission.status !== "granted") {
+          setLocationStatus("denied");
+          return;
+        }
+
+        const currentLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (!isMounted) return;
+
+        const nextRegion = {
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+          ...USER_REGION_DELTA,
+        };
+
+        setUserRegion(nextRegion);
+        setLocationStatus("granted");
+        mapRef.current?.animateToRegion(nextRegion, 900);
+      } catch (err) {
+        if (!isMounted) return;
+        console.error("Failed to get current location:", err);
+        setLocationStatus("error");
+      }
+    };
+
+    centerMapOnUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -202,9 +252,14 @@ export default function CitizenHomeScreen({ navigation }) {
               <MapView
                 ref={mapRef}
                 style={{ height: mapHeight, borderRadius: 16 }}
-                initialRegion={LEBANON_REGION}
-                showsUserLocation
-                showsMyLocationButton
+                initialRegion={userRegion || LEBANON_REGION}
+                showsUserLocation={locationStatus === "granted"}
+                showsMyLocationButton={locationStatus === "granted"}
+                onMapReady={() => {
+                  if (userRegion) {
+                    mapRef.current?.animateToRegion(userRegion, 500);
+                  }
+                }}
               >
                 {issuesWithCoords.map((issue) =>
                   issue.coords ? (
@@ -232,7 +287,7 @@ export default function CitizenHomeScreen({ navigation }) {
 
             <View style={styles.mapFooter}>
               <Text style={styles.mapFooterText}>{issuesWithCoords.length} open issues</Text>
-              <Text style={styles.mapFooterText}>Lebanon</Text>
+              <Text style={styles.mapFooterText}>{locationStatus === "granted" ? "Your location" : "Lebanon"}</Text>
             </View>
           </View>
         ) : (

@@ -7,6 +7,7 @@ use App\Models\Issue;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ReportPageController extends Controller
 {
@@ -114,9 +115,9 @@ class ReportPageController extends Controller
 
     private function validatedReportData(Request $request): array
     {
-        return $request->validate([
-            'user_id' => ['required', Rule::exists('users', 'id')->where('role', User::ROLE_CITIZEN)],
-            'assigned_to' => ['nullable', Rule::exists('users', 'id')->where('role', User::ROLE_WORKER)],
+        $data = $request->validate([
+            'user_id' => ['required', Rule::exists('users', 'id')],
+            'assigned_to' => ['nullable', Rule::exists('users', 'id')],
             'title' => ['required', 'string', 'min:5', 'max:180'],
             'description' => ['required', 'string', 'min:20'],
             'category' => ['required', Rule::in(Issue::CATEGORIES)],
@@ -128,15 +129,29 @@ class ReportPageController extends Controller
             'image_url' => ['nullable', 'url', 'max:2048'],
             'rejection_reason' => ['nullable', 'string'],
         ]);
+
+        if (! User::find($data['user_id'])?->hasRole(User::ROLE_CITIZEN)) {
+            throw ValidationException::withMessages([
+                'user_id' => 'The report creator must have the citizen role.',
+            ]);
+        }
+
+        if (! empty($data['assigned_to']) && ! User::find($data['assigned_to'])?->hasRole(User::ROLE_WORKER)) {
+            throw ValidationException::withMessages([
+                'assigned_to' => 'Reports can only be assigned to users with the worker role.',
+            ]);
+        }
+
+        return $data;
     }
 
     private function citizens()
     {
-        return User::where('role', User::ROLE_CITIZEN)->orderBy('name')->get(['id', 'name', 'email']);
+        return User::withRole(User::ROLE_CITIZEN)->orderBy('name')->get(['id', 'name', 'email', 'role']);
     }
 
     private function workers()
     {
-        return User::where('role', User::ROLE_WORKER)->orderBy('name')->get(['id', 'name', 'email']);
+        return User::withRole(User::ROLE_WORKER)->orderBy('name')->get(['id', 'name', 'email', 'role']);
     }
 }

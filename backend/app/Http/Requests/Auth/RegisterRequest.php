@@ -2,9 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
-use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 class RegisterRequest extends FormRequest
@@ -30,17 +28,11 @@ class RegisterRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'first_name' => ['required_without:name', 'nullable', 'string', 'min:2', 'max:80'],
-            'last_name' => ['required_with:first_name', 'nullable', 'string', 'min:2', 'max:80'],
-            'name' => ['required_without:first_name', 'nullable', 'string', 'min:2', 'max:160'],
+            'first_name' => ['required', 'string', 'min:2', 'max:80'],
+            'last_name' => ['required', 'string', 'min:2', 'max:80'],
             'email' => ['required', 'email:rfc', 'max:255', 'unique:users,email'],
-            'phone' => ['required', 'regex:/^\+961\s?[0-9]{7,8}$/'],
-            'role' => ['nullable', Rule::in(User::ROLES)],
-            'country' => ['nullable', 'string', 'max:80'],
-            'city' => ['nullable', 'string', 'max:80'],
-            'street' => ['nullable', 'string', 'max:160'],
-            'building' => ['nullable', 'string', 'max:80'],
-            'address' => ['nullable', 'string', 'min:5', 'max:255'],
+            'phone' => ['required', 'regex:/^\+961\s?[0-9]{7,8}$/', 'unique:users,phone'],
+            'city' => ['required', 'string', 'max:80'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ];
     }

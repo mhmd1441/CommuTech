@@ -18,7 +18,8 @@ class UserController extends Controller
         ]);
 
         $users = User::query()
-            ->when($data['role'] ?? null, fn ($query, $role) => $query->where('role', $role))
+            ->with('roles')
+            ->when($data['role'] ?? null, fn ($query, $role) => $query->withRole($role))
             ->when($data['search'] ?? null, function ($query, $search) {
                 $query->where(function ($query) use ($search) {
                     $query
@@ -35,18 +36,27 @@ class UserController extends Controller
 
     public function store(StoreUserRequest $request)
     {
-        $user = User::create($request->validated());
+        $data = $request->validated();
+        $roles = $data['roles'];
+        unset($data['roles']);
+
+        $data['name'] = $this->displayName($data);
+        $data['role'] = $this->primaryRole($roles);
+        $data['is_verified'] = $this->isProfileVerified($data);
+
+        $user = User::create($data);
+        $user->syncRolesByName($roles);
 
         return response()->json([
             'message' => 'User created successfully.',
-            'user' => $user,
+            'user' => $user->fresh()->load('roles'),
         ], 201);
     }
 
     public function show(User $user)
     {
         return response()->json([
-            'user' => $user,
+            'user' => $user->load('roles'),
             'stats' => [
                 'issues_count' => $user->issues()->count(),
                 'notifications_count' => $user->commuTechNotifications()->count(),
@@ -56,11 +66,33 @@ class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user)
     {
-        $user->update($request->validated());
+        $data = $request->validated();
+        $roles = $data['roles'] ?? null;
+        unset($data['roles']);
+
+        if ($roles !== null) {
+            $data['role'] = $this->primaryRole($roles);
+        }
+
+        if (array_intersect(['first_name', 'father_name', 'last_name'], array_keys($data)) !== []) {
+            $data['name'] = $this->displayName([
+                'first_name' => $data['first_name'] ?? $user->first_name,
+                'father_name' => $data['father_name'] ?? $user->father_name,
+                'last_name' => $data['last_name'] ?? $user->last_name,
+            ]);
+        }
+
+        $user->update($data);
+
+        if ($roles !== null) {
+            $user->syncRolesByName($roles);
+        }
+
+        $user->forceFill(['is_verified' => $this->isProfileVerified($user->fresh()->toArray())])->save();
 
         return response()->json([
             'message' => 'User updated successfully.',
-            'user' => $user->fresh(),
+            'user' => $user->fresh()->load('roles'),
         ]);
     }
 
@@ -75,5 +107,43 @@ class UserController extends Controller
         $user->delete();
 
         return response()->noContent();
+    }
+
+    private function displayName(array $data): string
+    {
+        return trim(collect([
+            $data['first_name'] ?? null,
+            $data['father_name'] ?? null,
+            $data['last_name'] ?? null,
+        ])->filter()->implode(' '));
+    }
+
+    private function primaryRole(array $roles): string
+    {
+        if (in_array(User::ROLE_ADMIN, $roles, true)) {
+            return User::ROLE_ADMIN;
+        }
+
+        if (in_array(User::ROLE_CITIZEN, $roles, true)) {
+            return User::ROLE_CITIZEN;
+        }
+
+        return $roles[0] ?? User::ROLE_CITIZEN;
+    }
+
+    private function isProfileVerified(array $data): bool
+    {
+        return collect([
+            $data['first_name'] ?? null,
+            $data['father_name'] ?? null,
+            $data['last_name'] ?? null,
+            $data['email'] ?? null,
+            $data['phone'] ?? null,
+            $data['country'] ?? null,
+            $data['city'] ?? null,
+            $data['area'] ?? null,
+            $data['street'] ?? null,
+            $data['building'] ?? null,
+        ])->every(fn ($value) => filled($value));
     }
 }
