@@ -11,6 +11,9 @@ import {
   StatusBar,
   Modal,
   TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,6 +54,78 @@ const USER = {
 };
 
 const roleLabel = (role) => role.charAt(0).toUpperCase() + role.slice(1);
+
+const PROFILE_FIELDS = [
+  { key: 'first_name', label: 'First Name', required: true, autoCapitalize: 'words' },
+  { key: 'father_name', label: 'Father Name', autoCapitalize: 'words' },
+  { key: 'last_name', label: 'Last Name', required: true, autoCapitalize: 'words' },
+  { key: 'email', label: 'Email', required: true, keyboardType: 'email-address', autoCapitalize: 'none' },
+  { key: 'phone', label: 'Phone', required: true, keyboardType: 'phone-pad' },
+  { key: 'country', label: 'Country', required: true, autoCapitalize: 'words' },
+  { key: 'city', label: 'City / Governorate', required: true, autoCapitalize: 'words' },
+  { key: 'area', label: 'Area', autoCapitalize: 'words' },
+  { key: 'street', label: 'Street', autoCapitalize: 'words' },
+  { key: 'building', label: 'Building', autoCapitalize: 'words' },
+];
+
+const REQUIRED_PROFILE_FIELDS = PROFILE_FIELDS.filter((field) => field.required);
+const DEFAULT_PROFILE = {
+  first_name: 'Karim',
+  father_name: '',
+  last_name: 'Nassar',
+  email: USER.email,
+  phone: USER.phone,
+  country: 'Lebanon',
+  city: 'Beirut',
+  area: 'Hamra',
+  street: '',
+  building: '',
+  name: USER.name,
+  is_verified: false,
+};
+
+function cleanText(value) {
+  return value ? String(value) : '';
+}
+
+function normalizeProfile(user = {}) {
+  const nameParts = cleanText(user.name).trim().split(/\s+/).filter(Boolean);
+
+  return {
+    first_name: cleanText(user.first_name) || nameParts[0] || '',
+    father_name: cleanText(user.father_name),
+    last_name: cleanText(user.last_name) || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''),
+    email: cleanText(user.email),
+    phone: cleanText(user.phone),
+    country: cleanText(user.country),
+    city: cleanText(user.city),
+    area: cleanText(user.area),
+    street: cleanText(user.street),
+    building: cleanText(user.building),
+    name: cleanText(user.name) || DEFAULT_PROFILE.name,
+    is_verified: Boolean(user.is_verified),
+  };
+}
+
+function displayName(profile) {
+  const parts = [profile.first_name, profile.father_name, profile.last_name]
+    .map((part) => cleanText(part).trim())
+    .filter(Boolean);
+
+  return parts.join(' ') || profile.name || USER.name;
+}
+
+function formatDistrict(profile) {
+  return [profile.area, profile.city].filter(Boolean).join(', ') || profile.city || USER.district;
+}
+
+function requestErrorMessage(error) {
+  return (
+    error.response?.data?.message ||
+    Object.values(error.response?.data?.errors || {})?.[0]?.[0] ||
+    'Request failed. Please try again.'
+  );
+}
 
 function getRoleNames(user) {
   const roleNames = Array.isArray(user?.role_names) ? user.role_names : [];
@@ -123,11 +198,9 @@ function ProfileScreen({ navigation }) {
   const [activeModal, setActiveModal] = useState(null);
   const [authUser, setAuthUser] = useState(getAuthUser());
   const [stats, setStats] = useState(USER.stats);
-  const [personalInfo, setPersonalInfo] = useState({
-    name: USER.name,
-    email: USER.email,
-    phone: USER.phone,
-  });
+  const [personalInfo, setPersonalInfo] = useState(DEFAULT_PROFILE);
+  const [profileForm, setProfileForm] = useState(DEFAULT_PROFILE);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [district, setDistrict] = useState(USER.district);
   const [passwordForm, setPasswordForm] = useState({
     current: '',
@@ -151,12 +224,10 @@ function ProfileScreen({ navigation }) {
           inProgress: data.stats?.in_progress ?? USER.stats.inProgress,
           points: data.stats?.points ?? USER.stats.points,
         });
-        setPersonalInfo({
-          name: user?.name || USER.name,
-          email: user?.email || USER.email,
-          phone: user?.phone || USER.phone,
-        });
-        setDistrict([user?.area, user?.city].filter(Boolean).join(', ') || user?.city || USER.district);
+        const profile = normalizeProfile(user);
+        setPersonalInfo(profile);
+        setProfileForm(profile);
+        setDistrict(formatDistrict(profile));
       } catch (error) {
         console.error('Failed to load profile:', error);
       }
@@ -172,6 +243,9 @@ function ProfileScreen({ navigation }) {
   const roleNames = useMemo(() => getRoleNames(authUser), [authUser]);
   const canSwitchToWorker = roleNames.includes('citizen') && roleNames.includes('worker');
   const displayRole = roleNames.length > 0 ? roleNames.map(roleLabel).join(' / ') : USER.role;
+  const currentDisplayName = displayName(personalInfo);
+  const verificationLabel = personalInfo.is_verified ? 'Verified' : 'Complete profile';
+  const verificationColor = personalInfo.is_verified ? C.green : C.orange;
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -188,6 +262,52 @@ function ProfileScreen({ navigation }) {
     navigation.reset({ index: 0, routes: [{ name: 'WorkerHome' }] });
   };
 
+  const handleOpenPersonalInfo = () => {
+    setProfileForm(personalInfo);
+    setActiveModal('personal');
+  };
+
+  const handleProfileFieldChange = (field, value) => {
+    setProfileForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveProfile = async () => {
+    const payload = PROFILE_FIELDS.reduce((values, field) => {
+      values[field.key] = cleanText(profileForm[field.key]).trim();
+      return values;
+    }, {});
+
+    const missingRequired = REQUIRED_PROFILE_FIELDS.filter((field) => !payload[field.key]);
+    if (missingRequired.length > 0) {
+      Alert.alert(
+        'Missing required info',
+        `Please fill: ${missingRequired.map((field) => field.label).join(', ')}.`
+      );
+      return;
+    }
+
+    try {
+      setSavingProfile(true);
+      const { data } = await api.put('/me', payload);
+      const profile = normalizeProfile(data.user);
+
+      setAuthUser(data.user);
+      setPersonalInfo(profile);
+      setProfileForm(profile);
+      setDistrict(formatDistrict(profile));
+      setActiveModal(null);
+
+      Alert.alert(
+        'Profile saved',
+        profile.is_verified ? 'Your profile is now verified.' : 'Complete the remaining fields to get verified.'
+      );
+    } catch (error) {
+      Alert.alert('Profile not saved', requestErrorMessage(error));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
@@ -195,10 +315,6 @@ function ProfileScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity style={styles.editBtn} onPress={() => setActiveModal('personal')}>
-          <Ionicons name="create-outline" size={18} color={C.navy} />
-          <Text style={styles.editText}>Edit</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -212,12 +328,22 @@ function ProfileScreen({ navigation }) {
             </View>
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{personalInfo.name}</Text>
+            <Text style={styles.userName}>{currentDisplayName}</Text>
             <Text style={styles.userEmail}>{personalInfo.email}</Text>
             <View style={styles.userMeta}>
               <View style={styles.rolePill}>
                 <View style={styles.roleDot} />
                 <Text style={styles.roleText}>{displayRole}</Text>
+              </View>
+              <View style={[styles.verificationPill, { borderColor: verificationColor + '35' }]}>
+                <Ionicons
+                  name={personalInfo.is_verified ? 'checkmark-circle' : 'alert-circle-outline'}
+                  size={10}
+                  color={verificationColor}
+                />
+                <Text style={[styles.verificationText, { color: verificationColor }]}>
+                  {verificationLabel}
+                </Text>
               </View>
               <View style={styles.districtPill}>
                 <Ionicons name="location-outline" size={10} color={C.muted} />
@@ -243,8 +369,8 @@ function ProfileScreen({ navigation }) {
           <MenuItem
             icon="person-circle-outline"
             label="Personal Info"
-            value="Update"
-            onPress={() => setActiveModal('personal')}
+            value={verificationLabel}
+            onPress={handleOpenPersonalInfo}
           />
           <MenuItem
             icon="location-outline"
@@ -358,7 +484,11 @@ function ProfileScreen({ navigation }) {
         animationType="fade"
         onRequestClose={() => setActiveModal(null)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
@@ -376,29 +506,25 @@ function ProfileScreen({ navigation }) {
             {activeModal === 'personal' && (
               <View style={styles.modalBody}>
                 <Text style={styles.modalHint}>
-                  Editable view only. Later this will save through the Laravel API.
+                  Required fields must stay filled. Verification is completed after every field has a value.
                 </Text>
-                <Text style={styles.inputLabel}>Full name</Text>
-                <TextInput
-                  value={personalInfo.name}
-                  onChangeText={(name) => setPersonalInfo((prev) => ({ ...prev, name }))}
-                  style={styles.modalInput}
-                />
-                <Text style={styles.inputLabel}>Email</Text>
-                <TextInput
-                  value={personalInfo.email}
-                  onChangeText={(email) => setPersonalInfo((prev) => ({ ...prev, email }))}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  style={styles.modalInput}
-                />
-                <Text style={styles.inputLabel}>Phone</Text>
-                <TextInput
-                  value={personalInfo.phone}
-                  onChangeText={(phone) => setPersonalInfo((prev) => ({ ...prev, phone }))}
-                  keyboardType="phone-pad"
-                  style={styles.modalInput}
-                />
+                <ScrollView style={styles.profileFieldsScroll} showsVerticalScrollIndicator={false}>
+                  {PROFILE_FIELDS.map((field) => (
+                    <View key={field.key} style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>
+                        {field.label}
+                        {field.required && <Text style={styles.requiredMark}> *</Text>}
+                      </Text>
+                      <TextInput
+                        value={profileForm[field.key]}
+                        onChangeText={(value) => handleProfileFieldChange(field.key, value)}
+                        keyboardType={field.keyboardType || 'default'}
+                        autoCapitalize={field.autoCapitalize || 'sentences'}
+                        style={styles.modalInput}
+                      />
+                    </View>
+                  ))}
+                </ScrollView>
               </View>
             )}
 
@@ -466,12 +592,22 @@ function ProfileScreen({ navigation }) {
             )}
 
             {activeModal !== 'district' && (
-              <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => setActiveModal(null)}>
-                <Text style={styles.modalPrimaryText}>Done</Text>
+              <TouchableOpacity
+                style={[styles.modalPrimaryBtn, savingProfile && styles.modalPrimaryBtnDisabled]}
+                onPress={activeModal === 'personal' ? handleSaveProfile : () => setActiveModal(null)}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalPrimaryText}>
+                    {activeModal === 'personal' ? 'Save Changes' : 'Done'}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       <BottomNav navigation={navigation} activeTab="Profile" />
     </SafeAreaView>
@@ -491,19 +627,6 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   headerTitle: { fontSize: 22, fontWeight: '800', color: C.navy, letterSpacing: -0.5 },
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  editText: { fontSize: 13, color: C.navy, fontWeight: '600' },
-
   scroll: { paddingHorizontal: 20, paddingBottom: 20 },
 
   // User Card
@@ -519,7 +642,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   avatarWrapper: { position: 'relative' },
-  avatar: { width: 64, height: 64, borderRadius: 20, borderWidth: 3, borderColor: C.navy + '30' },
+  avatar: { width: 68, height: 68, borderRadius: 22, borderWidth: 3, borderColor: C.navy + '30' },
   avatarBadge: {
     position: 'absolute',
     bottom: -2,
@@ -536,7 +659,7 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1, gap: 3 },
   userName: { fontSize: 17, fontWeight: '800', color: C.text },
   userEmail: { fontSize: 12, color: C.muted },
-  userMeta: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  userMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   rolePill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -560,6 +683,17 @@ const styles = StyleSheet.create({
     borderColor: C.border,
   },
   districtText: { fontSize: 10, color: C.muted, fontWeight: '500' },
+  verificationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: C.bg,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+  },
+  verificationText: { fontSize: 10, fontWeight: '800' },
 
   // Stats
   statsCard: {
@@ -621,6 +755,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     padding: 16,
     marginBottom: 92,
+    maxHeight: '86%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -641,7 +776,10 @@ const styles = StyleSheet.create({
   },
   modalBody: { gap: 9 },
   modalHint: { color: C.muted, fontSize: 12, fontWeight: '600', lineHeight: 18 },
+  profileFieldsScroll: { maxHeight: 430 },
+  inputGroup: { marginBottom: 9 },
   inputLabel: { color: C.muted, fontSize: 12, fontWeight: '800', marginTop: 4 },
+  requiredMark: { color: C.red },
   modalInput: {
     height: 46,
     borderRadius: 13,
@@ -673,6 +811,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  modalPrimaryBtnDisabled: { opacity: 0.7 },
   modalPrimaryText: { color: '#fff', fontWeight: '900', fontSize: 15 },
 });
 export default ProfileScreen;

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useFocusEffect } from "@react-navigation/native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Callout, Circle, Marker } from "react-native-maps";
 import api from "../../services/api";
 
@@ -39,18 +40,43 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.015,
 };
 
+function getPriorityColor(priority) {
+  switch (priority?.toLowerCase()) {
+    case "critical":
+      return COLORS.danger;
+    case "high":
+      return COLORS.orange;
+    case "medium":
+      return COLORS.blue;
+    default:
+      return COLORS.navy;
+  }
+}
+
+function formatDistance(issue) {
+  const distance = issue.distance_meters ?? issue.distance;
+
+  if (!distance) return null;
+
+  const meters = Math.round(Number(distance));
+  if (!Number.isFinite(meters)) return null;
+
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km away` : `${meters} m away`;
+}
+
 export default function WorkerHomeScreen({ navigation }) {
-  const [viewMode, setViewMode] = useState("map");
+  const [activePanel, setActivePanel] = useState("nearby");
   const [assignedIssues, setAssignedIssues] = useState([]);
   const [nearbyIssues, setNearbyIssues] = useState([]);
   const [workerRegion, setWorkerRegion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [assigningId, setAssigningId] = useState(null);
   const { height } = useWindowDimensions();
-  const mapHeight = Math.max(420, height - 285);
+  const mapHeight = Math.min(Math.max(height * 0.48, 315), 430);
   const mapRef = useRef(null);
 
   const activeRegion = workerRegion || DEFAULT_REGION;
+  const shownIssues = activePanel === "nearby" ? nearbyIssues : assignedIssues;
 
   const loadWorkerIssues = useCallback(async () => {
     try {
@@ -109,44 +135,26 @@ export default function WorkerHomeScreen({ navigation }) {
 
   const mapIssues = useMemo(() => {
     return nearbyIssues
-      .map((issue) => ({
-        ...issue,
-        coords:
-          issue.latitude && issue.longitude
-            ? { latitude: parseFloat(issue.latitude), longitude: parseFloat(issue.longitude) }
-            : null,
-      }))
+      .map((issue) => {
+        const latitude = parseFloat(issue.latitude);
+        const longitude = parseFloat(issue.longitude);
+
+        return {
+          ...issue,
+          coords:
+            Number.isFinite(latitude) && Number.isFinite(longitude)
+              ? { latitude, longitude }
+              : null,
+        };
+      })
       .filter((issue) => issue.coords);
   }, [nearbyIssues]);
-
-  const getPriorityColor = (priority) => {
-    switch (priority?.toLowerCase()) {
-      case "critical":
-        return COLORS.danger;
-      case "high":
-        return COLORS.orange;
-      case "medium":
-        return COLORS.blue;
-      default:
-        return COLORS.navy;
-    }
-  };
-
-  const PriorityLegend = () => (
-    <View style={styles.legendRow}>
-      {["critical", "high", "medium", "low"].map((priority) => (
-        <View key={priority} style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: getPriorityColor(priority) }]} />
-          <Text style={styles.legendText}>{priority}</Text>
-        </View>
-      ))}
-    </View>
-  );
 
   const assignToMe = async (issue) => {
     try {
       setAssigningId(issue.id);
       await api.patch(`/worker/issues/${issue.id}/assign-to-me`);
+      setActivePanel("assigned");
       await loadWorkerIssues();
     } catch (error) {
       Alert.alert("Assign Issue", error.message || "Could not assign this issue.");
@@ -164,188 +172,221 @@ export default function WorkerHomeScreen({ navigation }) {
     }
   };
 
-  const IssueCard = ({ issue, assigned }) => (
-    <View style={styles.issueCard}>
-      <View style={[styles.priorityLine, { backgroundColor: getPriorityColor(issue.priority) }]} />
-      <View style={styles.issueBody}>
-        <View style={styles.issueTop}>
+  const IssueCard = ({ issue, assigned }) => {
+    const priorityColor = getPriorityColor(issue.priority);
+    const distanceLabel = formatDistance(issue);
+
+    return (
+      <View style={styles.issueCard}>
+        <View style={styles.issueHeader}>
+          <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
           <Text style={styles.issueTitle} numberOfLines={1}>
             {issue.title}
           </Text>
-          <Text style={[styles.priorityPill, { color: getPriorityColor(issue.priority), borderColor: getPriorityColor(issue.priority) }]}>
+          <Text style={[styles.priorityPill, { color: priorityColor, borderColor: priorityColor }]}>
             {issue.priority}
           </Text>
         </View>
+
         <Text style={styles.issueMeta} numberOfLines={1}>
-          {issue.category} - {issue.location}
+          {[issue.category, issue.location, distanceLabel].filter(Boolean).join(" - ")}
         </Text>
         <Text style={styles.issueDescription} numberOfLines={2}>
           {issue.description}
         </Text>
-        <View style={styles.issueActions}>
-          {assigned ? (
-            <Pressable onPress={() => markResolved(issue)} style={[styles.actionBtn, styles.resolveBtn]}>
-              <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
-              <Text style={styles.actionText}>Mark Resolved</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => assignToMe(issue)}
-              disabled={assigningId === issue.id}
-              style={[styles.actionBtn, assigningId === issue.id && { opacity: 0.55 }]}
-            >
-              <Ionicons name="briefcase-outline" size={16} color="#fff" />
-              <Text style={styles.actionText}>{assigningId === issue.id ? "Assigning..." : "Assign to me"}</Text>
-            </Pressable>
-          )}
-        </View>
+
+        <Pressable
+          onPress={() => (assigned ? markResolved(issue) : assignToMe(issue))}
+          disabled={assigningId === issue.id}
+          style={[
+            styles.actionBtn,
+            assigned && styles.resolveBtn,
+            assigningId === issue.id && { opacity: 0.55 },
+          ]}
+        >
+          <Ionicons
+            name={assigned ? "checkmark-circle-outline" : "briefcase-outline"}
+            size={16}
+            color="#fff"
+          />
+          <Text style={styles.actionText}>
+            {assigned ? "Mark Resolved" : assigningId === issue.id ? "Assigning..." : "Assign to me"}
+          </Text>
+        </Pressable>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.headerRow}>
-          <View>
-            <View style={styles.modePill}>
-              <Ionicons name="construct-outline" size={14} color={COLORS.navy} />
-              <Text style={styles.modePillText}>Field Operations</Text>
-            </View>
-            <Text style={styles.brand}>Worker Mode</Text>
-            <Text style={styles.headerSub}>Assigned work and unassigned reports near you</Text>
+    <SafeAreaView style={styles.root}>
+      <View style={styles.header}>
+        <View style={styles.headerCopy}>
+          <View style={styles.modePill}>
+            <Ionicons name="construct-outline" size={13} color={COLORS.navy} />
+            <Text style={styles.modePillText}>Worker Mode</Text>
           </View>
-          <Pressable
-            onPress={() => navigation.reset({ index: 0, routes: [{ name: "CitizenHome" }] })}
-            style={styles.citizenBtn}
+          <Text style={styles.title}>Nearby Field Work</Text>
+          <Text style={styles.subtitle}>Unassigned reports within {RADIUS_LABEL} of your location.</Text>
+        </View>
+
+        <Pressable
+          onPress={() => navigation.reset({ index: 0, routes: [{ name: "CitizenHome" }] })}
+          style={styles.citizenBtn}
+        >
+          <Ionicons name="person-outline" size={17} color={COLORS.navy} />
+          <Text style={styles.citizenText}>Citizen</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.quickStats}>
+        <View style={styles.quickPill}>
+          <Ionicons name="locate-outline" size={15} color={COLORS.orange} />
+          <Text style={styles.quickText}>{nearbyIssues.length} nearby</Text>
+        </View>
+        <View style={styles.quickPill}>
+          <Ionicons name="clipboard-outline" size={15} color={COLORS.navy} />
+          <Text style={styles.quickText}>{assignedIssues.length} assigned</Text>
+        </View>
+        <Pressable onPress={loadWorkerIssues} style={styles.refreshBtn}>
+          <Ionicons name="refresh-outline" size={17} color={COLORS.navy} />
+        </Pressable>
+      </View>
+
+      {loading ? (
+        <View style={[styles.loadingBox, { height: mapHeight }]}>
+          <ActivityIndicator size="large" color={COLORS.navy} />
+          <Text style={styles.loadingText}>Loading worker map...</Text>
+        </View>
+      ) : (
+        <View style={[styles.mapFrame, { height: mapHeight }]}>
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={activeRegion}
+            showsUserLocation
+            showsMyLocationButton
+            onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
           >
-            <Ionicons name="person-outline" size={18} color={COLORS.navy} />
-            <Text style={styles.citizenText}>Citizen</Text>
+            <Circle
+              center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
+              radius={RADIUS_METERS}
+              strokeColor="rgba(25, 64, 95, 0.45)"
+              fillColor="rgba(25, 64, 95, 0.12)"
+            />
+            {mapIssues.map((issue) => (
+              <Marker
+                key={issue.id}
+                coordinate={issue.coords}
+                pinColor={getPriorityColor(issue.priority)}
+              >
+                <Callout onPress={() => assignToMe(issue)}>
+                  <View style={styles.callout}>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>
+                      {issue.title}
+                    </Text>
+                    <Text style={styles.calloutMeta}>{issue.category}</Text>
+                    <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
+                      {issue.priority?.toUpperCase()}
+                    </Text>
+                    <Text style={styles.calloutTap}>Tap to assign</Text>
+                  </View>
+                </Callout>
+              </Marker>
+            ))}
+          </MapView>
+
+          <View style={styles.radiusBadge}>
+            <Ionicons name="radio-button-on-outline" size={14} color={COLORS.navy} />
+            <Text style={styles.radiusText}>{RADIUS_LABEL} radius</Text>
+          </View>
+
+          <View style={styles.legend}>
+            {["critical", "high", "medium", "low"].map((priority) => (
+              <View key={priority} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: getPriorityColor(priority) }]} />
+                <Text style={styles.legendText}>{priority}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      <View style={styles.panel}>
+        <View style={styles.panelHandle} />
+        <View style={styles.panelTabs}>
+          <Pressable
+            onPress={() => setActivePanel("nearby")}
+            style={[styles.panelTab, activePanel === "nearby" && styles.panelTabActive]}
+          >
+            <Text style={[styles.panelTabText, activePanel === "nearby" && styles.panelTabTextActive]}>
+              Nearby
+            </Text>
+            <Text style={[styles.panelTabCount, activePanel === "nearby" && styles.panelTabCountActive]}>
+              {nearbyIssues.length}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setActivePanel("assigned")}
+            style={[styles.panelTab, activePanel === "assigned" && styles.panelTabActive]}
+          >
+            <Text style={[styles.panelTabText, activePanel === "assigned" && styles.panelTabTextActive]}>
+              Assigned
+            </Text>
+            <Text style={[styles.panelTabCount, activePanel === "assigned" && styles.panelTabCountActive]}>
+              {assignedIssues.length}
+            </Text>
           </Pressable>
         </View>
 
-        <View style={styles.segmentWrap}>
-          <Pressable
-            onPress={() => setViewMode("map")}
-            style={[styles.segmentBtn, viewMode === "map" && styles.segmentBtnActive]}
-          >
-            <Ionicons name="map-outline" size={18} color={viewMode === "map" ? "#fff" : COLORS.navy} />
-            <Text style={[styles.segmentText, viewMode === "map" && styles.segmentTextActive]}>Map View</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setViewMode("list")}
-            style={[styles.segmentBtn, viewMode === "list" && styles.segmentBtnActive]}
-          >
-            <Ionicons name="list-outline" size={18} color={viewMode === "list" ? "#fff" : COLORS.navy} />
-            <Text style={[styles.segmentText, viewMode === "list" && styles.segmentTextActive]}>List View</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryBox}>
-            <Ionicons name="clipboard-outline" size={18} color={COLORS.navy} />
-            <Text style={styles.summaryValue}>{assignedIssues.length}</Text>
-            <Text style={styles.summaryLabel}>Assigned</Text>
-          </View>
-          <View style={styles.summaryBox}>
-            <Ionicons name="locate-outline" size={18} color={COLORS.orange} />
-            <Text style={styles.summaryValue}>{nearbyIssues.length}</Text>
-            <Text style={styles.summaryLabel}>Unassigned Nearby</Text>
-          </View>
-          <View style={styles.summaryBox}>
-            <Ionicons name="radio-button-on-outline" size={18} color={COLORS.green} />
-            <Text style={styles.summaryValue}>{RADIUS_LABEL}</Text>
-            <Text style={styles.summaryLabel}>Radius</Text>
-          </View>
-        </View>
-
-        <PriorityLegend />
-
-        {loading ? (
-          <View style={[styles.loadingBox, { height: mapHeight }]}>
-            <ActivityIndicator size="large" color={COLORS.navy} />
-            <Text style={styles.loadingText}>Loading worker issues...</Text>
-          </View>
-        ) : viewMode === "map" ? (
-          <View style={styles.mapCard}>
-            <MapView
-              ref={mapRef}
-              style={{ height: mapHeight, borderRadius: 16 }}
-              initialRegion={activeRegion}
-              showsUserLocation
-              showsMyLocationButton
-              onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
-            >
-              <Circle
-                center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
-                radius={RADIUS_METERS}
-                strokeColor="rgba(25, 64, 95, 0.45)"
-                fillColor="rgba(25, 64, 95, 0.12)"
+        <ScrollView
+          style={styles.panelList}
+          contentContainerStyle={styles.panelListContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {shownIssues.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Ionicons
+                name={activePanel === "nearby" ? "map-outline" : "checkmark-done-outline"}
+                size={24}
+                color={activePanel === "nearby" ? COLORS.muted : COLORS.green}
               />
-              {mapIssues.map((issue) => (
-                <Marker
-                  key={issue.id}
-                  coordinate={issue.coords}
-                  pinColor={getPriorityColor(issue.priority)}
-                >
-                  <Callout onPress={() => assignToMe(issue)}>
-                    <View style={styles.callout}>
-                      <Text style={styles.calloutTitle} numberOfLines={1}>
-                        {issue.title}
-                      </Text>
-                      <Text style={styles.calloutMeta}>{issue.category}</Text>
-                      <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
-                        {issue.priority?.toUpperCase()}
-                      </Text>
-                      <Text style={styles.calloutTap}>Tap to assign to me</Text>
-                    </View>
-                  </Callout>
-                </Marker>
-              ))}
-            </MapView>
-            <View style={styles.mapFooter}>
-              <Text style={styles.mapFooterText}>Only unassigned pending issues are shown</Text>
-              <Text style={styles.mapFooterText}>{RADIUS_LABEL} radius</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.listWrap}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Assigned to me</Text>
-              <Text style={styles.sectionCount}>{assignedIssues.length}</Text>
-            </View>
-            {assignedIssues.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Ionicons name="checkmark-done-outline" size={24} color={COLORS.green} />
-                <Text style={styles.emptyText}>No assigned issues yet.</Text>
+              <View style={styles.emptyCopy}>
+                <Text style={styles.emptyTitle}>
+                  {activePanel === "nearby" ? "No nearby reports" : "No assigned reports"}
+                </Text>
+                <Text style={styles.emptyText}>
+                  {activePanel === "nearby"
+                    ? "Unassigned issues inside your radius will appear here."
+                    : "Issues you assign to yourself will appear here."}
+                </Text>
               </View>
-            ) : (
-              assignedIssues.map((issue) => <IssueCard key={issue.id} issue={issue} assigned />)
-            )}
-
-            <View style={[styles.sectionHeader, { marginTop: 18 }]}>
-              <Text style={styles.sectionTitle}>Unassigned nearby</Text>
-              <Text style={styles.sectionCount}>{nearbyIssues.length}</Text>
             </View>
-            {nearbyIssues.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Ionicons name="map-outline" size={24} color={COLORS.muted} />
-                <Text style={styles.emptyText}>No unassigned issues inside your radius.</Text>
-              </View>
-            ) : (
-              nearbyIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
-            )}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+          ) : (
+            shownIssues.map((issue) => (
+              <IssueCard key={issue.id} issue={issue} assigned={activePanel === "assigned"} />
+            ))
+          )}
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.bg },
-  scroll: { paddingHorizontal: 16, paddingTop: 54, paddingBottom: 32 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
+  root: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+    paddingHorizontal: 16,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingTop: 10,
+  },
+  headerCopy: { flex: 1 },
   modePill: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -355,140 +396,223 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    marginBottom: 8,
+    marginBottom: 7,
   },
   modePillText: { color: COLORS.navy, fontWeight: "900", fontSize: 11 },
-  brand: { fontSize: 26, fontWeight: "900", color: COLORS.text },
-  headerSub: { marginTop: 4, color: COLORS.muted, fontWeight: "700", maxWidth: 230 },
+  title: { color: COLORS.text, fontSize: 23, fontWeight: "900" },
+  subtitle: { color: COLORS.muted, fontWeight: "700", fontSize: 12, marginTop: 4 },
   citizenBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    height: 42,
+    gap: 5,
+    paddingHorizontal: 11,
+    height: 40,
     borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+  },
+  citizenText: { color: COLORS.navy, fontWeight: "900", fontSize: 12 },
+  quickStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 10,
+  },
+  quickPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    height: 34,
+  },
+  quickText: { color: COLORS.text, fontWeight: "900", fontSize: 12 },
+  refreshBtn: {
+    marginLeft: "auto",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingBox: {
+    borderRadius: 22,
+    backgroundColor: COLORS.softBlue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: { marginTop: 10, color: COLORS.muted, fontWeight: "800" },
+  mapFrame: {
+    borderRadius: 24,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.softBlue,
   },
-  citizenText: { color: COLORS.navy, fontWeight: "900" },
-  segmentWrap: {
-    marginTop: 18,
+  map: { flex: 1 },
+  radiusBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
     flexDirection: "row",
-    backgroundColor: "#EEF3F8",
-    borderRadius: 16,
-    padding: 4,
-    gap: 6,
-  },
-  segmentBtn: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  segmentBtnActive: { backgroundColor: COLORS.navy },
-  segmentText: { color: COLORS.navy, fontWeight: "800" },
-  segmentTextActive: { color: "#fff" },
-  summaryRow: { flexDirection: "row", gap: 10, marginVertical: 16 },
-  summaryBox: {
-    flex: 1,
-    backgroundColor: COLORS.card,
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    height: 34,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 14,
-    padding: 12,
   },
-  summaryValue: { color: COLORS.text, fontWeight: "900", fontSize: 18, marginTop: 8 },
-  summaryLabel: { marginTop: 4, color: COLORS.muted, fontWeight: "700", fontSize: 11 },
-  legendRow: {
+  radiusText: { color: COLORS.navy, fontWeight: "900", fontSize: 12 },
+  legend: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 14,
+    gap: 7,
   },
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    height: 28,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: {
+    color: COLORS.muted,
+    fontWeight: "900",
+    fontSize: 10,
+    textTransform: "capitalize",
+  },
+  callout: { width: 190, padding: 8 },
+  calloutTitle: { color: COLORS.text, fontSize: 14, fontWeight: "900", marginBottom: 4 },
+  calloutMeta: { color: COLORS.muted, fontSize: 12, fontWeight: "700" },
+  calloutPriority: { fontSize: 12, fontWeight: "900", marginTop: 2 },
+  calloutTap: { marginTop: 6, color: COLORS.navy, fontSize: 11, fontWeight: "800" },
+  panel: {
+    flex: 1,
+    marginTop: 12,
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingTop: 8,
+    paddingHorizontal: 12,
   },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { color: COLORS.muted, fontWeight: "800", fontSize: 11, textTransform: "capitalize" },
-  loadingBox: { borderRadius: 16, backgroundColor: "#EAF1F7", alignItems: "center", justifyContent: "center" },
-  loadingText: { marginTop: 10, color: COLORS.muted, fontWeight: "700" },
-  mapCard: { backgroundColor: COLORS.card, borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, padding: 14 },
-  mapFooter: { marginTop: 10, flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  mapFooterText: { flex: 1, fontSize: 12, color: COLORS.muted, fontWeight: "800" },
-  callout: { width: 200, padding: 10 },
-  calloutTitle: { fontSize: 14, fontWeight: "900", color: COLORS.text, marginBottom: 4 },
-  calloutMeta: { fontSize: 12, color: COLORS.muted, fontWeight: "700" },
-  calloutPriority: { fontSize: 12, fontWeight: "900", marginTop: 2 },
-  calloutTap: { marginTop: 6, fontSize: 11, color: COLORS.navy, fontWeight: "700" },
-  listWrap: { gap: 12 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  sectionTitle: { color: COLORS.text, fontSize: 16, fontWeight: "900" },
-  sectionCount: {
-    minWidth: 28,
+  panelHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.border,
+    marginBottom: 10,
+  },
+  panelTabs: {
+    flexDirection: "row",
+    gap: 8,
+    backgroundColor: "#EEF3F8",
+    borderRadius: 15,
+    padding: 4,
+  },
+  panelTab: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  panelTabActive: { backgroundColor: COLORS.navy },
+  panelTabText: { color: COLORS.navy, fontWeight: "900" },
+  panelTabTextActive: { color: "#fff" },
+  panelTabCount: {
+    minWidth: 24,
     textAlign: "center",
-    color: COLORS.navy,
-    fontWeight: "900",
-    backgroundColor: COLORS.softBlue,
+    overflow: "hidden",
     borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    color: COLORS.navy,
+    backgroundColor: COLORS.card,
+    fontWeight: "900",
+    fontSize: 12,
   },
+  panelTabCountActive: { color: COLORS.navy, backgroundColor: "#fff" },
+  panelList: { marginTop: 12 },
+  panelListContent: { gap: 10, paddingBottom: 22 },
   emptyBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    backgroundColor: COLORS.card,
-    padding: 14,
-  },
-  emptyText: { flex: 1, color: COLORS.muted, fontWeight: "700" },
-  issueCard: {
-    flexDirection: "row",
-    backgroundColor: COLORS.card,
+    gap: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 16,
-    overflow: "hidden",
+    backgroundColor: "#F8FAFC",
+    padding: 14,
   },
-  priorityLine: { width: 6 },
-  issueBody: { flex: 1, padding: 12 },
-  issueTop: { flexDirection: "row", justifyContent: "space-between", gap: 10, alignItems: "center" },
-  issueTitle: { flex: 1, color: COLORS.text, fontWeight: "900", fontSize: 15 },
+  emptyCopy: { flex: 1 },
+  emptyTitle: { color: COLORS.text, fontWeight: "900" },
+  emptyText: { color: COLORS.muted, fontWeight: "700", fontSize: 12, marginTop: 3 },
+  issueCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 17,
+    backgroundColor: "#fff",
+    padding: 12,
+  },
+  issueHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  priorityDot: { width: 9, height: 9, borderRadius: 5 },
+  issueTitle: { flex: 1, color: COLORS.text, fontSize: 15, fontWeight: "900" },
   priorityPill: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "900",
     textTransform: "capitalize",
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  issueMeta: { marginTop: 5, color: COLORS.muted, fontWeight: "700", fontSize: 12 },
-  issueDescription: { marginTop: 8, color: COLORS.muted, fontWeight: "600", lineHeight: 18 },
-  issueActions: { flexDirection: "row", justifyContent: "flex-end", marginTop: 12 },
+  issueMeta: { marginTop: 6, color: COLORS.muted, fontWeight: "800", fontSize: 12 },
+  issueDescription: {
+    marginTop: 7,
+    color: COLORS.muted,
+    fontWeight: "600",
+    lineHeight: 18,
+    fontSize: 12,
+  },
   actionBtn: {
+    alignSelf: "flex-end",
+    marginTop: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     backgroundColor: COLORS.navy,
     borderRadius: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 13,
     paddingVertical: 9,
   },
   resolveBtn: { backgroundColor: COLORS.green },
-  actionText: { color: "#fff", fontWeight: "900" },
+  actionText: { color: "#fff", fontWeight: "900", fontSize: 12 },
 });

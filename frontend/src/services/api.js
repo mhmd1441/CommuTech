@@ -7,7 +7,7 @@ import axios from "axios";
 // Example:
 // export const API_BASE_URL = "http://192.168.1.45:8000/api";
 //Mhmd 
-export const API_BASE_URL = "http://192.168.100.51:8000/api";
+//export const API_BASE_URL = "http://192.168.100.51:8000/api";
 //Mhmd Uni
 //export const API_BASE_URL = "http://172.16.129.137:8000/api";
 //sara Uni 
@@ -15,6 +15,8 @@ export const API_BASE_URL = "http://192.168.100.51:8000/api";
 
 //export const API_BASE_URL = "http://192.168.92.146:8000/api";
 
+//Ngrok
+export const API_BASE_URL = "https://speak-unselect-turret.ngrok-free.dev/api";
 
 let authToken = null;
 let authUser = null;

@@ -22,13 +22,13 @@ class ProfileController extends Controller
         $user = $request->user();
 
         $data = $request->validate([
-            'first_name' => ['sometimes', 'nullable', 'string', 'min:2', 'max:80'],
+            'first_name' => ['sometimes', 'required', 'string', 'min:2', 'max:80'],
             'father_name' => ['sometimes', 'nullable', 'string', 'min:2', 'max:80'],
-            'last_name' => ['sometimes', 'nullable', 'string', 'min:2', 'max:80'],
-            'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'phone' => ['sometimes', 'nullable', 'regex:/^\+961\s?[0-9]{7,8}$/', Rule::unique('users', 'phone')->ignore($user->id)],
-            'country' => ['sometimes', 'nullable', 'string', 'max:80'],
-            'city' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'last_name' => ['sometimes', 'required', 'string', 'min:2', 'max:80'],
+            'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'phone' => ['sometimes', 'required', 'regex:/^\+961\s?[0-9]{7,8}$/', Rule::unique('users', 'phone')->ignore($user->id)],
+            'country' => ['sometimes', 'required', 'string', 'max:80'],
+            'city' => ['sometimes', 'required', 'string', 'max:80'],
             'area' => ['sometimes', 'nullable', 'string', 'max:120'],
             'street' => ['sometimes', 'nullable', 'string', 'max:160'],
             'building' => ['sometimes', 'nullable', 'string', 'max:80'],
