@@ -131,7 +131,7 @@ export default function SignupScreen({ navigation }) {
               <TextInput
                 value={firstName}
                 onChangeText={setFirstName}
-                placeholder="Mohamad"
+                placeholder="First name"
                 placeholderTextColor="#94A3B8"
                 style={styles.input}
               />
@@ -141,7 +141,7 @@ export default function SignupScreen({ navigation }) {
               <TextInput
                 value={lastName}
                 onChangeText={setLastName}
-                placeholder="Moumneh"
+                placeholder="Last name"
                 placeholderTextColor="#94A3B8"
                 style={styles.input}
               />

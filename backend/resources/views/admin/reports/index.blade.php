@@ -13,6 +13,7 @@
             return match ($value) {
                 'resolved', 'citizen' => 'green',
                 'in_progress', 'worker' => 'orange',
+                'under_investigation' => 'orange',
                 'rejected', 'admin' => 'red',
                 default => 'blue',
             };
@@ -24,7 +25,7 @@
             <input name="search" value="{{ $search }}" placeholder="Search by title, location, or description">
             <select name="status">
                 <option value="">All statuses</option>
-                @foreach (['pending', 'in_progress', 'resolved', 'rejected'] as $item)
+                @foreach (\App\Models\Issue::STATUSES as $item)
                     <option value="{{ $item }}" @selected($status === $item)>{{ str_replace('_', ' ', ucfirst($item)) }}</option>
                 @endforeach
             </select>

@@ -2,11 +2,12 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
+  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -53,30 +54,36 @@ function getPriorityColor(priority) {
   }
 }
 
+function formatStatus(status) {
+  return status?.replace("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Pending";
+}
+
 function formatDistance(issue) {
   const distance = issue.distance_meters ?? issue.distance;
-
-  if (!distance) return null;
-
   const meters = Math.round(Number(distance));
-  if (!Number.isFinite(meters)) return null;
+
+  if (!Number.isFinite(meters) || meters <= 0) return null;
 
   return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km away` : `${meters} m away`;
 }
 
+function personName(person, fallback) {
+  return person?.name || [person?.first_name, person?.father_name, person?.last_name].filter(Boolean).join(" ") || fallback;
+}
+
 export default function WorkerHomeScreen({ navigation }) {
-  const [activePanel, setActivePanel] = useState("nearby");
+  const [activeView, setActiveView] = useState("map");
   const [assignedIssues, setAssignedIssues] = useState([]);
   const [nearbyIssues, setNearbyIssues] = useState([]);
   const [workerRegion, setWorkerRegion] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [assigningId, setAssigningId] = useState(null);
-  const { height } = useWindowDimensions();
-  const mapHeight = Math.min(Math.max(height * 0.48, 315), 430);
+  const [busyIssueId, setBusyIssueId] = useState(null);
+  const [selectedIssue, setSelectedIssue] = useState(null);
+  const [resolutionNote, setResolutionNote] = useState("");
   const mapRef = useRef(null);
 
   const activeRegion = workerRegion || DEFAULT_REGION;
-  const shownIssues = activePanel === "nearby" ? nearbyIssues : assignedIssues;
+  const reportList = activeView === "assigned" ? assignedIssues : nearbyIssues;
 
   const loadWorkerIssues = useCallback(async () => {
     try {
@@ -86,6 +93,7 @@ export default function WorkerHomeScreen({ navigation }) {
       if (permission.status !== "granted") {
         Alert.alert("Location Needed", "Worker mode needs location permission to show nearby unassigned issues.");
         setWorkerRegion(DEFAULT_REGION);
+
         const assignedResponse = await api.get("/worker/issues/assigned");
         setAssignedIssues(assignedResponse.data.data || []);
         setNearbyIssues([]);
@@ -150,72 +158,247 @@ export default function WorkerHomeScreen({ navigation }) {
       .filter((issue) => issue.coords);
   }, [nearbyIssues]);
 
+  const openIssue = (issue, assigned) => {
+    setSelectedIssue({ issue, assigned });
+    setResolutionNote(issue.worker_resolution_note || "");
+  };
+
   const assignToMe = async (issue) => {
     try {
-      setAssigningId(issue.id);
+      setBusyIssueId(issue.id);
       await api.patch(`/worker/issues/${issue.id}/assign-to-me`);
-      setActivePanel("assigned");
+      setSelectedIssue(null);
+      setActiveView("assigned");
       await loadWorkerIssues();
     } catch (error) {
       Alert.alert("Assign Issue", error.message || "Could not assign this issue.");
     } finally {
-      setAssigningId(null);
+      setBusyIssueId(null);
     }
   };
 
   const markResolved = async (issue) => {
+    const note = resolutionNote.trim();
+    if (note.length < 5) {
+      Alert.alert("Fix Description", "Please describe what you fixed before marking this report as resolved.");
+      return;
+    }
+
     try {
-      await api.patch(`/worker/issues/${issue.id}/status`, { status: "resolved" });
+      setBusyIssueId(issue.id);
+      await api.patch(`/worker/issues/${issue.id}/status`, {
+        status: "resolved",
+        worker_resolution_note: note,
+      });
+      setSelectedIssue(null);
       await loadWorkerIssues();
     } catch (error) {
       Alert.alert("Update Issue", error.message || "Could not update this issue.");
+    } finally {
+      setBusyIssueId(null);
     }
   };
 
-  const IssueCard = ({ issue, assigned }) => {
+  const ReportCard = ({ issue, assigned }) => {
     const priorityColor = getPriorityColor(issue.priority);
     const distanceLabel = formatDistance(issue);
 
     return (
-      <View style={styles.issueCard}>
-        <View style={styles.issueHeader}>
+      <Pressable onPress={() => openIssue(issue, assigned)} style={styles.reportCard}>
+        <View style={styles.reportCardTop}>
           <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
-          <Text style={styles.issueTitle} numberOfLines={1}>
+          <Text style={styles.reportTitle} numberOfLines={1}>
             {issue.title}
           </Text>
+          <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
+        </View>
+        <Text style={styles.reportMeta} numberOfLines={1}>
+          {[issue.category, distanceLabel || issue.location].filter(Boolean).join(" - ")}
+        </Text>
+        <Text style={styles.reportDescription} numberOfLines={2}>
+          {issue.description}
+        </Text>
+        <View style={styles.reportFooter}>
           <Text style={[styles.priorityPill, { color: priorityColor, borderColor: priorityColor }]}>
             {issue.priority}
           </Text>
+          <Text style={styles.statusPill}>{formatStatus(issue.status)}</Text>
         </View>
-
-        <Text style={styles.issueMeta} numberOfLines={1}>
-          {[issue.category, issue.location, distanceLabel].filter(Boolean).join(" - ")}
-        </Text>
-        <Text style={styles.issueDescription} numberOfLines={2}>
-          {issue.description}
-        </Text>
-
-        <Pressable
-          onPress={() => (assigned ? markResolved(issue) : assignToMe(issue))}
-          disabled={assigningId === issue.id}
-          style={[
-            styles.actionBtn,
-            assigned && styles.resolveBtn,
-            assigningId === issue.id && { opacity: 0.55 },
-          ]}
-        >
-          <Ionicons
-            name={assigned ? "checkmark-circle-outline" : "briefcase-outline"}
-            size={16}
-            color="#fff"
-          />
-          <Text style={styles.actionText}>
-            {assigned ? "Mark Resolved" : assigningId === issue.id ? "Assigning..." : "Assign to me"}
-          </Text>
-        </Pressable>
-      </View>
+      </Pressable>
     );
   };
+
+  const Tabs = () => (
+    <View style={styles.tabs}>
+      {[
+        ["map", "Map", "map-outline"],
+        ["nearby", "Nearby", "locate-outline"],
+        ["assigned", "My Reports", "clipboard-outline"],
+      ].map(([key, label, icon]) => {
+        const active = activeView === key;
+        const count = key === "nearby" ? nearbyIssues.length : key === "assigned" ? assignedIssues.length : null;
+
+        return (
+          <Pressable
+            key={key}
+            onPress={() => setActiveView(key)}
+            style={[styles.tabBtn, active && styles.tabBtnActive]}
+          >
+            <Ionicons name={icon} size={16} color={active ? "#fff" : COLORS.navy} />
+            <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+            {count !== null && (
+              <Text style={[styles.tabCount, active && styles.tabCountActive]}>{count}</Text>
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
+  if (selectedIssue) {
+    const { issue, assigned } = selectedIssue;
+    const priorityColor = getPriorityColor(issue.priority);
+    const reporter = personName(issue.user, "Unknown citizen");
+    const assignee = personName(issue.assignee, issue.assigned_to ? "Assigned worker" : "Unassigned");
+    const canResolve = assigned && !["resolved", "under_investigation", "rejected"].includes(issue.status);
+
+    return (
+      <SafeAreaView style={styles.root}>
+        <View style={styles.detailHeader}>
+          <Pressable onPress={() => setSelectedIssue(null)} style={styles.iconBtn}>
+            <Ionicons name="chevron-back" size={22} color={COLORS.navy} />
+          </Pressable>
+          <Text style={styles.detailHeaderTitle}>Report Details</Text>
+          <Pressable onPress={loadWorkerIssues} style={styles.iconBtn}>
+            <Ionicons name="refresh-outline" size={20} color={COLORS.navy} />
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false}>
+          {issue.image_url ? (
+            <Image source={{ uri: issue.image_url }} style={styles.detailImage} />
+          ) : (
+            <View style={styles.noImageBox}>
+              <Ionicons name="image-outline" size={30} color={COLORS.muted} />
+              <Text style={styles.noImageText}>No image attached yet</Text>
+            </View>
+          )}
+
+          <View style={styles.detailCard}>
+            <View style={styles.detailChips}>
+              <Text style={[styles.detailPriority, { color: priorityColor, borderColor: priorityColor }]}>
+                {issue.priority}
+              </Text>
+              <Text style={styles.statusPill}>{formatStatus(issue.status)}</Text>
+              {formatDistance(issue) && <Text style={styles.statusPill}>{formatDistance(issue)}</Text>}
+            </View>
+
+            <Text style={styles.detailTitle}>{issue.title}</Text>
+            <Text style={styles.detailDescription}>{issue.description}</Text>
+          </View>
+
+          <View style={styles.detailCard}>
+            <Text style={styles.sectionTitle}>People</Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="person-outline" size={18} color={COLORS.navy} />
+              <View style={styles.infoText}>
+                <Text style={styles.infoLabel}>Reported by</Text>
+                <Text style={styles.infoValue}>{reporter}</Text>
+              </View>
+            </View>
+            <View style={styles.infoRow}>
+              <Ionicons name="briefcase-outline" size={18} color={COLORS.orange} />
+              <View style={styles.infoText}>
+                <Text style={styles.infoLabel}>Assigned to</Text>
+                <Text style={styles.infoValue}>{assignee}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.detailCard}>
+            <Text style={styles.sectionTitle}>Report Info</Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="business-outline" size={18} color={COLORS.navy} />
+              <View style={styles.infoText}>
+                <Text style={styles.infoLabel}>Category</Text>
+                <Text style={styles.infoValue}>{issue.category}</Text>
+              </View>
+            </View>
+            <View style={styles.infoRow}>
+              <Ionicons name="location-outline" size={18} color={COLORS.orange} />
+              <View style={styles.infoText}>
+                <Text style={styles.infoLabel}>Location</Text>
+                <Text style={styles.infoValue}>{issue.location}</Text>
+              </View>
+            </View>
+            {issue.latitude && issue.longitude && (
+              <View style={styles.infoRow}>
+                <Ionicons name="navigate-outline" size={18} color={COLORS.green} />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>Coordinates</Text>
+                  <Text style={styles.infoValue}>
+                    {Number(issue.latitude).toFixed(5)}, {Number(issue.longitude).toFixed(5)}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {issue.worker_resolution_note && (
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>Worker Fix Description</Text>
+              <Text style={styles.detailDescription}>{issue.worker_resolution_note}</Text>
+            </View>
+          )}
+
+          {canResolve && (
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>Fix Description</Text>
+              <Text style={styles.inputHint}>Describe what you did before marking this report as resolved.</Text>
+              <TextInput
+                value={resolutionNote}
+                onChangeText={setResolutionNote}
+                placeholder="Example: Replaced the damaged streetlight bulb and tested the light."
+                placeholderTextColor="#94A3B8"
+                style={styles.resolutionInput}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          )}
+        </ScrollView>
+
+        {(canResolve || !assigned) && (
+          <View style={styles.detailActionBar}>
+            <Pressable
+              onPress={() => (assigned ? markResolved(issue) : assignToMe(issue))}
+              disabled={busyIssueId === issue.id}
+              style={[
+                styles.primaryAction,
+                assigned && styles.resolveAction,
+                busyIssueId === issue.id && { opacity: 0.55 },
+              ]}
+            >
+              {busyIssueId === issue.id ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons
+                    name={assigned ? "checkmark-circle-outline" : "briefcase-outline"}
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.primaryActionText}>
+                    {assigned ? "Mark Resolved" : "Assign to me"}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        )}
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -225,8 +408,8 @@ export default function WorkerHomeScreen({ navigation }) {
             <Ionicons name="construct-outline" size={13} color={COLORS.navy} />
             <Text style={styles.modePillText}>Worker Mode</Text>
           </View>
-          <Text style={styles.title}>Nearby Field Work</Text>
-          <Text style={styles.subtitle}>Unassigned reports within {RADIUS_LABEL} of your location.</Text>
+          <Text style={styles.title}>Field Work</Text>
+          <Text style={styles.subtitle}>Nearby unassigned reports and your assigned work.</Text>
         </View>
 
         <Pressable
@@ -238,137 +421,107 @@ export default function WorkerHomeScreen({ navigation }) {
         </Pressable>
       </View>
 
-      <View style={styles.quickStats}>
-        <View style={styles.quickPill}>
-          <Ionicons name="locate-outline" size={15} color={COLORS.orange} />
-          <Text style={styles.quickText}>{nearbyIssues.length} nearby</Text>
-        </View>
-        <View style={styles.quickPill}>
-          <Ionicons name="clipboard-outline" size={15} color={COLORS.navy} />
-          <Text style={styles.quickText}>{assignedIssues.length} assigned</Text>
-        </View>
-        <Pressable onPress={loadWorkerIssues} style={styles.refreshBtn}>
-          <Ionicons name="refresh-outline" size={17} color={COLORS.navy} />
-        </Pressable>
-      </View>
+      <Tabs />
 
-      {loading ? (
-        <View style={[styles.loadingBox, { height: mapHeight }]}>
-          <ActivityIndicator size="large" color={COLORS.navy} />
-          <Text style={styles.loadingText}>Loading worker map...</Text>
-        </View>
-      ) : (
-        <View style={[styles.mapFrame, { height: mapHeight }]}>
-          <MapView
-            ref={mapRef}
-            style={styles.map}
-            initialRegion={activeRegion}
-            showsUserLocation
-            showsMyLocationButton
-            onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
-          >
-            <Circle
-              center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
-              radius={RADIUS_METERS}
-              strokeColor="rgba(25, 64, 95, 0.45)"
-              fillColor="rgba(25, 64, 95, 0.12)"
-            />
-            {mapIssues.map((issue) => (
-              <Marker
-                key={issue.id}
-                coordinate={issue.coords}
-                pinColor={getPriorityColor(issue.priority)}
-              >
-                <Callout onPress={() => assignToMe(issue)}>
-                  <View style={styles.callout}>
-                    <Text style={styles.calloutTitle} numberOfLines={1}>
-                      {issue.title}
-                    </Text>
-                    <Text style={styles.calloutMeta}>{issue.category}</Text>
-                    <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
-                      {issue.priority?.toUpperCase()}
-                    </Text>
-                    <Text style={styles.calloutTap}>Tap to assign</Text>
-                  </View>
-                </Callout>
-              </Marker>
-            ))}
-          </MapView>
+      {activeView === "map" ? (
+        <View style={styles.mapPage}>
+          {loading ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="large" color={COLORS.navy} />
+              <Text style={styles.loadingText}>Loading worker map...</Text>
+            </View>
+          ) : (
+            <MapView
+              ref={mapRef}
+              style={styles.map}
+              initialRegion={activeRegion}
+              showsUserLocation
+              showsMyLocationButton
+              onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
+            >
+              <Circle
+                center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
+                radius={RADIUS_METERS}
+                strokeColor="rgba(25, 64, 95, 0.45)"
+                fillColor="rgba(25, 64, 95, 0.12)"
+              />
+              {mapIssues.map((issue) => (
+                <Marker
+                  key={issue.id}
+                  coordinate={issue.coords}
+                  pinColor={getPriorityColor(issue.priority)}
+                >
+                  <Callout onPress={() => openIssue(issue, false)}>
+                    <View style={styles.callout}>
+                      <Text style={styles.calloutTitle} numberOfLines={1}>
+                        {issue.title}
+                      </Text>
+                      <Text style={styles.calloutMeta}>{issue.category}</Text>
+                      <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
+                        {issue.priority?.toUpperCase()}
+                      </Text>
+                      <Text style={styles.calloutTap}>Tap to view details</Text>
+                    </View>
+                  </Callout>
+                </Marker>
+              ))}
+            </MapView>
+          )}
 
           <View style={styles.radiusBadge}>
             <Ionicons name="radio-button-on-outline" size={14} color={COLORS.navy} />
             <Text style={styles.radiusText}>{RADIUS_LABEL} radius</Text>
           </View>
-
-          <View style={styles.legend}>
-            {["critical", "high", "medium", "low"].map((priority) => (
-              <View key={priority} style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: getPriorityColor(priority) }]} />
-                <Text style={styles.legendText}>{priority}</Text>
-              </View>
-            ))}
+        </View>
+      ) : (
+        <View style={styles.listPage}>
+          <View style={styles.listHeader}>
+            <View>
+              <Text style={styles.listTitle}>
+                {activeView === "assigned" ? "My Assigned Reports" : "Nearby Reports"}
+              </Text>
+              <Text style={styles.listSubtitle}>
+                {activeView === "assigned"
+                  ? "Reports currently assigned to you."
+                  : `Unassigned reports within ${RADIUS_LABEL}.`}
+              </Text>
+            </View>
+            <Pressable onPress={loadWorkerIssues} style={styles.iconBtn}>
+              <Ionicons name="refresh-outline" size={20} color={COLORS.navy} />
+            </Pressable>
           </View>
-        </View>
-      )}
 
-      <View style={styles.panel}>
-        <View style={styles.panelHandle} />
-        <View style={styles.panelTabs}>
-          <Pressable
-            onPress={() => setActivePanel("nearby")}
-            style={[styles.panelTab, activePanel === "nearby" && styles.panelTabActive]}
-          >
-            <Text style={[styles.panelTabText, activePanel === "nearby" && styles.panelTabTextActive]}>
-              Nearby
-            </Text>
-            <Text style={[styles.panelTabCount, activePanel === "nearby" && styles.panelTabCountActive]}>
-              {nearbyIssues.length}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => setActivePanel("assigned")}
-            style={[styles.panelTab, activePanel === "assigned" && styles.panelTabActive]}
-          >
-            <Text style={[styles.panelTabText, activePanel === "assigned" && styles.panelTabTextActive]}>
-              Assigned
-            </Text>
-            <Text style={[styles.panelTabCount, activePanel === "assigned" && styles.panelTabCountActive]}>
-              {assignedIssues.length}
-            </Text>
-          </Pressable>
-        </View>
-
-        <ScrollView
-          style={styles.panelList}
-          contentContainerStyle={styles.panelListContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {shownIssues.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons
-                name={activePanel === "nearby" ? "map-outline" : "checkmark-done-outline"}
-                size={24}
-                color={activePanel === "nearby" ? COLORS.muted : COLORS.green}
-              />
-              <View style={styles.emptyCopy}>
-                <Text style={styles.emptyTitle}>
-                  {activePanel === "nearby" ? "No nearby reports" : "No assigned reports"}
-                </Text>
-                <Text style={styles.emptyText}>
-                  {activePanel === "nearby"
-                    ? "Unassigned issues inside your radius will appear here."
-                    : "Issues you assign to yourself will appear here."}
-                </Text>
-              </View>
+          {loading ? (
+            <View style={styles.listLoading}>
+              <ActivityIndicator size="large" color={COLORS.navy} />
             </View>
           ) : (
-            shownIssues.map((issue) => (
-              <IssueCard key={issue.id} issue={issue} assigned={activePanel === "assigned"} />
-            ))
+            <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+              {reportList.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Ionicons
+                    name={activeView === "assigned" ? "checkmark-done-outline" : "map-outline"}
+                    size={30}
+                    color={activeView === "assigned" ? COLORS.green : COLORS.muted}
+                  />
+                  <Text style={styles.emptyTitle}>
+                    {activeView === "assigned" ? "No assigned reports" : "No nearby reports"}
+                  </Text>
+                  <Text style={styles.emptyText}>
+                    {activeView === "assigned"
+                      ? "Reports you assign to yourself will appear here."
+                      : "Unassigned issues in your radius will appear here."}
+                  </Text>
+                </View>
+              ) : (
+                reportList.map((issue) => (
+                  <ReportCard key={issue.id} issue={issue} assigned={activeView === "assigned"} />
+                ))
+              )}
+            </ScrollView>
           )}
-        </ScrollView>
-      </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -399,7 +552,7 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
   modePillText: { color: COLORS.navy, fontWeight: "900", fontSize: 11 },
-  title: { color: COLORS.text, fontSize: 23, fontWeight: "900" },
+  title: { color: COLORS.text, fontSize: 24, fontWeight: "900" },
   subtitle: { color: COLORS.muted, fontWeight: "700", fontSize: 12, marginTop: 4 },
   citizenBtn: {
     flexDirection: "row",
@@ -413,51 +566,56 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
   },
   citizenText: { color: COLORS.navy, fontWeight: "900", fontSize: 12 },
-  quickStats: {
+  tabs: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 12,
-    marginBottom: 10,
-  },
-  quickPill: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 6,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    backgroundColor: "#EEF3F8",
+    borderRadius: 16,
+    padding: 4,
+    marginTop: 14,
+    marginBottom: 12,
+  },
+  tabBtn: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+  },
+  tabBtnActive: { backgroundColor: COLORS.navy },
+  tabText: { color: COLORS.navy, fontWeight: "900", fontSize: 12 },
+  tabTextActive: { color: "#fff" },
+  tabCount: {
+    minWidth: 20,
+    textAlign: "center",
+    overflow: "hidden",
     borderRadius: 999,
-    paddingHorizontal: 11,
-    height: 34,
-  },
-  quickText: { color: COLORS.text, fontWeight: "900", fontSize: 12 },
-  refreshBtn: {
-    marginLeft: "auto",
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    color: COLORS.navy,
     backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: "center",
-    justifyContent: "center",
+    fontWeight: "900",
+    fontSize: 11,
   },
-  loadingBox: {
-    borderRadius: 22,
-    backgroundColor: COLORS.softBlue,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: { marginTop: 10, color: COLORS.muted, fontWeight: "800" },
-  mapFrame: {
+  tabCountActive: { color: COLORS.navy, backgroundColor: "#fff" },
+  mapPage: {
+    flex: 1,
     borderRadius: 24,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.softBlue,
+    marginBottom: 12,
   },
   map: { flex: 1 },
+  loadingBox: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: { marginTop: 10, color: COLORS.muted, fontWeight: "800" },
   radiusBadge: {
     position: "absolute",
     top: 12,
@@ -473,146 +631,176 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   radiusText: { color: COLORS.navy, fontWeight: "900", fontSize: 12 },
-  legend: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    height: 28,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  legendDot: { width: 7, height: 7, borderRadius: 4 },
-  legendText: {
-    color: COLORS.muted,
-    fontWeight: "900",
-    fontSize: 10,
-    textTransform: "capitalize",
-  },
   callout: { width: 190, padding: 8 },
   calloutTitle: { color: COLORS.text, fontSize: 14, fontWeight: "900", marginBottom: 4 },
   calloutMeta: { color: COLORS.muted, fontSize: 12, fontWeight: "700" },
   calloutPriority: { fontSize: 12, fontWeight: "900", marginTop: 2 },
   calloutTap: { marginTop: 6, color: COLORS.navy, fontSize: 11, fontWeight: "800" },
-  panel: {
-    flex: 1,
-    marginTop: 12,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingTop: 8,
-    paddingHorizontal: 12,
-  },
-  panelHandle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: COLORS.border,
+  listPage: { flex: 1 },
+  listHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
     marginBottom: 10,
   },
-  panelTabs: {
-    flexDirection: "row",
-    gap: 8,
-    backgroundColor: "#EEF3F8",
-    borderRadius: 15,
-    padding: 4,
-  },
-  panelTab: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
-    flexDirection: "row",
+  listTitle: { color: COLORS.text, fontSize: 21, fontWeight: "900" },
+  listSubtitle: { color: COLORS.muted, fontWeight: "700", marginTop: 3 },
+  iconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
   },
-  panelTabActive: { backgroundColor: COLORS.navy },
-  panelTabText: { color: COLORS.navy, fontWeight: "900" },
-  panelTabTextActive: { color: "#fff" },
-  panelTabCount: {
-    minWidth: 24,
-    textAlign: "center",
-    overflow: "hidden",
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    color: COLORS.navy,
-    backgroundColor: COLORS.card,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-  panelTabCountActive: { color: COLORS.navy, backgroundColor: "#fff" },
-  panelList: { marginTop: 12 },
-  panelListContent: { gap: 10, paddingBottom: 22 },
+  listLoading: { flex: 1, alignItems: "center", justifyContent: "center" },
+  listContent: { gap: 12, paddingBottom: 24 },
   emptyBox: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 16,
-    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    backgroundColor: COLORS.card,
+    padding: 22,
+    marginTop: 22,
+  },
+  emptyTitle: { color: COLORS.text, fontWeight: "900", marginTop: 10 },
+  emptyText: { color: COLORS.muted, fontWeight: "700", textAlign: "center", marginTop: 5 },
+  reportCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    backgroundColor: COLORS.card,
     padding: 14,
   },
-  emptyCopy: { flex: 1 },
-  emptyTitle: { color: COLORS.text, fontWeight: "900" },
-  emptyText: { color: COLORS.muted, fontWeight: "700", fontSize: 12, marginTop: 3 },
-  issueCard: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 17,
-    backgroundColor: "#fff",
-    padding: 12,
-  },
-  issueHeader: {
+  reportCardTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
   priorityDot: { width: 9, height: 9, borderRadius: 5 },
-  issueTitle: { flex: 1, color: COLORS.text, fontSize: 15, fontWeight: "900" },
+  reportTitle: { flex: 1, color: COLORS.text, fontSize: 16, fontWeight: "900" },
+  reportMeta: { marginTop: 7, color: COLORS.muted, fontWeight: "800", fontSize: 12 },
+  reportDescription: {
+    marginTop: 8,
+    color: COLORS.muted,
+    fontWeight: "600",
+    lineHeight: 19,
+    fontSize: 13,
+  },
+  reportFooter: { flexDirection: "row", gap: 8, marginTop: 11 },
   priorityPill: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "900",
     textTransform: "capitalize",
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
-  issueMeta: { marginTop: 6, color: COLORS.muted, fontWeight: "800", fontSize: 12 },
-  issueDescription: {
-    marginTop: 7,
-    color: COLORS.muted,
-    fontWeight: "600",
-    lineHeight: 18,
-    fontSize: 12,
+  statusPill: {
+    color: COLORS.navy,
+    backgroundColor: COLORS.softBlue,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "capitalize",
   },
-  actionBtn: {
-    alignSelf: "flex-end",
-    marginTop: 10,
+  detailHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.navy,
-    borderRadius: 12,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
+    justifyContent: "space-between",
+    paddingTop: 10,
   },
-  resolveBtn: { backgroundColor: COLORS.green },
-  actionText: { color: "#fff", fontWeight: "900", fontSize: 12 },
+  detailHeaderTitle: { color: COLORS.navy, fontSize: 18, fontWeight: "900" },
+  detailScroll: { paddingTop: 14, paddingBottom: 100 },
+  detailImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: 20,
+    backgroundColor: COLORS.border,
+  },
+  noImageBox: {
+    height: 170,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  noImageText: { color: COLORS.muted, fontWeight: "800" },
+  detailCard: {
+    marginTop: 14,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    padding: 16,
+  },
+  detailChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  detailPriority: {
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "capitalize",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  detailTitle: { color: COLORS.text, fontSize: 22, fontWeight: "900", lineHeight: 28 },
+  detailDescription: { color: COLORS.muted, fontWeight: "600", lineHeight: 21, marginTop: 10 },
+  sectionTitle: { color: COLORS.text, fontSize: 16, fontWeight: "900", marginBottom: 10 },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 8,
+    backgroundColor: "#F8FAFC",
+  },
+  infoText: { flex: 1 },
+  infoLabel: { color: COLORS.muted, fontSize: 11, fontWeight: "900" },
+  infoValue: { color: COLORS.text, marginTop: 3, fontWeight: "900", lineHeight: 18 },
+  inputHint: { color: COLORS.muted, fontWeight: "700", lineHeight: 18, marginBottom: 10 },
+  resolutionInput: {
+    minHeight: 116,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: "#fff",
+    padding: 12,
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  detailActionBar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 12,
+    backgroundColor: COLORS.bg,
+    paddingTop: 10,
+  },
+  primaryAction: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: COLORS.navy,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  resolveAction: { backgroundColor: COLORS.green },
+  primaryActionText: { color: "#fff", fontSize: 15, fontWeight: "900" },
 });

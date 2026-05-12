@@ -14,7 +14,7 @@ class ReportPageController extends Controller
     public function index(Request $request)
     {
         $data = $request->validate([
-            'status' => ['nullable', Rule::in(['pending', 'in_progress', 'resolved', 'rejected'])],
+            'status' => ['nullable', Rule::in(Issue::STATUSES)],
             'category' => ['nullable', Rule::in(Issue::CATEGORIES)],
             'search' => ['nullable', 'string', 'max:100'],
         ]);
@@ -51,7 +51,7 @@ class ReportPageController extends Controller
             'citizens' => $this->citizens(),
             'workers' => $this->workers(),
             'categories' => Issue::CATEGORIES,
-            'statuses' => ['pending', 'in_progress', 'resolved', 'rejected'],
+            'statuses' => Issue::STATUSES,
             'priorities' => ['low', 'medium', 'high', 'critical'],
             'mode' => 'create',
         ]);
@@ -79,7 +79,7 @@ class ReportPageController extends Controller
             'citizens' => $this->citizens(),
             'workers' => $this->workers(),
             'categories' => Issue::CATEGORIES,
-            'statuses' => ['pending', 'in_progress', 'resolved', 'rejected'],
+            'statuses' => Issue::STATUSES,
             'priorities' => ['low', 'medium', 'high', 'critical'],
             'mode' => 'edit',
         ]);
@@ -121,7 +121,7 @@ class ReportPageController extends Controller
             'title' => ['required', 'string', 'min:5', 'max:180'],
             'description' => ['required', 'string', 'min:20'],
             'category' => ['required', Rule::in(Issue::CATEGORIES)],
-            'status' => ['required', Rule::in(['pending', 'in_progress', 'resolved', 'rejected'])],
+            'status' => ['required', Rule::in(Issue::STATUSES)],
             'priority' => ['required', Rule::in(['low', 'medium', 'high', 'critical'])],
             'location' => ['required', 'string', 'min:4', 'max:255'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],

@@ -35,6 +35,7 @@ const STATUS_META = {
   'in-progress': { label: 'In Progress', color: C.navy, bg: '#EFF6FF', icon: 'sync-outline' },
   in_progress: { label: 'In Progress', color: C.navy, bg: '#EFF6FF', icon: 'sync-outline' },
   resolved: { label: 'Resolved', color: C.green, bg: '#ECFDF5', icon: 'checkmark-circle-outline' },
+  under_investigation: { label: 'Under Review', color: C.orange, bg: '#FFF7ED', icon: 'shield-outline' },
   rejected: { label: 'Rejected', color: C.red, bg: '#FEF2F2', icon: 'close-circle-outline' },
 };
 
@@ -50,7 +51,7 @@ const MY_ISSUES = [
     id: '1',
     title: 'Large pothole on Hamra Street',
     description: 'Deep pothole near the intersection causing damage to vehicles and risk to motorcyclists.',
-    category: 'Roads',
+    category: 'Roads & Sidewalks',
     status: 'in-progress',
     priority: 'high',
     location: 'Hamra, Beirut',
@@ -63,7 +64,7 @@ const MY_ISSUES = [
     id: '2',
     title: 'Street light out for 2 weeks',
     description: 'The lamp post on Bliss Street near AUB gate has been non-functional.',
-    category: 'Lighting',
+    category: 'Street Lighting & Electricity',
     status: 'open',
     priority: 'medium',
     location: 'Bliss St, Beirut',
@@ -75,7 +76,7 @@ const MY_ISSUES = [
     id: '3',
     title: 'Sewage overflow on main road',
     description: 'Raw sewage spilling onto the road - strong odor and health hazard.',
-    category: 'Sanitation',
+    category: 'Waste & Sanitation',
     status: 'resolved',
     priority: 'high',
     location: 'Achrafieh, Beirut',
@@ -88,7 +89,7 @@ const MY_ISSUES = [
     id: '4',
     title: 'Illegal waste dumping near school',
     description: 'Residents dumping waste near the school gates. Smell is unbearable.',
-    category: 'Environment',
+    category: 'Environment & Public Spaces',
     status: 'rejected',
     priority: 'low',
     location: 'Dekwaneh, Beirut',
@@ -104,6 +105,7 @@ const TABS = [
   { id: 'open', label: 'Open' },
   { id: 'in-progress', label: 'In Progress' },
   { id: 'resolved', label: 'Resolved' },
+  { id: 'under_investigation', label: 'Review' },
   { id: 'rejected', label: 'Rejected' },
 ];
 
@@ -190,6 +192,7 @@ const StatsBar = ({ issues }) => {
     open: issues.filter((i) => i.status === 'open' || i.status === 'pending').length,
     'in-progress': issues.filter((i) => i.status === 'in-progress' || i.status === 'in_progress').length,
     resolved: issues.filter((i) => i.status === 'resolved').length,
+    review: issues.filter((i) => i.status === 'under_investigation').length,
   };
   return (
     <View style={styles.statsBar}>
@@ -197,6 +200,7 @@ const StatsBar = ({ issues }) => {
         { label: 'Open', count: counts.open, color: C.orange },
         { label: 'In Progress', count: counts['in-progress'], color: C.navy },
         { label: 'Resolved', count: counts.resolved, color: C.green },
+        { label: 'Review', count: counts.review, color: C.orange },
       ].map((s) => (
         <View key={s.label} style={styles.statItem}>
           <Text style={[styles.statCount, { color: s.color }]}>{s.count}</Text>
@@ -234,7 +238,7 @@ export default function MyReportsScreen({ navigation }) {
 
   const filtered = useMemo(() => {
     const priorityWeight = { high: 3, medium: 2, low: 1 };
-    const statusWeight = { open: 1, pending: 1, 'in-progress': 2, in_progress: 2, resolved: 3, rejected: 4 };
+    const statusWeight = { open: 1, pending: 1, 'in-progress': 2, in_progress: 2, resolved: 3, under_investigation: 4, rejected: 5 };
     const base = activeTab === 'all'
       ? issues
       : issues.filter((i) => i.status === activeTab || i.status === activeTab.replace('-', '_'));

@@ -55,7 +55,7 @@ class DatabaseSeeder extends Seeder
             [
                 'title' => 'Traffic light not working',
                 'description' => 'The traffic light at the intersection has stopped working since morning and is causing traffic confusion.',
-                'category' => 'Traffic',
+                'category' => 'Traffic & Signals',
                 'status' => 'pending',
                 'priority' => 'high',
                 'location' => 'Hamra, Beirut',
@@ -64,7 +64,7 @@ class DatabaseSeeder extends Seeder
             [
                 'title' => 'Streetlight damaged',
                 'description' => 'One of the streetlights on the main road is broken and the area becomes very dark at night.',
-                'category' => 'Lighting',
+                'category' => 'Street Lighting & Electricity',
                 'status' => 'in_progress',
                 'priority' => 'medium',
                 'location' => 'Verdun, Beirut',

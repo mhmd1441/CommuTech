@@ -24,6 +24,7 @@ class DashboardController extends Controller
                 'pending' => Issue::where('status', 'pending')->count(),
                 'in_progress' => Issue::where('status', 'in_progress')->count(),
                 'resolved' => Issue::where('status', 'resolved')->count(),
+                'under_investigation' => Issue::where('status', 'under_investigation')->count(),
                 'rejected' => Issue::where('status', 'rejected')->count(),
                 'unassigned' => Issue::whereNull('assigned_to')->count(),
             ],
@@ -33,7 +34,7 @@ class DashboardController extends Controller
     public function issueStatus()
     {
         return response()->json([
-            'data' => $this->countIssuesBy('status', ['pending', 'in_progress', 'resolved', 'rejected']),
+            'data' => $this->countIssuesBy('status', Issue::STATUSES),
         ]);
     }
 

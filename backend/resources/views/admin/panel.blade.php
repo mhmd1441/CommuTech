@@ -246,6 +246,7 @@
         return match ($value) {
             'resolved', 'citizen' => 'green',
             'in_progress', 'worker' => 'orange',
+            'under_investigation' => 'orange',
             'rejected', 'admin' => 'red',
             default => 'blue',
         };

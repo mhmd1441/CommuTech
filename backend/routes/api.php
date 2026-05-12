@@ -38,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{issue}', 'show');
+        Route::patch('/{issue}/confirm-resolution', 'confirmResolution');
         Route::put('/{issue}', 'update');
         Route::patch('/{issue}', 'update');
         Route::delete('/{issue}', 'destroy');

@@ -10,12 +10,23 @@ class Issue extends Model
     use HasFactory;
 
     public const CATEGORIES = [
-        'Roads',
-        'Lighting',
-        'Traffic',
-        'Environment',
-        'Water',
-        'Sanitation',
+        'Roads & Sidewalks',
+        'Street Lighting & Electricity',
+        'Traffic & Signals',
+        'Waste & Sanitation',
+        'Water & Drainage',
+        'Environment & Public Spaces',
+        'Public Safety',
+        'Public Property',
+        'Other',
+    ];
+
+    public const STATUSES = [
+        'pending',
+        'in_progress',
+        'resolved',
+        'under_investigation',
+        'rejected',
     ];
 
     protected $fillable = [
@@ -33,6 +44,13 @@ class Issue extends Model
         'ai_score',
         'rejection_reason',
         'resolved_at',
+        'worker_resolution_note',
+        'worker_resolution_image_url',
+        'worker_resolved_at',
+        'citizen_resolution_confirmed',
+        'citizen_resolution_note',
+        'citizen_resolution_image_url',
+        'citizen_confirmed_at',
     ];
 
     protected function casts(): array
@@ -42,6 +60,9 @@ class Issue extends Model
             'longitude' => 'decimal:7',
             'ai_score' => 'decimal:2',
             'resolved_at' => 'datetime',
+            'worker_resolved_at' => 'datetime',
+            'citizen_resolution_confirmed' => 'boolean',
+            'citizen_confirmed_at' => 'datetime',
         ];
     }
 

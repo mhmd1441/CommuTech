@@ -90,13 +90,25 @@ class IssueController extends Controller
             'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
             'image_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
-            'status' => ['sometimes', Rule::in(['pending', 'in_progress', 'resolved', 'rejected'])],
+            'status' => ['sometimes', Rule::in(Issue::STATUSES)],
             'priority' => ['sometimes', Rule::in(['low', 'medium', 'high', 'critical'])],
             'rejection_reason' => ['sometimes', 'nullable', 'string'],
         ]);
 
         if ($issue->user_id !== $request->user()->id) {
             abort(403);
+        }
+
+        if ($issue->status === 'under_investigation') {
+            return response()->json([
+                'message' => 'This issue is under investigation and can only be changed by an admin.',
+            ], 423);
+        }
+
+        if (array_key_exists('status', $data)) {
+            return response()->json([
+                'message' => 'Citizens cannot directly change report status.',
+            ], 403);
         }
 
         if (($data['status'] ?? null) === 'resolved') {
@@ -106,6 +118,52 @@ class IssueController extends Controller
         $issue->update($data);
 
         return response()->json($issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']));
+    }
+
+    public function confirmResolution(Request $request, Issue $issue)
+    {
+        if ($issue->user_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        if ($issue->status !== 'resolved') {
+            return response()->json([
+                'message' => 'Only resolved reports can be confirmed or audited.',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'resolved' => ['required', 'boolean'],
+            'note' => ['nullable', 'string', 'max:1200'],
+            'image_url' => ['nullable', 'url', 'max:2048'],
+        ]);
+
+        $confirmed = (bool) $data['resolved'];
+
+        $issue->update([
+            'status' => $confirmed ? 'resolved' : 'under_investigation',
+            'citizen_resolution_confirmed' => $confirmed,
+            'citizen_resolution_note' => $data['note'] ?? null,
+            'citizen_resolution_image_url' => $data['image_url'] ?? null,
+            'citizen_confirmed_at' => now(),
+        ]);
+
+        if (! $confirmed && $issue->assigned_to) {
+            CommuTechNotification::create([
+                'user_id' => $issue->assigned_to,
+                'issue_id' => $issue->id,
+                'type' => 'status_update',
+                'title' => 'Report Under Investigation',
+                'body' => 'The citizen challenged the resolution for "'.$issue->title.'".',
+            ]);
+        }
+
+        return response()->json([
+            'message' => $confirmed
+                ? 'Resolution confirmed.'
+                : 'Report moved under investigation for admin review.',
+            'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
+        ]);
     }
 
     public function destroy(Request $request, Issue $issue)
@@ -128,12 +186,20 @@ class IssueController extends Controller
     {
         $text = strtolower($category.' '.$description);
 
-        if (str_contains($text, 'sewage') || str_contains($text, 'danger') || str_contains($text, 'traffic light')) {
-            return 'high';
-        }
-
         if (str_contains($text, 'emergency') || str_contains($text, 'injury')) {
             return 'critical';
+        }
+
+        if (
+            str_contains($text, 'sewage') ||
+            str_contains($text, 'danger') ||
+            str_contains($text, 'traffic light') ||
+            str_contains($text, 'traffic signal') ||
+            str_contains($text, 'electricity') ||
+            str_contains($text, 'drainage') ||
+            str_contains($text, 'public safety')
+        ) {
+            return 'high';
         }
 
         return 'medium';

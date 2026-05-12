@@ -11,7 +11,7 @@ class DashboardPageController extends Controller
 {
     public function index()
     {
-        $statusLabels = ['pending', 'in_progress', 'resolved', 'rejected'];
+        $statusLabels = Issue::STATUSES;
         $priorityLabels = ['low', 'medium', 'high', 'critical'];
 
         $statusCounts = $this->countIssuesBy('status', $statusLabels);

@@ -10,10 +10,12 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import MapView, { Marker } from "react-native-maps";
 import BottomNav from "../shared/BottomNav";
 import api from "../../services/api";
 
@@ -29,15 +31,33 @@ const C = {
   red: "#B91C1C",
 };
 
-const CATEGORIES = ["Roads", "Lighting", "Traffic", "Environment", "Water", "Sanitation"];
+const CATEGORIES = [
+  "Roads & Sidewalks",
+  "Street Lighting & Electricity",
+  "Traffic & Signals",
+  "Waste & Sanitation",
+  "Water & Drainage",
+  "Environment & Public Spaces",
+  "Public Safety",
+  "Public Property",
+  "Other",
+];
+
+const DEFAULT_COORDINATE = {
+  latitude: 33.8938,
+  longitude: 35.5018,
+};
 
 export default function CreateIssueScreen({ navigation }) {
-  const [category, setCategory] = useState("Roads");
+  const [category, setCategory] = useState(CATEGORIES[0]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
+  const [pickedCoordinate, setPickedCoordinate] = useState(DEFAULT_COORDINATE);
+  const [mapPickerVisible, setMapPickerVisible] = useState(false);
+  const [resolvingMapLocation, setResolvingMapLocation] = useState(false);
   const [locating, setLocating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -54,7 +74,51 @@ export default function CreateIssueScreen({ navigation }) {
     [category, title, description, location]
   );
 
-const searchLocation = (text) => {
+  const mapPickerRegion = useMemo(
+    () => ({
+      latitude: latitude ?? pickedCoordinate.latitude,
+      longitude: longitude ?? pickedCoordinate.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    }),
+    [latitude, longitude, pickedCoordinate]
+  );
+
+  const saveCoordinate = (lat, lng) => {
+    setLatitude(lat);
+    setLongitude(lng);
+    setPickedCoordinate({ latitude: lat, longitude: lng });
+  };
+
+  const readableLocationFromCoords = async (lat, lng) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+        { headers: { "Accept-Language": "en", "User-Agent": "CommuTech/1.0" } }
+      );
+      const geo = await response.json();
+
+      if (geo?.address) {
+        const a = geo.address;
+        const readable = [
+          a.amenity || a.building || a.tourism || a.shop,
+          a.road,
+          a.suburb || a.neighbourhood || a.quarter,
+          a.city || a.town || a.village,
+        ].filter(Boolean).join(", ");
+
+        return readable.length > 3
+          ? readable
+          : geo.display_name.split(",").slice(0, 3).join(",").trim();
+      }
+    } catch {
+      // Coordinate text is a useful fallback when reverse lookup is unavailable.
+    }
+
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  };
+
+  const searchLocation = (text) => {
     setLocation(text);
     if (latitude !== null || longitude !== null) {
       setLatitude(null);
@@ -92,33 +156,33 @@ const searchLocation = (text) => {
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
-      setLatitude(lat);
-      setLongitude(lng);
-
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-          { headers: { "Accept-Language": "en", "User-Agent": "CommuTech/1.0" } }
-        );
-        const geo = await response.json();
-        if (geo?.address) {
-          const a = geo.address;
-          const readable = [
-            a.amenity || a.building || a.tourism || a.shop,
-            a.suburb || a.neighbourhood || a.quarter,
-            a.city || a.town || a.village,
-          ].filter(Boolean).join(", ");
-          setLocation(readable.length > 3 ? readable : geo.display_name.split(",").slice(0, 3).join(",").trim());
-        } else {
-          setLocation(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-        }
-      } catch {
-        setLocation(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-      }
+      saveCoordinate(lat, lng);
+      setLocation(await readableLocationFromCoords(lat, lng));
     } catch (err) {
       Alert.alert("Error", "Could not detect location. Please enter it manually.");
     } finally {
       setLocating(false);
+    }
+  };
+
+  const openMapPicker = () => {
+    setPickedCoordinate({
+      latitude: latitude ?? DEFAULT_COORDINATE.latitude,
+      longitude: longitude ?? DEFAULT_COORDINATE.longitude,
+    });
+    setMapPickerVisible(true);
+  };
+
+  const confirmMapLocation = async () => {
+    try {
+      setResolvingMapLocation(true);
+      saveCoordinate(pickedCoordinate.latitude, pickedCoordinate.longitude);
+      setLocation(await readableLocationFromCoords(pickedCoordinate.latitude, pickedCoordinate.longitude));
+      setMapPickerVisible(false);
+    } catch {
+      Alert.alert("Location", "Could not confirm this location.");
+    } finally {
+      setResolvingMapLocation(false);
     }
   };
 
@@ -133,7 +197,7 @@ const searchLocation = (text) => {
         description: description.trim(),
         category,
         location: location.trim(),
-        ...(latitude && longitude ? { latitude, longitude } : {}),
+        ...(latitude !== null && longitude !== null ? { latitude, longitude } : {}),
       };
 
       const { data } = await api.post("/issues", payload);
@@ -215,12 +279,14 @@ const searchLocation = (text) => {
 
             <Text style={[styles.label, styles.mt]}>Location</Text>
             <View style={styles.locationRow}>
+              <Pressable style={styles.mapPickBtn} onPress={openMapPicker}>
+                <Ionicons name="map-outline" size={19} color={C.navy} />
+              </Pressable>
               <View style={styles.locationInput}>
-                <Ionicons name="location-outline" size={18} color={C.muted} />
                 <TextInput
                   value={location}
                   onChangeText={searchLocation}
-                  placeholder="Detect or enter location"
+                  placeholder="Search location"
                   placeholderTextColor="#94A3B8"
                   style={styles.locationTextInput}
                 />
@@ -241,9 +307,10 @@ const searchLocation = (text) => {
                     key={s.place_id}
                     style={styles.suggestionItem}
                     onPress={() => {
+                      const lat = parseFloat(s.lat);
+                      const lng = parseFloat(s.lon);
                       setLocation(s.display_name.split(",").slice(0, 3).join(",").trim());
-                      setLatitude(parseFloat(s.lat));
-                      setLongitude(parseFloat(s.lon));
+                      saveCoordinate(lat, lng);
                       setSuggestions([]);
                       setShowSuggestions(false);
                     }}
@@ -268,17 +335,6 @@ const searchLocation = (text) => {
             )}
           </View>
 
-          {/* AI card */}
-          <View style={styles.aiCard}>
-            <Ionicons name="sparkles-outline" size={20} color={C.orange} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.aiTitle}>AI Triage Active</Text>
-              <Text style={styles.aiText}>
-                Your issue will be automatically prioritized by the backend based on category and description.
-              </Text>
-            </View>
-          </View>
-
           <Pressable
             onPress={submitIssue}
             disabled={!canSubmit || submitting || submitted}
@@ -291,6 +347,56 @@ const searchLocation = (text) => {
             )}
           </Pressable>
         </ScrollView>
+
+        <Modal
+          visible={mapPickerVisible}
+          animationType="slide"
+          onRequestClose={() => setMapPickerVisible(false)}
+        >
+          <SafeAreaView style={styles.mapModalSafe} edges={["top", "bottom"]}>
+            <View style={styles.mapModalHeader}>
+              <View>
+                <Text style={styles.mapModalTitle}>Choose Location</Text>
+                <Text style={styles.mapModalHint}>Drag the marker or tap the map.</Text>
+              </View>
+              <Pressable onPress={() => setMapPickerVisible(false)} style={styles.iconBtn}>
+                <Ionicons name="close" size={22} color={C.navy} />
+              </Pressable>
+            </View>
+
+            <MapView
+              style={styles.mapPicker}
+              initialRegion={mapPickerRegion}
+              onPress={(event) => setPickedCoordinate(event.nativeEvent.coordinate)}
+            >
+              <Marker
+                coordinate={pickedCoordinate}
+                draggable
+                onDragEnd={(event) => setPickedCoordinate(event.nativeEvent.coordinate)}
+              />
+            </MapView>
+
+            <View style={styles.mapModalFooter}>
+              <View style={styles.mapCoordsPreview}>
+                <Ionicons name="location-outline" size={16} color={C.navy} />
+                <Text style={styles.mapCoordsText}>
+                  {pickedCoordinate.latitude.toFixed(5)}, {pickedCoordinate.longitude.toFixed(5)}
+                </Text>
+              </View>
+              <Pressable
+                onPress={confirmMapLocation}
+                disabled={resolvingMapLocation}
+                style={[styles.confirmMapBtn, resolvingMapLocation && styles.submitBtnDisabled]}
+              >
+                {resolvingMapLocation ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.confirmMapText}>Confirm Location</Text>
+                )}
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </Modal>
 
         <BottomNav navigation={navigation} activeTab="Report" />
       </KeyboardAvoidingView>
@@ -337,6 +443,11 @@ const styles = StyleSheet.create({
   },
   textarea: { minHeight: 112, paddingTop: 12, lineHeight: 20 },
   locationRow: { flexDirection: "row", gap: 10 },
+  mapPickBtn: {
+    width: 50, height: 50, borderRadius: 14,
+    borderWidth: 1, borderColor: C.border, backgroundColor: C.card,
+    alignItems: "center", justifyContent: "center",
+  },
   locationInput: {
     flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
     minHeight: 50, borderRadius: 14, borderWidth: 1,
@@ -362,17 +473,33 @@ const styles = StyleSheet.create({
     padding: 12, borderBottomWidth: 1, borderBottomColor: C.border,
   },
   suggestionText: { flex: 1, fontSize: 13, color: C.text, fontWeight: "600" },
-  aiCard: {
-    marginTop: 12, flexDirection: "row", gap: 12,
-    backgroundColor: "#FFF7ED", borderColor: "#FED7AA",
-    borderWidth: 1, borderRadius: 16, padding: 14,
-  },
-  aiTitle: { color: C.text, fontWeight: "900" },
-  aiText: { marginTop: 4, color: C.muted, fontWeight: "600", lineHeight: 18 },
   submitBtn: {
     marginTop: 14, height: 54, borderRadius: 16,
     backgroundColor: C.navy, alignItems: "center", justifyContent: "center",
   },
   submitBtnDisabled: { opacity: 0.5 },
   submitText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  mapModalSafe: { flex: 1, backgroundColor: C.bg },
+  mapModalHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, paddingVertical: 14,
+  },
+  mapModalTitle: { color: C.text, fontSize: 22, fontWeight: "900" },
+  mapModalHint: { marginTop: 4, color: C.muted, fontWeight: "700" },
+  mapPicker: { flex: 1 },
+  mapModalFooter: {
+    padding: 18, gap: 12, backgroundColor: C.card,
+    borderTopWidth: 1, borderTopColor: C.border,
+  },
+  mapCoordsPreview: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderWidth: 1, borderColor: C.border, borderRadius: 14,
+    paddingHorizontal: 12, minHeight: 44, backgroundColor: C.bg,
+  },
+  mapCoordsText: { color: C.text, fontWeight: "800" },
+  confirmMapBtn: {
+    height: 52, borderRadius: 16, backgroundColor: C.navy,
+    alignItems: "center", justifyContent: "center",
+  },
+  confirmMapText: { color: "#fff", fontSize: 16, fontWeight: "900" },
 });

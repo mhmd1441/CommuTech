@@ -29,7 +29,18 @@ const COLORS = {
   danger: "#B91C1C",
 };
 
-const FILTERS = ["All", "Roads", "Lighting", "Traffic", "Environment"];
+const FILTERS = [
+  "All",
+  "Roads & Sidewalks",
+  "Street Lighting & Electricity",
+  "Traffic & Signals",
+  "Waste & Sanitation",
+  "Water & Drainage",
+  "Environment & Public Spaces",
+  "Public Safety",
+  "Public Property",
+  "Other",
+];
 
 // Lebanon default region
 const LEBANON_REGION = {
