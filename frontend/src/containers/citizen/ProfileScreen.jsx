@@ -17,8 +17,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import BottomNav from "../shared/BottomNav";
-import api, { getAuthUser } from "../../services/api";
+import api, { getAuthUser, setAuthUser as setStoredAuthUser } from "../../services/api";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -34,23 +35,11 @@ const C = {
 };
 
 // ─── Mock User ────────────────────────────────────────────────────────────────
-const USER = {
-  name: 'Karim Nassar',
-  email: 'karim.nassar@gmail.com',
-  phone: '+961 70 123 456',
-  district: 'Hamra, Beirut',
-  avatar: 'https://i.pravatar.cc/150?img=52',
-  joinDate: 'March 2025',
-  role: 'Citizen',
-  // Future backend shape:
-  // roles: ['citizen', 'worker'],
-  // canSwitchToWorker: roles.includes('citizen') && roles.includes('worker'),
-  stats: {
-    submitted: 7,
-    resolved: 3,
-    inProgress: 2,
-    points: 140,
-  },
+const EMPTY_STATS = {
+  submitted: 0,
+  resolved: 0,
+  inProgress: 0,
+  points: 0,
 };
 
 const roleLabel = (role) => role.charAt(0).toUpperCase() + role.slice(1);
@@ -70,17 +59,19 @@ const PROFILE_FIELDS = [
 
 const REQUIRED_PROFILE_FIELDS = PROFILE_FIELDS.filter((field) => field.required);
 const DEFAULT_PROFILE = {
-  first_name: 'Karim',
+  first_name: '',
   father_name: '',
-  last_name: 'Nassar',
-  email: USER.email,
-  phone: USER.phone,
-  country: 'Lebanon',
-  city: 'Beirut',
-  area: 'Hamra',
+  last_name: '',
+  email: '',
+  phone: '',
+  profile_picture_url: '',
+  country: '',
+  city: '',
+  area: '',
   street: '',
   building: '',
-  name: USER.name,
+  name: '',
+  created_at: '',
   is_verified: false,
 };
 
@@ -97,12 +88,14 @@ function normalizeProfile(user = {}) {
     last_name: cleanText(user.last_name) || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''),
     email: cleanText(user.email),
     phone: cleanText(user.phone),
+    profile_picture_url: cleanText(user.profile_picture_url),
     country: cleanText(user.country),
     city: cleanText(user.city),
     area: cleanText(user.area),
     street: cleanText(user.street),
     building: cleanText(user.building),
     name: cleanText(user.name) || DEFAULT_PROFILE.name,
+    created_at: cleanText(user.created_at),
     is_verified: Boolean(user.is_verified),
   };
 }
@@ -112,11 +105,31 @@ function displayName(profile) {
     .map((part) => cleanText(part).trim())
     .filter(Boolean);
 
-  return parts.join(' ') || profile.name || USER.name;
+  return parts.join(' ') || profile.name || 'Profile loading...';
 }
 
 function formatDistrict(profile) {
-  return [profile.area, profile.city].filter(Boolean).join(', ') || profile.city || USER.district;
+  return [profile.area, profile.city].filter(Boolean).join(', ') || profile.city || 'No district yet';
+}
+
+function formatJoinDate(date) {
+  if (!date) return '';
+
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  return parsed.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+function imageFormFile(asset, fallbackName) {
+  const type = asset.mimeType || 'image/jpeg';
+  const extension = type.split('/')[1] || 'jpg';
+
+  return {
+    uri: asset.uri,
+    name: asset.fileName || `${fallbackName}.${extension}`,
+    type,
+  };
 }
 
 function requestErrorMessage(error) {
@@ -193,15 +206,17 @@ const MenuToggle = ({ icon, iconColor = C.navy, label, value, onToggle }) => (
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 function ProfileScreen({ navigation }) {
+  const initialProfile = normalizeProfile(getAuthUser() || {});
   const [notifEnabled, setNotifEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
   const [activeModal, setActiveModal] = useState(null);
-  const [authUser, setAuthUser] = useState(getAuthUser());
-  const [stats, setStats] = useState(USER.stats);
-  const [personalInfo, setPersonalInfo] = useState(DEFAULT_PROFILE);
-  const [profileForm, setProfileForm] = useState(DEFAULT_PROFILE);
+  const [authUser, setAuthUserState] = useState(getAuthUser());
+  const [stats, setStats] = useState(EMPTY_STATS);
+  const [personalInfo, setPersonalInfo] = useState(initialProfile);
+  const [profileForm, setProfileForm] = useState(initialProfile);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [district, setDistrict] = useState(USER.district);
+  const [district, setDistrict] = useState(formatDistrict(initialProfile));
   const [passwordForm, setPasswordForm] = useState({
     current: '',
     next: '',
@@ -217,12 +232,13 @@ function ProfileScreen({ navigation }) {
         if (!isMounted) return;
 
         const user = data.user;
-        setAuthUser(user);
+        setAuthUserState(user);
+        setStoredAuthUser(user);
         setStats({
-          submitted: data.stats?.submitted ?? USER.stats.submitted,
-          resolved: data.stats?.resolved ?? USER.stats.resolved,
-          inProgress: data.stats?.in_progress ?? USER.stats.inProgress,
-          points: data.stats?.points ?? USER.stats.points,
+          submitted: data.stats?.submitted ?? EMPTY_STATS.submitted,
+          resolved: data.stats?.resolved ?? EMPTY_STATS.resolved,
+          inProgress: data.stats?.in_progress ?? EMPTY_STATS.inProgress,
+          points: data.stats?.points ?? EMPTY_STATS.points,
         });
         const profile = normalizeProfile(user);
         setPersonalInfo(profile);
@@ -242,8 +258,9 @@ function ProfileScreen({ navigation }) {
 
   const roleNames = useMemo(() => getRoleNames(authUser), [authUser]);
   const canSwitchToWorker = roleNames.includes('citizen') && roleNames.includes('worker');
-  const displayRole = roleNames.length > 0 ? roleNames.map(roleLabel).join(' / ') : USER.role;
+  const displayRole = roleNames.length > 0 ? roleNames.map(roleLabel).join(' / ') : 'Citizen';
   const currentDisplayName = displayName(personalInfo);
+  const avatarUrl = personalInfo.profile_picture_url;
   const verificationLabel = personalInfo.is_verified ? 'Verified' : 'Complete profile';
   const verificationColor = personalInfo.is_verified ? C.green : C.orange;
 
@@ -271,6 +288,48 @@ function ProfileScreen({ navigation }) {
     setProfileForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handlePickProfilePicture = async () => {
+    if (uploadingAvatar) return;
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Allow photo library access to update your profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const formData = new FormData();
+      formData.append('profile_picture', imageFormFile(result.assets[0], 'profile-picture'));
+
+      setUploadingAvatar(true);
+      const { data } = await api.post('/me/profile-picture', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const profile = normalizeProfile(data.user);
+
+      setAuthUserState(data.user);
+      setStoredAuthUser(data.user);
+      setPersonalInfo(profile);
+      setProfileForm(profile);
+      setDistrict(formatDistrict(profile));
+
+      Alert.alert('Profile picture updated', profile.is_verified ? 'Your profile is verified.' : 'Complete the remaining fields to get verified.');
+    } catch (error) {
+      Alert.alert('Upload failed', requestErrorMessage(error));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     const payload = PROFILE_FIELDS.reduce((values, field) => {
       values[field.key] = cleanText(profileForm[field.key]).trim();
@@ -291,7 +350,8 @@ function ProfileScreen({ navigation }) {
       const { data } = await api.put('/me', payload);
       const profile = normalizeProfile(data.user);
 
-      setAuthUser(data.user);
+      setAuthUserState(data.user);
+      setStoredAuthUser(data.user);
       setPersonalInfo(profile);
       setProfileForm(profile);
       setDistrict(formatDistrict(profile));
@@ -321,12 +381,27 @@ function ProfileScreen({ navigation }) {
 
         {/* ── User Card ── */}
         <View style={styles.userCard}>
-          <View style={styles.avatarWrapper}>
-            <Image source={{ uri: USER.avatar }} style={styles.avatar} />
+          <TouchableOpacity
+            style={styles.avatarWrapper}
+            activeOpacity={0.8}
+            onPress={handlePickProfilePicture}
+            disabled={uploadingAvatar}
+          >
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Ionicons name="person" size={26} color={C.navy} />
+              </View>
+            )}
             <View style={styles.avatarBadge}>
-              <Ionicons name="person" size={10} color="#fff" />
+              {uploadingAvatar ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="camera" size={10} color="#fff" />
+              )}
             </View>
-          </View>
+          </TouchableOpacity>
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{currentDisplayName}</Text>
             <Text style={styles.userEmail}>{personalInfo.email}</Text>
@@ -474,8 +549,9 @@ function ProfileScreen({ navigation }) {
           />
         </MenuGroup>
 
-        {/* Member since */}
-        <Text style={styles.memberSince}>Member since {USER.joinDate}</Text>
+        {!!formatJoinDate(personalInfo.created_at) && (
+          <Text style={styles.memberSince}>Member since {formatJoinDate(personalInfo.created_at)}</Text>
+        )}
         <View style={{ height: 100 }} />
       </ScrollView>
       <Modal
@@ -506,7 +582,7 @@ function ProfileScreen({ navigation }) {
             {activeModal === 'personal' && (
               <View style={styles.modalBody}>
                 <Text style={styles.modalHint}>
-                  Required fields must stay filled. Verification is completed after every field has a value.
+                  Required fields must stay filled. Change your profile picture by tapping the photo beside your name.
                 </Text>
                 <ScrollView style={styles.profileFieldsScroll} showsVerticalScrollIndicator={false}>
                   {PROFILE_FIELDS.map((field) => (
@@ -643,6 +719,11 @@ const styles = StyleSheet.create({
   },
   avatarWrapper: { position: 'relative' },
   avatar: { width: 68, height: 68, borderRadius: 22, borderWidth: 3, borderColor: C.navy + '30' },
+  avatarPlaceholder: {
+    backgroundColor: C.navy + '10',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarBadge: {
     position: 'absolute',
     bottom: -2,

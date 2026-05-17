@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class IssueController extends Controller
@@ -51,7 +52,17 @@ class IssueController extends Controller
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'image_url' => ['nullable', 'url', 'max:2048'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
         ]);
+
+        if ($request->hasFile('image')) {
+            $data['image_url'] = $this->publicStorageUrl(
+                $request,
+                $request->file('image')->store('issue-images', 'public')
+            );
+        }
+
+        unset($data['image']);
 
         $issue = $request->user()->issues()->create([
             ...$data,
@@ -180,6 +191,11 @@ class IssueController extends Controller
     private function normalizeStatus(string $status): string
     {
         return str_replace('-', '_', strtolower($status));
+    }
+
+    private function publicStorageUrl(Request $request, string $path): string
+    {
+        return rtrim($request->getSchemeAndHttpHost(), '/').Storage::url($path);
     }
 
     private function triagePriority(string $category, string $description): string

@@ -64,6 +64,7 @@ class UserPageController extends Controller
             'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
+            'profile_picture_url' => ['nullable', 'url', 'max:2048'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 
@@ -114,6 +115,7 @@ class UserPageController extends Controller
             'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
+            'profile_picture_url' => ['nullable', 'url', 'max:2048'],
             'password' => ['sometimes', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 
@@ -181,6 +183,7 @@ class UserPageController extends Controller
             $data['area'] ?? null,
             $data['street'] ?? null,
             $data['building'] ?? null,
+            $data['profile_picture_url'] ?? null,
         ])->every(fn ($value) => filled($value));
     }
 }

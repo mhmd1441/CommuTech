@@ -135,18 +135,58 @@
         .actions {
             display: flex;
             gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
         }
 
         .pill {
             min-height: 38px;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             padding: 0 14px;
             background: var(--panel-2);
             border: 1px solid var(--line);
             color: var(--text);
             font-size: 13px;
             font-weight: 900;
+        }
+
+        .range-form {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .range-form select,
+        .range-form input {
+            min-height: 38px;
+            border: 1px solid var(--line);
+            background: #0d0f11;
+            color: var(--text);
+            padding: 0 10px;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 800;
+            outline: none;
+        }
+
+        .range-form select {
+            width: 190px;
+        }
+
+        .range-form input {
+            width: 140px;
+        }
+
+        .range-form button {
+            border: 1px solid var(--blue);
+            background: var(--blue);
+            color: #fff;
+            cursor: pointer;
         }
 
         .grid-cards {
@@ -381,6 +421,7 @@
     $maxTrend = max(1, collect($trend)->max('total'));
     $maxStatus = max(1, collect($statusCounts)->max('total'));
     $maxCategory = max(1, collect($categoryCounts)->max('total'));
+    $trendLabelEvery = max(1, (int) ceil(max(1, count($trend)) / 8));
 
     $dashboardTagClass = function ($value) {
         return match ($value) {
@@ -426,7 +467,16 @@
                 <p class="sub">Live overview of community reports, workers, citizens, and response activity.</p>
             </div>
             <div class="actions">
-                <span class="pill">Monthly</span>
+                <form class="range-form" method="GET" action="{{ route('admin.dashboard') }}">
+                    <select name="range" aria-label="Dashboard date range">
+                        @foreach ($dateRange['options'] as $value => $label)
+                            <option value="{{ $value }}" @selected($dateRange['preset'] === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <input name="from" type="date" value="{{ $dateRange['from'] }}" aria-label="Start date" data-custom-date>
+                    <input name="to" type="date" value="{{ $dateRange['to'] }}" aria-label="End date" data-custom-date>
+                    <button class="pill" type="submit">Apply</button>
+                </form>
                 <span class="pill">{{ now()->format('M d, Y') }}</span>
             </div>
         </header>
@@ -458,13 +508,15 @@
             <article class="chart-card">
                 <div class="section-head">
                     <h2>Reports Trend</h2>
-                    <span class="muted">Last 14 days</span>
+                    <span class="muted">{{ $dateRange['label'] }}</span>
                 </div>
-                <div class="bars">
+                <div class="bars" style="grid-template-columns: repeat({{ max(1, count($trend)) }}, minmax(8px, 1fr));">
                     @foreach ($trend as $point)
-                        <div class="bar-wrap" title="{{ $point['date'] }}: {{ $point['total'] }}">
+                        <div class="bar-wrap" title="{{ $point['label'] }}: {{ $point['total'] }}">
                             <div class="bar" style="height: {{ max(4, ($point['total'] / $maxTrend) * 100) }}%;"></div>
-                            <span class="bar-label">{{ $loop->iteration }}</span>
+                            <span class="bar-label">
+                                {{ $loop->first || $loop->last || $loop->iteration % $trendLabelEvery === 0 ? $point['axis_label'] : '' }}
+                            </span>
                         </div>
                     @endforeach
                 </div>
@@ -509,7 +561,7 @@
             <article class="table-card">
                 <div class="section-head">
                     <h2>Recent Reports</h2>
-                    <span class="muted">{{ $summary['totalIssues'] }} total</span>
+                    <span class="muted">{{ $summary['totalIssues'] }} in range</span>
                 </div>
                 <table>
                     <thead>
@@ -580,5 +632,12 @@
         </section>
     </main>
 </div>
+<script>
+    document.querySelectorAll('[data-custom-date]').forEach((input) => {
+        input.addEventListener('change', () => {
+            document.querySelector('[name="range"]').value = 'custom';
+        });
+    });
+</script>
 </body>
 </html>

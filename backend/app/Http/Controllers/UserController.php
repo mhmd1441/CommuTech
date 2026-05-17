@@ -144,6 +144,7 @@ class UserController extends Controller
             $data['area'] ?? null,
             $data['street'] ?? null,
             $data['building'] ?? null,
+            $data['profile_picture_url'] ?? null,
         ])->every(fn ($value) => filled($value));
     }
 }

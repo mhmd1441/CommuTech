@@ -37,6 +37,7 @@ class StoreUserRequest extends FormRequest
             'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
+            'profile_picture_url' => ['nullable', 'url', 'max:2048'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ];
     }

@@ -77,6 +77,10 @@
                     <label>Building</label>
                     <input name="building" value="{{ old('building', $user->building) }}">
                 </div>
+                <div>
+                    <label>Profile Picture URL</label>
+                    <input name="profile_picture_url" type="url" value="{{ old('profile_picture_url', $user->profile_picture_url) }}">
+                </div>
                 @if ($mode === 'create')
                     <div>
                         <label>Password</label>

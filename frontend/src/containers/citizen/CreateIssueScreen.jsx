@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
+  Image,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import MapView, { Marker } from "react-native-maps";
 import BottomNav from "../shared/BottomNav";
@@ -53,6 +55,7 @@ export default function CreateIssueScreen({ navigation }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
   const [pickedCoordinate, setPickedCoordinate] = useState(DEFAULT_COORDINATE);
@@ -186,21 +189,73 @@ export default function CreateIssueScreen({ navigation }) {
     }
   };
 
+  const imageFormFile = (asset, fallbackName) => {
+    const type = asset.mimeType || "image/jpeg";
+    const extension = type.split("/")[1] || "jpg";
+
+    return {
+      uri: asset.uri,
+      name: asset.fileName || `${fallbackName}.${extension}`,
+      type,
+    };
+  };
+
+  const captureIssuePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Camera permission needed", "Allow camera access to capture a report photo.");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setCapturedPhoto(result.assets[0]);
+      }
+    } catch {
+      Alert.alert("Camera error", "Could not open the camera. Please try again.");
+    }
+  };
+
   const submitIssue = async () => {
     if (!canSubmit || submitting) return;
 
     try {
       setSubmitting(true);
 
-      const payload = {
-        title: title.trim(),
-        description: description.trim(),
-        category,
-        location: location.trim(),
-        ...(latitude !== null && longitude !== null ? { latitude, longitude } : {}),
-      };
+      let response;
 
-      const { data } = await api.post("/issues", payload);
+      if (capturedPhoto) {
+        const formData = new FormData();
+        formData.append("title", title.trim());
+        formData.append("description", description.trim());
+        formData.append("category", category);
+        formData.append("location", location.trim());
+        if (latitude !== null && longitude !== null) {
+          formData.append("latitude", String(latitude));
+          formData.append("longitude", String(longitude));
+        }
+        formData.append("image", imageFormFile(capturedPhoto, "issue-photo"));
+
+        response = await api.post("/issues", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } else {
+        response = await api.post("/issues", {
+          title: title.trim(),
+          description: description.trim(),
+          category,
+          location: location.trim(),
+          ...(latitude !== null && longitude !== null ? { latitude, longitude } : {}),
+        });
+      }
+
+      const { data } = response;
 
       setSubmitted(true);
       setTimeout(() => navigation.replace("IssueDetails", { issue: data }), 300);
@@ -332,6 +387,22 @@ export default function CreateIssueScreen({ navigation }) {
                   GPS: {latitude.toFixed(5)}, {longitude.toFixed(5)}
                 </Text>
               </View>
+            )}
+
+            <Text style={[styles.label, styles.mt]}>Photo</Text>
+            {capturedPhoto ? (
+              <View style={styles.photoPreviewWrap}>
+                <Image source={{ uri: capturedPhoto.uri }} style={styles.photoPreview} />
+                <Pressable style={styles.retakePhotoBtn} onPress={captureIssuePhoto}>
+                  <Ionicons name="camera" size={16} color={C.navy} />
+                  <Text style={styles.retakePhotoText}>Retake</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable style={styles.cameraBtn} onPress={captureIssuePhoto}>
+                <Ionicons name="camera-outline" size={20} color={C.navy} />
+                <Text style={styles.cameraBtnText}>Open Camera</Text>
+              </Pressable>
             )}
           </View>
 
@@ -473,6 +544,23 @@ const styles = StyleSheet.create({
     padding: 12, borderBottomWidth: 1, borderBottomColor: C.border,
   },
   suggestionText: { flex: 1, fontSize: 13, color: C.text, fontWeight: "600" },
+  cameraBtn: {
+    minHeight: 52, borderRadius: 14, borderWidth: 1,
+    borderColor: C.border, backgroundColor: C.bg,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8,
+  },
+  cameraBtnText: { color: C.navy, fontSize: 15, fontWeight: "900" },
+  photoPreviewWrap: {
+    borderRadius: 16, overflow: "hidden", borderWidth: 1,
+    borderColor: C.border, backgroundColor: C.bg,
+  },
+  photoPreview: { width: "100%", height: 190, backgroundColor: C.border },
+  retakePhotoBtn: {
+    minHeight: 46, flexDirection: "row", alignItems: "center",
+    justifyContent: "center", gap: 8, backgroundColor: "#FFFFFF",
+  },
+  retakePhotoText: { color: C.navy, fontWeight: "900" },
   submitBtn: {
     marginTop: 14, height: 54, borderRadius: 16,
     backgroundColor: C.navy, alignItems: "center", justifyContent: "center",

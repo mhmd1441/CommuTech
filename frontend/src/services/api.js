@@ -1,26 +1,8 @@
 import axios from "axios";
+import { API_BASE_URL } from "../config.js";
 
-//export const API_BASE_URL = "http://127.0.0.1:8000/api";
-// Real iPhone or Samsung testing:
-// 1. Run Laravel with: php artisan serve --host=0.0.0.0 --port=8000
-// 2. Replace 127.0.0.1 with your laptop IPv4 address.
-// Example:
-// export const API_BASE_URL = "http://192.168.1.45:8000/api";
-//Mhmd 
-//export const API_BASE_URL = "http://192.168.100.51:8000/api";
-//Mhmd Uni
-//export const API_BASE_URL = "http://172.16.129.137:8000/api";
-//sara Uni 
-//export const API_BASE_URL = "http://172.16.187.188:8000/api";
 
-//export const API_BASE_URL = "http://192.168.92.146:8000/api";
-
-//Ngrok
-//export const API_BASE_URL = "https://speak-unselect-turret.ngrok-free.dev/api";
-
-//NGROK SARA
-export const API_BASE_URL = "https://tuition-remission-hunger.ngrok-free.dev/api"; 
-
+export { API_BASE_URL };
 let authToken = null;
 let authUser = null;
 
@@ -93,6 +75,10 @@ export function getAuthToken() {
 
 export function getAuthUser() {
   return authUser;
+}
+
+export function setAuthUser(user) {
+  authUser = user;
 }
 
 export default api;

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -32,6 +33,7 @@ class ProfileController extends Controller
             'area' => ['sometimes', 'nullable', 'string', 'max:120'],
             'street' => ['sometimes', 'nullable', 'string', 'max:160'],
             'building' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'profile_picture_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
         ]);
 
         if (isset($data['email'])) {
@@ -58,6 +60,28 @@ class ProfileController extends Controller
         ]);
     }
 
+    public function updateProfilePicture(Request $request)
+    {
+        $request->validate([
+            'profile_picture' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+        ]);
+
+        $path = $request->file('profile_picture')->store('profile-pictures', 'public');
+        $user = $request->user();
+
+        $user->forceFill([
+            'profile_picture_url' => $this->publicStorageUrl($request, $path),
+        ])->save();
+
+        $user->forceFill(['is_verified' => $this->isProfileVerified($user->fresh())])->save();
+
+        return response()->json([
+            'message' => 'Profile picture updated.',
+            'user' => $user->fresh()->load('roles'),
+            'stats' => $this->stats($request),
+        ]);
+    }
+
     public function updatePassword(Request $request)
     {
         $data = $request->validate([
@@ -74,6 +98,11 @@ class ProfileController extends Controller
         $request->user()->update(['password' => $data['password']]);
 
         return response()->json(['message' => 'Password updated.']);
+    }
+
+    private function publicStorageUrl(Request $request, string $path): string
+    {
+        return rtrim($request->getSchemeAndHttpHost(), '/').Storage::url($path);
     }
 
     private function stats(Request $request): array
@@ -101,6 +130,7 @@ class ProfileController extends Controller
             $user->area,
             $user->street,
             $user->building,
+            $user->profile_picture_url,
         ])->every(fn ($value) => filled($value));
     }
 }

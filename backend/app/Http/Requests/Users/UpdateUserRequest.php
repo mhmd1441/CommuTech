@@ -53,6 +53,7 @@ class UpdateUserRequest extends FormRequest
             'area' => ['sometimes', 'nullable', 'string', 'max:120'],
             'street' => ['sometimes', 'nullable', 'string', 'max:160'],
             'building' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'profile_picture_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             'password' => ['sometimes', 'confirmed', Password::min(8)->letters()->numbers()],
         ];
     }

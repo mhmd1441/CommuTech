@@ -44,6 +44,7 @@ class User extends Authenticatable
         'street',
         'building',
         'is_verified',
+        'profile_picture_url',
         'password',
     ];
 
