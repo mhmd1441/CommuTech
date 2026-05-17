@@ -265,10 +265,6 @@ export default function SignupScreen({ navigation }) {
             </Pressable>
           </View>
         </View>
-
-        <Text style={styles.footerNote}>
-          Suggestion: later you can add OTP (SMS) verification for stronger identity.
-        </Text>
       </ScrollView>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
