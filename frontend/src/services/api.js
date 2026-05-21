@@ -81,4 +81,19 @@ export function setAuthUser(user) {
   authUser = user;
 }
 
+export const profileApi = {
+  async changePassword(currentPassword, newPassword) {
+    try {
+      const { data } = await api.put('/me/password', {
+        current_password: currentPassword,
+        password: newPassword,
+        password_confirmation: newPassword,
+      });
+      return data;
+    } catch (error) {
+      throw apiError(error);
+    }
+  },
+};
+
 export default api;
