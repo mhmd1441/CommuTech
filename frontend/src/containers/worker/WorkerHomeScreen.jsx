@@ -74,6 +74,7 @@ function personName(person, fallback) {
 
 export default function WorkerHomeScreen({ navigation }) {
   const [activeView, setActiveView] = useState("map");
+  const [workerTab, setWorkerTab] = useState("active");
   const [assignedIssues, setAssignedIssues] = useState([]);
   const [nearbyIssues, setNearbyIssues] = useState([]);
   const [workerRegion, setWorkerRegion] = useState(null);
@@ -84,7 +85,19 @@ export default function WorkerHomeScreen({ navigation }) {
   const mapRef = useRef(null);
 
   const activeRegion = workerRegion || DEFAULT_REGION;
-  const reportList = activeView === "assigned" ? assignedIssues : nearbyIssues;
+
+  const activeAssigned = useMemo(
+    () => assignedIssues.filter((i) => i.status !== "resolved"),
+    [assignedIssues]
+  );
+  const completedAssigned = useMemo(
+    () => assignedIssues.filter((i) => i.status === "resolved"),
+    [assignedIssues]
+  );
+
+  const reportList = activeView === "assigned"
+    ? (workerTab === "active" ? activeAssigned : completedAssigned)
+    : nearbyIssues;
 
   const loadWorkerIssues = useCallback(async () => {
     try {
@@ -158,6 +171,7 @@ export default function WorkerHomeScreen({ navigation }) {
 
   const mapAssignedIssues = useMemo(() => {
     return assignedIssues
+      .filter((issue) => issue.status !== "resolved")
       .map((issue) => {
         const latitude = parseFloat(issue.latitude);
         const longitude = parseFloat(issue.longitude);
@@ -170,7 +184,7 @@ export default function WorkerHomeScreen({ navigation }) {
       .filter((issue) => issue.coords);
   }, [assignedIssues]);
 
-  const assignedWithoutCoords = assignedIssues.length - mapAssignedIssues.length;
+  const assignedWithoutCoords = activeAssigned.length - mapAssignedIssues.length;
 
   const openMapsNavigation = (issue) => {
     const lat = Number(issue.latitude);
@@ -534,11 +548,11 @@ export default function WorkerHomeScreen({ navigation }) {
           <View style={styles.listHeader}>
             <View>
               <Text style={styles.listTitle}>
-                {activeView === "assigned" ? "My Assigned Reports" : "Nearby Reports"}
+                {activeView === "assigned" ? "My Reports" : "Nearby Reports"}
               </Text>
               <Text style={styles.listSubtitle}>
                 {activeView === "assigned"
-                  ? "Reports currently assigned to you."
+                  ? "Your assigned work."
                   : `Unassigned reports within ${RADIUS_LABEL}.`}
               </Text>
             </View>
@@ -546,6 +560,27 @@ export default function WorkerHomeScreen({ navigation }) {
               <Ionicons name="refresh-outline" size={20} color={COLORS.navy} />
             </Pressable>
           </View>
+
+          {activeView === "assigned" && (
+            <View style={styles.workerTabsRow}>
+              <Pressable
+                style={[styles.workerTab, workerTab === "active" && styles.workerTabActive]}
+                onPress={() => setWorkerTab("active")}
+              >
+                <Text style={[styles.workerTabText, workerTab === "active" && styles.workerTabTextActive]}>
+                  Active ({activeAssigned.length})
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.workerTab, workerTab === "completed" && styles.workerTabActive]}
+                onPress={() => setWorkerTab("completed")}
+              >
+                <Text style={[styles.workerTabText, workerTab === "completed" && styles.workerTabTextActive]}>
+                  Completed ({completedAssigned.length})
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
           {loading ? (
             <View style={styles.listLoading}>
@@ -556,17 +591,25 @@ export default function WorkerHomeScreen({ navigation }) {
               {reportList.length === 0 ? (
                 <View style={styles.emptyBox}>
                   <Ionicons
-                    name={activeView === "assigned" ? "checkmark-done-outline" : "map-outline"}
+                    name={
+                      activeView !== "assigned" ? "map-outline"
+                      : workerTab === "completed" ? "checkmark-done-outline"
+                      : "clipboard-outline"
+                    }
                     size={30}
-                    color={activeView === "assigned" ? COLORS.green : COLORS.muted}
+                    color={workerTab === "completed" ? COLORS.green : COLORS.muted}
                   />
                   <Text style={styles.emptyTitle}>
-                    {activeView === "assigned" ? "No assigned reports" : "No nearby reports"}
+                    {activeView !== "assigned" ? "No nearby reports"
+                      : workerTab === "completed" ? "No completed reports yet"
+                      : "No active reports"}
                   </Text>
                   <Text style={styles.emptyText}>
-                    {activeView === "assigned"
-                      ? "Reports you assign to yourself will appear here."
-                      : "Unassigned issues in your radius will appear here."}
+                    {activeView !== "assigned"
+                      ? "Unassigned issues in your radius will appear here."
+                      : workerTab === "completed"
+                      ? "Reports you mark as resolved will appear here."
+                      : "Reports you assign to yourself will appear here."}
                   </Text>
                 </View>
               ) : (
@@ -736,6 +779,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  workerTabsRow: {
+    flexDirection: "row",
+    backgroundColor: "#EEF3F8",
+    borderRadius: 14,
+    padding: 4,
+    gap: 4,
+    marginBottom: 12,
+  },
+  workerTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  workerTabActive: { backgroundColor: COLORS.navy },
+  workerTabText: { fontSize: 13, fontWeight: "800", color: COLORS.navy },
+  workerTabTextActive: { color: "#fff" },
   listLoading: { flex: 1, alignItems: "center", justifyContent: "center" },
   listContent: { gap: 12, paddingBottom: 24 },
   emptyBox: {
