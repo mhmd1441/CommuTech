@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import BottomNav from "../shared/BottomNav";
 import api from "../../services/api";
 
@@ -116,7 +117,7 @@ const SORT_OPTIONS = [
 ];
 
 // ─── Issue Card ───────────────────────────────────────────────────────────────
-const IssueCard = ({ item, onPress }) => {
+const IssueCard = ({ item, onPress, onImagePress }) => {
   const statusMeta = STATUS_META[item.status] || STATUS_META.open;
   const priorityMeta = PRIORITY_META[item.priority] || PRIORITY_META.low;
 
@@ -126,7 +127,9 @@ const IssueCard = ({ item, onPress }) => {
       <View style={[styles.cardAccent, { backgroundColor: statusMeta.color }]} />
 
       {item.image_url ? (
-        <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+        <TouchableOpacity onPress={() => onImagePress(item.image_url)} activeOpacity={0.85}>
+          <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+        </TouchableOpacity>
       ) : (
         <View style={[styles.cardImage, { backgroundColor: C.border, alignItems: 'center', justifyContent: 'center' }]}>
           <Ionicons name="image-outline" size={24} color={C.muted} />
@@ -219,6 +222,7 @@ export default function MyReportsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   const fetchIssues = useCallback(async () => {
     try {
@@ -232,9 +236,12 @@ export default function MyReportsScreen({ navigation }) {
     }
   }, [sortMode]);
 
-  React.useEffect(() => {
-    fetchIssues();
-  }, [fetchIssues]);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      fetchIssues();
+    }, [fetchIssues])
+  );
 
   const filtered = useMemo(() => {
     const priorityWeight = { high: 3, medium: 2, low: 1 };
@@ -308,7 +315,7 @@ export default function MyReportsScreen({ navigation }) {
       <FlatList
         data={filtered}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <IssueCard item={item} onPress={goToDetail} />}
+        renderItem={({ item }) => <IssueCard item={item} onPress={goToDetail} onImagePress={setSelectedImage} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -329,6 +336,28 @@ export default function MyReportsScreen({ navigation }) {
           </View>
         }
       />
+      <Modal
+        visible={!!selectedImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedImage(null)}
+      >
+        <TouchableOpacity
+          style={styles.imageModalBackdrop}
+          activeOpacity={1}
+          onPress={() => setSelectedImage(null)}
+        >
+          <Image
+            source={{ uri: selectedImage }}
+            style={styles.fullImage}
+            resizeMode="contain"
+          />
+          <TouchableOpacity style={styles.imageCloseBtn} onPress={() => setSelectedImage(null)}>
+            <Ionicons name="close" size={22} color="#fff" />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal
         visible={sortModalVisible}
         transparent
@@ -548,4 +577,27 @@ const styles = StyleSheet.create({
   sortOptionActive: { backgroundColor: C.navy + '10' },
   sortOptionText: { flex: 1, color: C.muted, fontWeight: '700' },
   sortOptionTextActive: { color: C.navy, fontWeight: '900' },
+
+  // Full-screen image viewer
+  imageModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullImage: {
+    width: '100%',
+    height: '80%',
+  },
+  imageCloseBtn: {
+    position: 'absolute',
+    top: 54,
+    right: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

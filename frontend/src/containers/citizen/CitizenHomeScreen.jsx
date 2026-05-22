@@ -254,46 +254,45 @@ export default function CitizenHomeScreen({ navigation }) {
         {/* Content */}
         {viewMode === "map" ? (
           <View style={styles.mapCard}>
-            {loading ? (
-              <View style={[styles.mapPlaceholder, { height: mapHeight }]}>
-                <ActivityIndicator size="large" color={COLORS.navy} />
-                <Text style={styles.mapSub}>Loading issues...</Text>
+            <MapView
+              ref={mapRef}
+              style={{ height: mapHeight, borderRadius: 16 }}
+              initialRegion={userRegion || LEBANON_REGION}
+              showsUserLocation={locationStatus === "granted"}
+              showsMyLocationButton={locationStatus === "granted"}
+              onMapReady={() => {
+                if (userRegion) {
+                  mapRef.current?.animateToRegion(userRegion, 500);
+                }
+              }}
+            >
+              {issuesWithCoords.map((issue) =>
+                issue.coords ? (
+                  <Marker
+                    key={issue.id}
+                    coordinate={issue.coords}
+                    pinColor={getMarkerColor(issue.priority)}
+                    onPress={() => setSelectedMarker(issue)}
+                  >
+                    <Callout onPress={() => navigation.navigate("IssueDetails", { issue })}>
+                      <View style={styles.callout}>
+                        <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
+                        <Text style={styles.calloutCategory}>{issue.category}</Text>
+                        <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
+                          {issue.priority?.toUpperCase()}
+                        </Text>
+                        <Text style={styles.calloutTap}>Tap to view details →</Text>
+                      </View>
+                    </Callout>
+                  </Marker>
+                ) : null
+              )}
+            </MapView>
+            {loading && (
+              <View style={styles.mapLoadingOverlay}>
+                <ActivityIndicator size="small" color={COLORS.navy} />
+                <Text style={styles.mapLoadingText}>Loading pins…</Text>
               </View>
-            ) : (
-              <MapView
-                ref={mapRef}
-                style={{ height: mapHeight, borderRadius: 16 }}
-                initialRegion={userRegion || LEBANON_REGION}
-                showsUserLocation={locationStatus === "granted"}
-                showsMyLocationButton={locationStatus === "granted"}
-                onMapReady={() => {
-                  if (userRegion) {
-                    mapRef.current?.animateToRegion(userRegion, 500);
-                  }
-                }}
-              >
-                {issuesWithCoords.map((issue) =>
-                  issue.coords ? (
-                    <Marker
-                      key={issue.id}
-                      coordinate={issue.coords}
-                      pinColor={getMarkerColor(issue.priority)}
-                      onPress={() => setSelectedMarker(issue)}
-                    >
-                      <Callout onPress={() => navigation.navigate("IssueDetails", { issue })}>
-                        <View style={styles.callout}>
-                          <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
-                          <Text style={styles.calloutCategory}>{issue.category}</Text>
-                          <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
-                            {issue.priority?.toUpperCase()}
-                          </Text>
-                          <Text style={styles.calloutTap}>Tap to view details →</Text>
-                        </View>
-                      </Callout>
-                    </Marker>
-                  ) : null
-                )}
-              </MapView>
             )}
 
             <View style={styles.mapFooter}>
@@ -378,8 +377,14 @@ const styles = StyleSheet.create({
   filterChipText: { color: COLORS.text, fontWeight: "800" },
   filterChipTextActive: { color: "#fff" },
   mapCard: { backgroundColor: "#fff", borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, padding: 14 },
-  mapPlaceholder: { borderRadius: 16, backgroundColor: "#EAF1F7", alignItems: "center", justifyContent: "center" },
-  mapSub: { marginTop: 10, color: COLORS.muted, fontWeight: "700" },
+  mapLoadingOverlay: {
+    position: "absolute", top: 14, left: 14, right: 14,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 6, paddingHorizontal: 14,
+    backgroundColor: "rgba(255,255,255,0.88)", borderRadius: 20,
+    alignSelf: "center", width: 150,
+  },
+  mapLoadingText: { fontSize: 12, color: COLORS.navy, fontWeight: "700" },
   mapFooter: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
   mapFooterText: { fontSize: 12, color: COLORS.muted, fontWeight: "800" },
   callout: { width: 200, padding: 10 },
