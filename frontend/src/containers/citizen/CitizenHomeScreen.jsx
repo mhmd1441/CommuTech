@@ -139,7 +139,7 @@ export default function CitizenHomeScreen({ navigation }) {
   const fetchIssues = async () => {
     try {
       setLoading(true);
-      const params = { mine: 1, status: "pending" };
+      const params = { mine: 1 };
       if (selectedFilter !== "All") params.category = selectedFilter;
       const { data } = await api.get("/issues", { params });
       setIssues(data.data || []);
@@ -151,13 +151,15 @@ export default function CitizenHomeScreen({ navigation }) {
   };
 
   const issuesWithCoords = useMemo(() => {
-    return issues.map((issue) => ({
-      ...issue,
-      coords:
-        issue.latitude && issue.longitude
-          ? { latitude: parseFloat(issue.latitude), longitude: parseFloat(issue.longitude) }
-          : getCoordsFromLocation(issue.location),
-    }));
+    return issues
+      .filter((issue) => issue.status !== "resolved")
+      .map((issue) => ({
+        ...issue,
+        coords:
+          issue.latitude && issue.longitude
+            ? { latitude: parseFloat(issue.latitude), longitude: parseFloat(issue.longitude) }
+            : getCoordsFromLocation(issue.location),
+      }));
   }, [issues]);
 
   const getPriorityColor = (priority) => {

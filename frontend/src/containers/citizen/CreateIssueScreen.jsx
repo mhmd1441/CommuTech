@@ -277,32 +277,20 @@ export default function CreateIssueScreen({ navigation }) {
         saveCoordinate(lat, lng);
       }
 
-      let response;
-
-      if (capturedPhoto) {
-        const formData = new FormData();
-        formData.append("title", title.trim());
-        formData.append("description", description.trim());
-        formData.append("category", category);
-        formData.append("location", location.trim());
-        if (lat !== null && lng !== null) {
-          formData.append("latitude", String(lat));
-          formData.append("longitude", String(lng));
-        }
-        formData.append("image", imageFormFile(capturedPhoto, "issue-photo"));
-
-        response = await api.post("/issues", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      } else {
-        response = await api.post("/issues", {
-          title: title.trim(),
-          description: description.trim(),
-          category,
-          location: location.trim(),
-          ...(lat !== null && lng !== null ? { latitude: lat, longitude: lng } : {}),
-        });
+      const formData = new FormData();
+      formData.append("title", title.trim());
+      formData.append("description", description.trim());
+      formData.append("category", category);
+      formData.append("location", location.trim());
+      if (lat !== null && lng !== null) {
+        formData.append("latitude", String(lat));
+        formData.append("longitude", String(lng));
       }
+      formData.append("image", imageFormFile(capturedPhoto, "issue-photo"));
+
+      const response = await api.post("/issues", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       const { data } = response;
       setSubmitted(true);

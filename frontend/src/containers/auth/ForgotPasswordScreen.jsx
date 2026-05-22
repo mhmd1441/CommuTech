@@ -53,8 +53,15 @@ export default function ForgotPasswordScreen({ navigation }) {
 
   const handleVerifyOtp = async () => {
     if (otp.length !== 6) { setError("Enter the full 6-digit code."); return; }
-    setStep(2);
-    clearError();
+    try {
+      setLoading(true); clearError();
+      await authApi.verifyOtp(email.trim().toLowerCase(), otp);
+      setStep(2);
+    } catch (e) {
+      setError(e.message || "Invalid or expired code.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResetPassword = async () => {

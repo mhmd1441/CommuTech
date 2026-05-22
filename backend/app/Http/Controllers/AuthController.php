@@ -105,6 +105,28 @@ class AuthController extends Controller
         ]);
     }
 
+    public function verifyOtp(Request $request)
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'otp'   => ['required', 'string', 'size:6'],
+        ]);
+
+        $email  = strtolower($data['email']);
+        $record = DB::table('password_reset_otps')
+            ->where('email', $email)
+            ->where('otp', $data['otp'])
+            ->first();
+
+        if (! $record || now()->isAfter($record->expires_at)) {
+            throw ValidationException::withMessages([
+                'otp' => ['Invalid or expired code. Please request a new one.'],
+            ]);
+        }
+
+        return response()->json(['message' => 'Code verified.']);
+    }
+
     public function resetPassword(Request $request)
     {
         $data = $request->validate([

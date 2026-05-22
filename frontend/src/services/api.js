@@ -69,6 +69,15 @@ export const authApi = {
     }
   },
 
+  async verifyOtp(email, otp) {
+    try {
+      const { data } = await api.post("/auth/verify-otp", { email, otp });
+      return data;
+    } catch (error) {
+      throw apiError(error);
+    }
+  },
+
   async resetPassword(email, otp, password) {
     try {
       const { data } = await api.post("/auth/reset-password", {
