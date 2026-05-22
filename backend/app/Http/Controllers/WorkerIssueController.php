@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class WorkerIssueController extends Controller
@@ -62,35 +63,39 @@ class WorkerIssueController extends Controller
 
     public function assignToMe(Request $request, Issue $issue)
     {
-        if ($issue->assigned_to) {
+        return DB::transaction(function () use ($request, $issue) {
+            $issue = Issue::where('id', $issue->id)->lockForUpdate()->first();
+
+            if ($issue->assigned_to) {
+                return response()->json([
+                    'message' => 'This issue is already assigned to another worker.',
+                ], 409);
+            }
+
+            if ($issue->status !== 'pending') {
+                return response()->json([
+                    'message' => 'Only pending issues can be assigned.',
+                ], 422);
+            }
+
+            $issue->update([
+                'assigned_to' => $request->user()->id,
+                'status' => 'in_progress',
+            ]);
+
+            CommuTechNotification::create([
+                'user_id' => $issue->user_id,
+                'issue_id' => $issue->id,
+                'type' => 'status_update',
+                'title' => 'Report Assigned',
+                'body' => 'Your report "'.$issue->title.'" was assigned to a worker.',
+            ]);
+
             return response()->json([
-                'message' => 'This issue is already assigned to another worker.',
-            ], 409);
-        }
-
-        if ($issue->status !== 'pending') {
-            return response()->json([
-                'message' => 'Only pending issues can be assigned.',
-            ], 422);
-        }
-
-        $issue->update([
-            'assigned_to' => $request->user()->id,
-            'status' => 'in_progress',
-        ]);
-
-        CommuTechNotification::create([
-            'user_id' => $issue->user_id,
-            'issue_id' => $issue->id,
-            'type' => 'status_update',
-            'title' => 'Report Assigned',
-            'body' => 'Your report "'.$issue->title.'" was assigned to a worker.',
-        ]);
-
-        return response()->json([
-            'message' => 'Issue assigned successfully.',
-            'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
-        ]);
+                'message' => 'Issue assigned successfully.',
+                'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
+            ]);
+        });
     }
 
     public function updateStatus(Request $request, Issue $issue)

@@ -597,7 +597,7 @@ function ProfileScreen({ navigation }) {
                   ? 'Default District'
                   : 'Change Password'}
               </Text>
-              <TouchableOpacity style={styles.modalClose} onPress={() => setActiveModal(null)}>
+              <TouchableOpacity style={styles.modalClose} onPress={() => { setActiveModal(null); setPasswordForm({ current: '', next: '', confirm: '' }); }}>
                 <Ionicons name="close" size={20} color={C.navy} />
               </TouchableOpacity>
             </View>

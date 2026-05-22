@@ -73,8 +73,9 @@ export default function CreateIssueScreen({ navigation }) {
       category &&
       title.trim().length >= 5 &&
       description.trim().length >= 20 &&
-      location.trim().length >= 4,
-    [category, title, description, location]
+      location.trim().length >= 4 &&
+      !!capturedPhoto,
+    [category, title, description, location, capturedPhoto]
   );
 
   const mapPickerRegion = useMemo(
@@ -224,11 +225,6 @@ export default function CreateIssueScreen({ navigation }) {
 
   const submitIssue = async () => {
     if (!canSubmit || submitting) return;
-
-    if (!capturedPhoto) {
-      Alert.alert("Photo required", "Please take a photo before submitting the report.");
-      return;
-    }
 
     setSubmitting(true);
 
@@ -425,7 +421,7 @@ export default function CreateIssueScreen({ navigation }) {
               </View>
             )}
 
-            <Text style={[styles.label, styles.mt]}>Photo</Text>
+            <Text style={[styles.label, styles.mt]}>Photo <Text style={{ color: "#B91C1C" }}>*</Text></Text>
             {capturedPhoto ? (
               <View style={styles.photoPreviewWrap}>
                 <Image source={{ uri: capturedPhoto.uri }} style={styles.photoPreview} />
@@ -435,10 +431,13 @@ export default function CreateIssueScreen({ navigation }) {
                 </Pressable>
               </View>
             ) : (
-              <Pressable style={styles.cameraBtn} onPress={captureIssuePhoto}>
-                <Ionicons name="camera-outline" size={20} color={C.navy} />
-                <Text style={styles.cameraBtnText}>Open Camera</Text>
-              </Pressable>
+              <>
+                <Pressable style={styles.cameraBtn} onPress={captureIssuePhoto}>
+                  <Ionicons name="camera-outline" size={20} color={C.navy} />
+                  <Text style={styles.cameraBtnText}>Open Camera</Text>
+                </Pressable>
+                <Text style={styles.photoHint}>A photo is required to submit your report.</Text>
+              </>
             )}
           </View>
 
@@ -587,6 +586,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cameraBtnText: { color: C.navy, fontSize: 15, fontWeight: "900" },
+  photoHint: { marginTop: 6, fontSize: 12, color: "#B91C1C", fontWeight: "600" },
   photoPreviewWrap: {
     borderRadius: 16, overflow: "hidden", borderWidth: 1,
     borderColor: C.border, backgroundColor: C.bg,
