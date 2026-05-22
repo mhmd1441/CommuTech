@@ -139,7 +139,7 @@ export default function CitizenHomeScreen({ navigation }) {
   const fetchIssues = async () => {
     try {
       setLoading(true);
-      const params = { status: "pending" };
+      const params = { mine: 1, status: "pending" };
       if (selectedFilter !== "All") params.category = selectedFilter;
       const { data } = await api.get("/issues", { params });
       setIssues(data.data || []);
