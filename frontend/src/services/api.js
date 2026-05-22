@@ -1,6 +1,6 @@
 import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "../config.js";
-
 
 export { API_BASE_URL };
 let authToken = null;
@@ -37,6 +37,8 @@ export const authApi = {
       const { data } = await api.post("/auth/register", payload);
       authToken = data.access_token;
       authUser = data.user;
+      await AsyncStorage.setItem("auth_token", data.access_token);
+      await AsyncStorage.setItem("auth_user", JSON.stringify(data.user));
 
       return data;
     } catch (error) {
@@ -49,6 +51,8 @@ export const authApi = {
       const { data } = await api.post("/auth/login", payload);
       authToken = data.access_token;
       authUser = data.user;
+      await AsyncStorage.setItem("auth_token", data.access_token);
+      await AsyncStorage.setItem("auth_user", JSON.stringify(data.user));
 
       return data;
     } catch (error) {
@@ -61,6 +65,7 @@ export const authApi = {
       const { data } = await api.post("/auth/logout");
       authToken = null;
       authUser = null;
+      await AsyncStorage.multiRemove(["auth_token", "auth_user"]);
 
       return data;
     } catch (error) {
@@ -79,6 +84,21 @@ export function getAuthUser() {
 
 export function setAuthUser(user) {
   authUser = user;
+}
+
+export async function initAuth() {
+  try {
+    const token = await AsyncStorage.getItem("auth_token");
+    const userJson = await AsyncStorage.getItem("auth_user");
+    if (token && userJson) {
+      authToken = token;
+      authUser = JSON.parse(userJson);
+      return authUser;
+    }
+  } catch {
+    // storage unreadable — stay logged out
+  }
+  return null;
 }
 
 export const profileApi = {

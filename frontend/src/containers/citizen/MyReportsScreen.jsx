@@ -226,7 +226,8 @@ export default function MyReportsScreen({ navigation }) {
 
   const fetchIssues = useCallback(async () => {
     try {
-      const { data } = await api.get("/issues", { params: { mine: 1, sort: sortMode } });
+      const apiSort = sortMode === 'status' ? 'newest' : sortMode;
+      const { data } = await api.get("/issues", { params: { mine: 1, sort: apiSort } });
       setIssues(data.data || []);
     } catch (err) {
       console.error("Failed to fetch issues:", err);
@@ -238,7 +239,6 @@ export default function MyReportsScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
       fetchIssues();
     }, [fetchIssues])
   );
@@ -248,7 +248,9 @@ export default function MyReportsScreen({ navigation }) {
     const statusWeight = { open: 1, pending: 1, 'in-progress': 2, in_progress: 2, resolved: 3, under_investigation: 4, rejected: 5 };
     const base = activeTab === 'all'
       ? issues
-      : issues.filter((i) => i.status === activeTab || i.status === activeTab.replace('-', '_'));
+      : activeTab === 'open'
+        ? issues.filter((i) => i.status === 'open' || i.status === 'pending')
+        : issues.filter((i) => i.status === activeTab || i.status === activeTab.replace('-', '_'));
 
     return [...base].sort((a, b) => {
       if (sortMode === 'priority') {
