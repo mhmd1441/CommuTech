@@ -538,14 +538,14 @@ function ProfileScreen({ navigation }) {
             icon="shield-checkmark-outline"
             iconColor={C.muted}
             label="Privacy Policy"
-            onPress={() => {}}
+            onPress={() => navigation.navigate('PrivacyPolicy')}
           />
           <MenuDivider />
           <MenuItem
             icon="document-outline"
             iconColor={C.muted}
             label="Terms of Service"
-            onPress={() => {}}
+            onPress={() => navigation.navigate('Terms')}
           />
         </MenuGroup>
 

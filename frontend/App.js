@@ -18,6 +18,8 @@ import IssueDetailsScreen from "./src/containers/citizen/IssueDetailsScreen";
 import ProfileScreen from "./src/containers/citizen/ProfileScreen";
 import NotificationsScreen from "./src/containers/citizen/NotificationsScreen";
 import WorkerHomeScreen from "./src/containers/worker/WorkerHomeScreen";
+import TermsScreen from "./src/containers/shared/TermsScreen";
+import PrivacyPolicyScreen from "./src/containers/shared/PrivacyPolicyScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -53,6 +55,8 @@ export default function App() {
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
           <Stack.Screen name="WorkerHome" component={WorkerHomeScreen} />
+          <Stack.Screen name="Terms" component={TermsScreen} />
+          <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
