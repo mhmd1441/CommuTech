@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,8 +32,8 @@ const COLORS = {
   softBlue: "#EAF1F7",
 };
 
-const RADIUS_METERS = 1000;
-const RADIUS_LABEL = "1 km";
+const RADIUS_METERS = 5000;
+const RADIUS_LABEL = "5 km";
 
 const DEFAULT_REGION = {
   latitude: 33.8938,
@@ -141,22 +142,45 @@ export default function WorkerHomeScreen({ navigation }) {
     }, [loadWorkerIssues])
   );
 
-  const mapIssues = useMemo(() => {
+  const mapNearbyIssues = useMemo(() => {
     return nearbyIssues
       .map((issue) => {
         const latitude = parseFloat(issue.latitude);
         const longitude = parseFloat(issue.longitude);
-
         return {
           ...issue,
-          coords:
-            Number.isFinite(latitude) && Number.isFinite(longitude)
-              ? { latitude, longitude }
-              : null,
+          coords: Number.isFinite(latitude) && Number.isFinite(longitude)
+            ? { latitude, longitude } : null,
         };
       })
       .filter((issue) => issue.coords);
   }, [nearbyIssues]);
+
+  const mapAssignedIssues = useMemo(() => {
+    return assignedIssues
+      .map((issue) => {
+        const latitude = parseFloat(issue.latitude);
+        const longitude = parseFloat(issue.longitude);
+        return {
+          ...issue,
+          coords: Number.isFinite(latitude) && Number.isFinite(longitude)
+            ? { latitude, longitude } : null,
+        };
+      })
+      .filter((issue) => issue.coords);
+  }, [assignedIssues]);
+
+  const assignedWithoutCoords = assignedIssues.length - mapAssignedIssues.length;
+
+  const openMapsNavigation = (issue) => {
+    const lat = Number(issue.latitude);
+    const lng = Number(issue.longitude);
+    const label = encodeURIComponent(issue.title || "Issue");
+    const url = `https://maps.google.com/?daddr=${lat},${lng}&q=${label}`;
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Navigation", "Could not open maps app.")
+    );
+  };
 
   const openIssue = (issue, assigned) => {
     setSelectedIssue({ issue, assigned });
@@ -368,8 +392,17 @@ export default function WorkerHomeScreen({ navigation }) {
           )}
         </ScrollView>
 
-        {(canResolve || !assigned) && (
-          <View style={styles.detailActionBar}>
+        <View style={styles.detailActionBar}>
+          {assigned && issue.latitude && issue.longitude && (
+            <Pressable
+              onPress={() => openMapsNavigation(issue)}
+              style={styles.navigateAction}
+            >
+              <Ionicons name="navigate-outline" size={18} color={COLORS.navy} />
+              <Text style={styles.navigateActionText}>Navigate</Text>
+            </Pressable>
+          )}
+          {(canResolve || !assigned) && (
             <Pressable
               onPress={() => (assigned ? markResolved(issue) : assignToMe(issue))}
               disabled={busyIssueId === issue.id}
@@ -394,8 +427,8 @@ export default function WorkerHomeScreen({ navigation }) {
                 </>
               )}
             </Pressable>
-          </View>
-        )}
+          )}
+        </View>
       </SafeAreaView>
     );
   }
@@ -425,53 +458,76 @@ export default function WorkerHomeScreen({ navigation }) {
 
       {activeView === "map" ? (
         <View style={styles.mapPage}>
-          {loading ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator size="large" color={COLORS.navy} />
-              <Text style={styles.loadingText}>Loading worker map...</Text>
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={activeRegion}
+            showsUserLocation
+            showsMyLocationButton
+            onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
+          >
+            <Circle
+              center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
+              radius={RADIUS_METERS}
+              strokeColor="rgba(25, 64, 95, 0.45)"
+              fillColor="rgba(25, 64, 95, 0.12)"
+            />
+            {/* Orange pins — nearby unassigned issues */}
+            {mapNearbyIssues.map((issue) => (
+              <Marker
+                key={`nearby-${issue.id}`}
+                coordinate={issue.coords}
+                pinColor="#EC9F4B"
+              >
+                <Callout onPress={() => openIssue(issue, false)}>
+                  <View style={styles.callout}>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
+                    <Text style={styles.calloutMeta}>{issue.category}</Text>
+                    <Text style={[styles.calloutPriority, { color: "#EC9F4B" }]}>UNASSIGNED</Text>
+                    <Text style={styles.calloutTap}>Tap to claim</Text>
+                  </View>
+                </Callout>
+              </Marker>
+            ))}
+            {/* Green pins — my assigned issues */}
+            {mapAssignedIssues.map((issue) => (
+              <Marker
+                key={`assigned-${issue.id}`}
+                coordinate={issue.coords}
+                pinColor="#4AA85C"
+              >
+                <Callout onPress={() => openIssue(issue, true)}>
+                  <View style={styles.callout}>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
+                    <Text style={styles.calloutMeta}>{issue.category}</Text>
+                    <Text style={[styles.calloutPriority, { color: "#4AA85C" }]}>MY ISSUE</Text>
+                    <Text style={styles.calloutTap}>Tap to view details</Text>
+                  </View>
+                </Callout>
+              </Marker>
+            ))}
+          </MapView>
+
+          {loading && (
+            <View style={styles.mapLoadingOverlay}>
+              <ActivityIndicator size="small" color={COLORS.navy} />
+              <Text style={styles.mapLoadingText}>Loading pins…</Text>
             </View>
-          ) : (
-            <MapView
-              ref={mapRef}
-              style={styles.map}
-              initialRegion={activeRegion}
-              showsUserLocation
-              showsMyLocationButton
-              onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
-            >
-              <Circle
-                center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
-                radius={RADIUS_METERS}
-                strokeColor="rgba(25, 64, 95, 0.45)"
-                fillColor="rgba(25, 64, 95, 0.12)"
-              />
-              {mapIssues.map((issue) => (
-                <Marker
-                  key={issue.id}
-                  coordinate={issue.coords}
-                  pinColor={getPriorityColor(issue.priority)}
-                >
-                  <Callout onPress={() => openIssue(issue, false)}>
-                    <View style={styles.callout}>
-                      <Text style={styles.calloutTitle} numberOfLines={1}>
-                        {issue.title}
-                      </Text>
-                      <Text style={styles.calloutMeta}>{issue.category}</Text>
-                      <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
-                        {issue.priority?.toUpperCase()}
-                      </Text>
-                      <Text style={styles.calloutTap}>Tap to view details</Text>
-                    </View>
-                  </Callout>
-                </Marker>
-              ))}
-            </MapView>
           )}
 
           <View style={styles.radiusBadge}>
             <Ionicons name="radio-button-on-outline" size={14} color={COLORS.navy} />
             <Text style={styles.radiusText}>{RADIUS_LABEL} radius</Text>
           </View>
+
+          {assignedWithoutCoords > 0 && (
+            <Pressable style={styles.missingPinsBadge} onPress={() => setActiveView("assigned")}>
+              <Ionicons name="warning-outline" size={13} color={COLORS.orange} />
+              <Text style={styles.missingPinsText}>
+                {assignedWithoutCoords} assigned {assignedWithoutCoords === 1 ? "issue" : "issues"} not on map → View list
+              </Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <View style={styles.listPage}>
@@ -610,12 +666,36 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   map: { flex: 1 },
-  loadingBox: {
-    flex: 1,
+  mapLoadingOverlay: {
+    position: "absolute",
+    top: 12,
+    alignSelf: "center",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  loadingText: { marginTop: 10, color: COLORS.muted, fontWeight: "800" },
+  mapLoadingText: { fontSize: 12, color: COLORS.navy, fontWeight: "700" },
+  missingPinsBadge: {
+    position: "absolute",
+    bottom: 12,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.orange,
+  },
+  missingPinsText: { fontSize: 12, color: COLORS.orange, fontWeight: "800" },
   radiusBadge: {
     position: "absolute",
     top: 12,
@@ -789,10 +869,13 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     bottom: 12,
+    flexDirection: "row",
+    gap: 10,
     backgroundColor: COLORS.bg,
     paddingTop: 10,
   },
   primaryAction: {
+    flex: 1,
     height: 52,
     borderRadius: 16,
     backgroundColor: COLORS.navy,
@@ -803,4 +886,16 @@ const styles = StyleSheet.create({
   },
   resolveAction: { backgroundColor: COLORS.green },
   primaryActionText: { color: "#fff", fontSize: 15, fontWeight: "900" },
+  navigateAction: {
+    height: 52,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.navy,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  navigateActionText: { color: COLORS.navy, fontSize: 15, fontWeight: "900" },
 });
