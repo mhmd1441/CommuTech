@@ -60,6 +60,29 @@ export const authApi = {
     }
   },
 
+  async sendOtp(email) {
+    try {
+      const { data } = await api.post("/auth/forgot-password", { email });
+      return data;
+    } catch (error) {
+      throw apiError(error);
+    }
+  },
+
+  async resetPassword(email, otp, password) {
+    try {
+      const { data } = await api.post("/auth/reset-password", {
+        email,
+        otp,
+        password,
+        password_confirmation: password,
+      });
+      return data;
+    } catch (error) {
+      throw apiError(error);
+    }
+  },
+
   async logout() {
     try {
       const { data } = await api.post("/auth/logout");

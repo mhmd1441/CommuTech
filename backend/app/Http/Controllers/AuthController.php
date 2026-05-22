@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
+use App\Mail\OtpMail;
 use App\Models\CommuTechNotification;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -75,10 +78,59 @@ class AuthController extends Controller
 
     public function forgotPassword(ForgotPasswordRequest $request)
     {
-        $request->validated();
+        $email = strtolower($request->validated()['email']);
+        $user  = User::where('email', $email)->first();
+
+        if ($user) {
+            $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            DB::table('password_reset_otps')->where('email', $email)->delete();
+            DB::table('password_reset_otps')->insert([
+                'email'      => $email,
+                'otp'        => $otp,
+                'expires_at' => now()->addMinutes(10),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            try {
+                Mail::to($email)->send(new OtpMail($otp, $user->first_name ?? $user->name));
+            } catch (\Throwable $e) {
+                \Log::warning('OTP email failed: '.$e->getMessage());
+            }
+        }
 
         return response()->json([
-            'message' => 'If this email exists, reset instructions will be sent.',
+            'message' => 'If this email is registered, a 6-digit code has been sent.',
         ]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $data = $request->validate([
+            'email'    => ['required', 'email'],
+            'otp'      => ['required', 'string', 'size:6'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $email  = strtolower($data['email']);
+        $record = DB::table('password_reset_otps')
+            ->where('email', $email)
+            ->where('otp', $data['otp'])
+            ->first();
+
+        if (! $record || now()->isAfter($record->expires_at)) {
+            throw ValidationException::withMessages([
+                'otp' => ['Invalid or expired code. Please request a new one.'],
+            ]);
+        }
+
+        User::where('email', $email)->update([
+            'password' => Hash::make($data['password']),
+        ]);
+
+        DB::table('password_reset_otps')->where('email', $email)->delete();
+
+        return response()->json(['message' => 'Password reset successfully.']);
     }
 }
