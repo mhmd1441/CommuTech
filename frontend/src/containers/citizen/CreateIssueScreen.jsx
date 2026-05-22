@@ -225,8 +225,57 @@ export default function CreateIssueScreen({ navigation }) {
   const submitIssue = async () => {
     if (!canSubmit || submitting) return;
 
+    if (!capturedPhoto) {
+      Alert.alert("Photo required", "Please take a photo before submitting the report.");
+      return;
+    }
+
+    setSubmitting(true);
+
     try {
-      setSubmitting(true);
+      let lat = latitude;
+      let lng = longitude;
+
+      if (lat === null || lng === null) {
+        const geoResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location.trim())}&format=json&limit=1&countrycodes=lb&accept-language=en&addressdetails=1`,
+          { headers: { "User-Agent": "CommuTech/1.0" } }
+        );
+        const results = await geoResponse.json();
+
+        if (!results || results.length === 0) {
+          Alert.alert(
+            "Location not found",
+            "We couldn't find this location. Use the GPS button or select from suggestions."
+          );
+          return;
+        }
+
+        const top = results[0];
+        const address = top.address || {};
+        const hasStreetLevel = !!(
+          address.road ||
+          address.neighbourhood ||
+          address.suburb ||
+          address.quarter ||
+          address.amenity ||
+          address.building ||
+          address.shop ||
+          address.tourism
+        );
+
+        if (!hasStreetLevel) {
+          Alert.alert(
+            "Location too general",
+            "Please be more specific. Add a street or landmark.\nExample: Hamra Street, Beirut"
+          );
+          return;
+        }
+
+        lat = parseFloat(top.lat);
+        lng = parseFloat(top.lon);
+        saveCoordinate(lat, lng);
+      }
 
       let response;
 
@@ -236,9 +285,9 @@ export default function CreateIssueScreen({ navigation }) {
         formData.append("description", description.trim());
         formData.append("category", category);
         formData.append("location", location.trim());
-        if (latitude !== null && longitude !== null) {
-          formData.append("latitude", String(latitude));
-          formData.append("longitude", String(longitude));
+        if (lat !== null && lng !== null) {
+          formData.append("latitude", String(lat));
+          formData.append("longitude", String(lng));
         }
         formData.append("image", imageFormFile(capturedPhoto, "issue-photo"));
 
@@ -251,12 +300,11 @@ export default function CreateIssueScreen({ navigation }) {
           description: description.trim(),
           category,
           location: location.trim(),
-          ...(latitude !== null && longitude !== null ? { latitude, longitude } : {}),
+          ...(lat !== null && lng !== null ? { latitude: lat, longitude: lng } : {}),
         });
       }
 
       const { data } = response;
-
       setSubmitted(true);
       setTimeout(() => navigation.replace("IssueDetails", { issue: data }), 300);
     } catch (err) {
