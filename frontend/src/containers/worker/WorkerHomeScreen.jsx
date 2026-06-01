@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,7 +16,10 @@ import * as Location from "expo-location";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Callout, Circle, Marker } from "react-native-maps";
+import * as ImagePicker from "expo-image-picker";
 import api from "../../services/api";
+import { getAuthUser } from "../../services/api";
+import { getPusher } from "../../services/echo";
 
 const COLORS = {
   navy: "#19405F",
@@ -31,8 +35,8 @@ const COLORS = {
   softBlue: "#EAF1F7",
 };
 
-const RADIUS_METERS = 1000;
-const RADIUS_LABEL = "1 km";
+const RADIUS_METERS = 5000;
+const RADIUS_LABEL = "5 km";
 
 const DEFAULT_REGION = {
   latitude: 33.8938,
@@ -72,7 +76,9 @@ function personName(person, fallback) {
 }
 
 export default function WorkerHomeScreen({ navigation }) {
+  const [unreadCount, setUnreadCount] = useState(0);
   const [activeView, setActiveView] = useState("map");
+  const [workerTab, setWorkerTab] = useState("active");
   const [assignedIssues, setAssignedIssues] = useState([]);
   const [nearbyIssues, setNearbyIssues] = useState([]);
   const [workerRegion, setWorkerRegion] = useState(null);
@@ -80,10 +86,23 @@ export default function WorkerHomeScreen({ navigation }) {
   const [busyIssueId, setBusyIssueId] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [resolutionNote, setResolutionNote] = useState("");
+  const [resolutionPhoto, setResolutionPhoto] = useState(null);
   const mapRef = useRef(null);
 
   const activeRegion = workerRegion || DEFAULT_REGION;
-  const reportList = activeView === "assigned" ? assignedIssues : nearbyIssues;
+
+  const activeAssigned = useMemo(
+    () => assignedIssues.filter((i) => i.status !== "resolved"),
+    [assignedIssues]
+  );
+  const completedAssigned = useMemo(
+    () => assignedIssues.filter((i) => i.status === "resolved"),
+    [assignedIssues]
+  );
+
+  const reportList = activeView === "assigned"
+    ? (workerTab === "active" ? activeAssigned : completedAssigned)
+    : nearbyIssues;
 
   const loadWorkerIssues = useCallback(async () => {
     try {
@@ -138,29 +157,104 @@ export default function WorkerHomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadWorkerIssues();
+      api.get('/notifications', { params: { role: 'worker' } }).then(({ data }) => setUnreadCount(data.unread_count || 0)).catch(() => {});
     }, [loadWorkerIssues])
   );
 
-  const mapIssues = useMemo(() => {
+  useEffect(() => {
+    const user = getAuthUser();
+    if (!user) return;
+    const pusher = getPusher();
+    if (!pusher) return;
+    const handler = (data) => { if (data?.recipient_role === 'worker') setUnreadCount((prev) => prev + 1); };
+    const channel = pusher.subscribe(`private-user.${user.id}`);
+    channel.bind('notification.sent', handler);
+    return () => {
+      channel.unbind('notification.sent', handler);
+    };
+  }, []);
+
+  const mapNearbyIssues = useMemo(() => {
     return nearbyIssues
       .map((issue) => {
         const latitude = parseFloat(issue.latitude);
         const longitude = parseFloat(issue.longitude);
-
         return {
           ...issue,
-          coords:
-            Number.isFinite(latitude) && Number.isFinite(longitude)
-              ? { latitude, longitude }
-              : null,
+          coords: Number.isFinite(latitude) && Number.isFinite(longitude)
+            ? { latitude, longitude } : null,
         };
       })
       .filter((issue) => issue.coords);
   }, [nearbyIssues]);
 
+  const mapAssignedIssues = useMemo(() => {
+    return assignedIssues
+      .filter((issue) => issue.status !== "resolved")
+      .map((issue) => {
+        const latitude = parseFloat(issue.latitude);
+        const longitude = parseFloat(issue.longitude);
+        return {
+          ...issue,
+          coords: Number.isFinite(latitude) && Number.isFinite(longitude)
+            ? { latitude, longitude } : null,
+        };
+      })
+      .filter((issue) => issue.coords);
+  }, [assignedIssues]);
+
+  const assignedWithoutCoords = activeAssigned.length - mapAssignedIssues.length;
+
+  const openMapsNavigation = (issue) => {
+    const lat = Number(issue.latitude);
+    const lng = Number(issue.longitude);
+    const label = encodeURIComponent(issue.title || "Issue");
+    const url = `https://maps.google.com/?daddr=${lat},${lng}&q=${label}`;
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Navigation", "Could not open maps app.")
+    );
+  };
+
   const openIssue = (issue, assigned) => {
     setSelectedIssue({ issue, assigned });
     setResolutionNote(issue.worker_resolution_note || "");
+    setResolutionPhoto(null);
+  };
+
+  const captureResolutionPhoto = () => {
+    Alert.alert("Resolution Photo", "Choose a source", [
+      {
+        text: "Camera",
+        onPress: async () => {
+          const permission = await ImagePicker.requestCameraPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert("Permission needed", "Allow camera access to take a photo.");
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.7,
+          });
+          if (!result.canceled && result.assets?.[0]) setResolutionPhoto(result.assets[0]);
+        },
+      },
+      {
+        text: "Gallery",
+        onPress: async () => {
+          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert("Permission needed", "Allow gallery access to pick a photo.");
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.7,
+          });
+          if (!result.canceled && result.assets?.[0]) setResolutionPhoto(result.assets[0]);
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const assignToMe = async (issue) => {
@@ -186,10 +280,27 @@ export default function WorkerHomeScreen({ navigation }) {
 
     try {
       setBusyIssueId(issue.id);
-      await api.patch(`/worker/issues/${issue.id}/status`, {
-        status: "resolved",
-        worker_resolution_note: note,
-      });
+
+      if (resolutionPhoto) {
+        const formData = new FormData();
+        formData.append("status", "resolved");
+        formData.append("worker_resolution_note", note);
+        formData.append("resolution_image", {
+          uri: resolutionPhoto.uri,
+          name: "resolution-photo.jpg",
+          type: resolutionPhoto.mimeType || "image/jpeg",
+        });
+        await api.post(`/worker/issues/${issue.id}/status`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } else {
+        await api.patch(`/worker/issues/${issue.id}/status`, {
+          status: "resolved",
+          worker_resolution_note: note,
+        });
+      }
+
+      setResolutionPhoto(null);
       setSelectedIssue(null);
       await loadWorkerIssues();
     } catch (error) {
@@ -364,12 +475,36 @@ export default function WorkerHomeScreen({ navigation }) {
                 multiline
                 textAlignVertical="top"
               />
+              <Text style={[styles.inputHint, { marginTop: 12 }]}>Resolution photo (optional)</Text>
+              {resolutionPhoto ? (
+                <View style={styles.resolutionPhotoWrap}>
+                  <Image source={{ uri: resolutionPhoto.uri }} style={styles.resolutionPhotoPreview} />
+                  <Pressable style={styles.retakeResolutionBtn} onPress={captureResolutionPhoto}>
+                    <Ionicons name="camera" size={14} color={COLORS.navy} />
+                    <Text style={styles.retakeResolutionText}>Retake</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable style={styles.resolutionCameraBtn} onPress={captureResolutionPhoto}>
+                  <Ionicons name="camera-outline" size={18} color={COLORS.navy} />
+                  <Text style={styles.resolutionCameraBtnText}>Take Photo</Text>
+                </Pressable>
+              )}
             </View>
           )}
         </ScrollView>
 
-        {(canResolve || !assigned) && (
-          <View style={styles.detailActionBar}>
+        <View style={styles.detailActionBar}>
+          {assigned && issue.latitude && issue.longitude && (
+            <Pressable
+              onPress={() => openMapsNavigation(issue)}
+              style={styles.navigateAction}
+            >
+              <Ionicons name="navigate-outline" size={18} color={COLORS.navy} />
+              <Text style={styles.navigateActionText}>Navigate</Text>
+            </Pressable>
+          )}
+          {(canResolve || !assigned) && (
             <Pressable
               onPress={() => (assigned ? markResolved(issue) : assignToMe(issue))}
               disabled={busyIssueId === issue.id}
@@ -394,8 +529,8 @@ export default function WorkerHomeScreen({ navigation }) {
                 </>
               )}
             </Pressable>
-          </View>
-        )}
+          )}
+        </View>
       </SafeAreaView>
     );
   }
@@ -412,77 +547,113 @@ export default function WorkerHomeScreen({ navigation }) {
           <Text style={styles.subtitle}>Nearby unassigned reports and your assigned work.</Text>
         </View>
 
-        <Pressable
-          onPress={() => navigation.reset({ index: 0, routes: [{ name: "CitizenHome" }] })}
-          style={styles.citizenBtn}
-        >
-          <Ionicons name="person-outline" size={17} color={COLORS.navy} />
-          <Text style={styles.citizenText}>Citizen</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => { navigation.navigate("Notifications", { role: "worker" }); setUnreadCount(0); }}
+            style={styles.workerBellBtn}
+          >
+            <Ionicons name="notifications-outline" size={20} color={COLORS.navy} />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.reset({ index: 0, routes: [{ name: "CitizenHome" }] })}
+            style={styles.citizenBtn}
+          >
+            <Ionicons name="person-outline" size={17} color={COLORS.navy} />
+            <Text style={styles.citizenText}>Citizen</Text>
+          </Pressable>
+        </View>
       </View>
 
       <Tabs />
 
       {activeView === "map" ? (
         <View style={styles.mapPage}>
-          {loading ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator size="large" color={COLORS.navy} />
-              <Text style={styles.loadingText}>Loading worker map...</Text>
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={activeRegion}
+            showsUserLocation
+            showsMyLocationButton
+            onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
+          >
+            <Circle
+              center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
+              radius={RADIUS_METERS}
+              strokeColor="rgba(25, 64, 95, 0.45)"
+              fillColor="rgba(25, 64, 95, 0.12)"
+            />
+            {/* Orange pins — nearby unassigned issues */}
+            {mapNearbyIssues.map((issue) => (
+              <Marker
+                key={`nearby-${issue.id}`}
+                coordinate={issue.coords}
+                pinColor="#EC9F4B"
+              >
+                <Callout onPress={() => openIssue(issue, false)}>
+                  <View style={styles.callout}>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
+                    <Text style={styles.calloutMeta}>{issue.category}</Text>
+                    <Text style={[styles.calloutPriority, { color: "#EC9F4B" }]}>UNASSIGNED</Text>
+                    <Text style={styles.calloutTap}>Tap to claim</Text>
+                  </View>
+                </Callout>
+              </Marker>
+            ))}
+            {/* Green pins — my assigned issues */}
+            {mapAssignedIssues.map((issue) => (
+              <Marker
+                key={`assigned-${issue.id}`}
+                coordinate={issue.coords}
+                pinColor="#4AA85C"
+              >
+                <Callout onPress={() => openIssue(issue, true)}>
+                  <View style={styles.callout}>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
+                    <Text style={styles.calloutMeta}>{issue.category}</Text>
+                    <Text style={[styles.calloutPriority, { color: "#4AA85C" }]}>MY ISSUE</Text>
+                    <Text style={styles.calloutTap}>Tap to view details</Text>
+                  </View>
+                </Callout>
+              </Marker>
+            ))}
+          </MapView>
+
+          {loading && (
+            <View style={styles.mapLoadingOverlay}>
+              <ActivityIndicator size="small" color={COLORS.navy} />
+              <Text style={styles.mapLoadingText}>Loading pins…</Text>
             </View>
-          ) : (
-            <MapView
-              ref={mapRef}
-              style={styles.map}
-              initialRegion={activeRegion}
-              showsUserLocation
-              showsMyLocationButton
-              onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
-            >
-              <Circle
-                center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
-                radius={RADIUS_METERS}
-                strokeColor="rgba(25, 64, 95, 0.45)"
-                fillColor="rgba(25, 64, 95, 0.12)"
-              />
-              {mapIssues.map((issue) => (
-                <Marker
-                  key={issue.id}
-                  coordinate={issue.coords}
-                  pinColor={getPriorityColor(issue.priority)}
-                >
-                  <Callout onPress={() => openIssue(issue, false)}>
-                    <View style={styles.callout}>
-                      <Text style={styles.calloutTitle} numberOfLines={1}>
-                        {issue.title}
-                      </Text>
-                      <Text style={styles.calloutMeta}>{issue.category}</Text>
-                      <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
-                        {issue.priority?.toUpperCase()}
-                      </Text>
-                      <Text style={styles.calloutTap}>Tap to view details</Text>
-                    </View>
-                  </Callout>
-                </Marker>
-              ))}
-            </MapView>
           )}
 
           <View style={styles.radiusBadge}>
             <Ionicons name="radio-button-on-outline" size={14} color={COLORS.navy} />
             <Text style={styles.radiusText}>{RADIUS_LABEL} radius</Text>
           </View>
+
+          {assignedWithoutCoords > 0 && (
+            <Pressable style={styles.missingPinsBadge} onPress={() => setActiveView("assigned")}>
+              <Ionicons name="warning-outline" size={13} color={COLORS.orange} />
+              <Text style={styles.missingPinsText}>
+                {assignedWithoutCoords} assigned {assignedWithoutCoords === 1 ? "issue" : "issues"} not on map → View list
+              </Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <View style={styles.listPage}>
           <View style={styles.listHeader}>
             <View>
               <Text style={styles.listTitle}>
-                {activeView === "assigned" ? "My Assigned Reports" : "Nearby Reports"}
+                {activeView === "assigned" ? "My Reports" : "Nearby Reports"}
               </Text>
               <Text style={styles.listSubtitle}>
                 {activeView === "assigned"
-                  ? "Reports currently assigned to you."
+                  ? "Your assigned work."
                   : `Unassigned reports within ${RADIUS_LABEL}.`}
               </Text>
             </View>
@@ -490,6 +661,27 @@ export default function WorkerHomeScreen({ navigation }) {
               <Ionicons name="refresh-outline" size={20} color={COLORS.navy} />
             </Pressable>
           </View>
+
+          {activeView === "assigned" && (
+            <View style={styles.workerTabsRow}>
+              <Pressable
+                style={[styles.workerTab, workerTab === "active" && styles.workerTabActive]}
+                onPress={() => setWorkerTab("active")}
+              >
+                <Text style={[styles.workerTabText, workerTab === "active" && styles.workerTabTextActive]}>
+                  Active ({activeAssigned.length})
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.workerTab, workerTab === "completed" && styles.workerTabActive]}
+                onPress={() => setWorkerTab("completed")}
+              >
+                <Text style={[styles.workerTabText, workerTab === "completed" && styles.workerTabTextActive]}>
+                  Completed ({completedAssigned.length})
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
           {loading ? (
             <View style={styles.listLoading}>
@@ -500,17 +692,25 @@ export default function WorkerHomeScreen({ navigation }) {
               {reportList.length === 0 ? (
                 <View style={styles.emptyBox}>
                   <Ionicons
-                    name={activeView === "assigned" ? "checkmark-done-outline" : "map-outline"}
+                    name={
+                      activeView !== "assigned" ? "map-outline"
+                      : workerTab === "completed" ? "checkmark-done-outline"
+                      : "clipboard-outline"
+                    }
                     size={30}
-                    color={activeView === "assigned" ? COLORS.green : COLORS.muted}
+                    color={workerTab === "completed" ? COLORS.green : COLORS.muted}
                   />
                   <Text style={styles.emptyTitle}>
-                    {activeView === "assigned" ? "No assigned reports" : "No nearby reports"}
+                    {activeView !== "assigned" ? "No nearby reports"
+                      : workerTab === "completed" ? "No completed reports yet"
+                      : "No active reports"}
                   </Text>
                   <Text style={styles.emptyText}>
-                    {activeView === "assigned"
-                      ? "Reports you assign to yourself will appear here."
-                      : "Unassigned issues in your radius will appear here."}
+                    {activeView !== "assigned"
+                      ? "Unassigned issues in your radius will appear here."
+                      : workerTab === "completed"
+                      ? "Reports you mark as resolved will appear here."
+                      : "Reports you assign to yourself will appear here."}
                   </Text>
                 </View>
               ) : (
@@ -554,6 +754,19 @@ const styles = StyleSheet.create({
   modePillText: { color: COLORS.navy, fontWeight: "900", fontSize: 11 },
   title: { color: COLORS.text, fontSize: 24, fontWeight: "900" },
   subtitle: { color: COLORS.muted, fontWeight: "700", fontSize: 12, marginTop: 4 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  workerBellBtn: {
+    width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.card,
+    borderWidth: 1, borderColor: COLORS.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  bellBadge: {
+    position: "absolute", top: -4, right: -4,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 4, borderWidth: 2, borderColor: "#fff",
+  },
+  bellBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   citizenBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -610,12 +823,36 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   map: { flex: 1 },
-  loadingBox: {
-    flex: 1,
+  mapLoadingOverlay: {
+    position: "absolute",
+    top: 12,
+    alignSelf: "center",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  loadingText: { marginTop: 10, color: COLORS.muted, fontWeight: "800" },
+  mapLoadingText: { fontSize: 12, color: COLORS.navy, fontWeight: "700" },
+  missingPinsBadge: {
+    position: "absolute",
+    bottom: 12,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.orange,
+  },
+  missingPinsText: { fontSize: 12, color: COLORS.orange, fontWeight: "800" },
   radiusBadge: {
     position: "absolute",
     top: 12,
@@ -656,6 +893,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  workerTabsRow: {
+    flexDirection: "row",
+    backgroundColor: "#EEF3F8",
+    borderRadius: 14,
+    padding: 4,
+    gap: 4,
+    marginBottom: 12,
+  },
+  workerTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  workerTabActive: { backgroundColor: COLORS.navy },
+  workerTabText: { fontSize: 13, fontWeight: "800", color: COLORS.navy },
+  workerTabTextActive: { color: "#fff" },
   listLoading: { flex: 1, alignItems: "center", justifyContent: "center" },
   listContent: { gap: 12, paddingBottom: 24 },
   emptyBox: {
@@ -784,15 +1038,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  resolutionCameraBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, height: 46, borderRadius: 14, borderWidth: 1,
+    borderColor: COLORS.border, backgroundColor: COLORS.bg,
+  },
+  resolutionCameraBtnText: { color: COLORS.navy, fontWeight: "900", fontSize: 14 },
+  resolutionPhotoWrap: { borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: COLORS.border },
+  resolutionPhotoPreview: { width: "100%", height: 160 },
+  retakeResolutionBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 10, backgroundColor: COLORS.bg,
+  },
+  retakeResolutionText: { color: COLORS.navy, fontWeight: "800", fontSize: 13 },
   detailActionBar: {
     position: "absolute",
     left: 16,
     right: 16,
     bottom: 12,
+    flexDirection: "row",
+    gap: 10,
     backgroundColor: COLORS.bg,
     paddingTop: 10,
   },
   primaryAction: {
+    flex: 1,
     height: 52,
     borderRadius: 16,
     backgroundColor: COLORS.navy,
@@ -803,4 +1073,16 @@ const styles = StyleSheet.create({
   },
   resolveAction: { backgroundColor: COLORS.green },
   primaryActionText: { color: "#fff", fontSize: 15, fontWeight: "900" },
+  navigateAction: {
+    height: 52,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.navy,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  navigateActionText: { color: COLORS.navy, fontSize: 15, fontWeight: "900" },
 });

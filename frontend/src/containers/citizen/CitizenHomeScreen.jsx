@@ -15,6 +15,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import BottomNav from "../shared/BottomNav";
 import api from "../../services/api";
+import { getAuthUser } from "../../services/api";
+import { getPusher } from "../../services/echo";
 
 const COLORS = {
   navy: "#19405F",
@@ -83,6 +85,7 @@ export default function CitizenHomeScreen({ navigation }) {
   const [userRegion, setUserRegion] = useState(null);
   const [locationStatus, setLocationStatus] = useState("idle");
   const [selectedMarker, setSelectedMarker] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const { height } = useWindowDimensions();
   const mapHeight = Math.max(420, height - 315);
   const mapRef = useRef(null);
@@ -133,13 +136,28 @@ export default function CitizenHomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       fetchIssues();
+      api.get('/notifications', { params: { role: 'citizen' } }).then(({ data }) => setUnreadCount(data.unread_count || 0)).catch(() => {});
     }, [selectedFilter])
   );
+
+  useEffect(() => {
+    const user = getAuthUser();
+    if (!user) return;
+    const pusher = getPusher();
+    if (!pusher) return;
+    const handler = (data) => { if (data?.recipient_role === 'citizen') setUnreadCount((prev) => prev + 1); };
+    const channel = pusher.subscribe(`private-user.${user.id}`);
+    channel.bind('notification.sent', handler);
+    return () => {
+      channel.unbind('notification.sent', handler);
+      pusher.unsubscribe(`private-user.${user.id}`);
+    };
+  }, []);
 
   const fetchIssues = async () => {
     try {
       setLoading(true);
-      const params = { status: "pending" };
+      const params = { mine: 1 };
       if (selectedFilter !== "All") params.category = selectedFilter;
       const { data } = await api.get("/issues", { params });
       setIssues(data.data || []);
@@ -151,13 +169,15 @@ export default function CitizenHomeScreen({ navigation }) {
   };
 
   const issuesWithCoords = useMemo(() => {
-    return issues.map((issue) => ({
-      ...issue,
-      coords:
-        issue.latitude && issue.longitude
-          ? { latitude: parseFloat(issue.latitude), longitude: parseFloat(issue.longitude) }
-          : getCoordsFromLocation(issue.location),
-    }));
+    return issues
+      .filter((issue) => issue.status !== "resolved")
+      .map((issue) => ({
+        ...issue,
+        coords:
+          issue.latitude && issue.longitude
+            ? { latitude: parseFloat(issue.latitude), longitude: parseFloat(issue.longitude) }
+            : getCoordsFromLocation(issue.location),
+      }));
   }, [issues]);
 
   const getPriorityColor = (priority) => {
@@ -210,10 +230,15 @@ export default function CitizenHomeScreen({ navigation }) {
             <Text style={styles.headerSub}>Smart Civic Reporting</Text>
           </View>
           <Pressable
-            onPress={() => navigation.navigate("Notifications")}
+            onPress={() => { navigation.navigate("Notifications", { role: "citizen" }); setUnreadCount(0); }}
             style={styles.notificationBtn}
           >
             <Ionicons name="notifications-outline" size={22} color={COLORS.navy} />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
           </Pressable>
         </View>
 
@@ -254,46 +279,45 @@ export default function CitizenHomeScreen({ navigation }) {
         {/* Content */}
         {viewMode === "map" ? (
           <View style={styles.mapCard}>
-            {loading ? (
-              <View style={[styles.mapPlaceholder, { height: mapHeight }]}>
-                <ActivityIndicator size="large" color={COLORS.navy} />
-                <Text style={styles.mapSub}>Loading issues...</Text>
+            <MapView
+              ref={mapRef}
+              style={{ height: mapHeight, borderRadius: 16 }}
+              initialRegion={userRegion || LEBANON_REGION}
+              showsUserLocation={locationStatus === "granted"}
+              showsMyLocationButton={locationStatus === "granted"}
+              onMapReady={() => {
+                if (userRegion) {
+                  mapRef.current?.animateToRegion(userRegion, 500);
+                }
+              }}
+            >
+              {issuesWithCoords.map((issue) =>
+                issue.coords ? (
+                  <Marker
+                    key={issue.id}
+                    coordinate={issue.coords}
+                    pinColor={getMarkerColor(issue.priority)}
+                    onPress={() => setSelectedMarker(issue)}
+                  >
+                    <Callout onPress={() => navigation.navigate("IssueDetails", { issue })}>
+                      <View style={styles.callout}>
+                        <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
+                        <Text style={styles.calloutCategory}>{issue.category}</Text>
+                        <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
+                          {issue.priority?.toUpperCase()}
+                        </Text>
+                        <Text style={styles.calloutTap}>Tap to view details →</Text>
+                      </View>
+                    </Callout>
+                  </Marker>
+                ) : null
+              )}
+            </MapView>
+            {loading && (
+              <View style={styles.mapLoadingOverlay}>
+                <ActivityIndicator size="small" color={COLORS.navy} />
+                <Text style={styles.mapLoadingText}>Loading pins…</Text>
               </View>
-            ) : (
-              <MapView
-                ref={mapRef}
-                style={{ height: mapHeight, borderRadius: 16 }}
-                initialRegion={userRegion || LEBANON_REGION}
-                showsUserLocation={locationStatus === "granted"}
-                showsMyLocationButton={locationStatus === "granted"}
-                onMapReady={() => {
-                  if (userRegion) {
-                    mapRef.current?.animateToRegion(userRegion, 500);
-                  }
-                }}
-              >
-                {issuesWithCoords.map((issue) =>
-                  issue.coords ? (
-                    <Marker
-                      key={issue.id}
-                      coordinate={issue.coords}
-                      pinColor={getMarkerColor(issue.priority)}
-                      onPress={() => setSelectedMarker(issue)}
-                    >
-                      <Callout onPress={() => navigation.navigate("IssueDetails", { issue })}>
-                        <View style={styles.callout}>
-                          <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
-                          <Text style={styles.calloutCategory}>{issue.category}</Text>
-                          <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
-                            {issue.priority?.toUpperCase()}
-                          </Text>
-                          <Text style={styles.calloutTap}>Tap to view details →</Text>
-                        </View>
-                      </Callout>
-                    </Marker>
-                  ) : null
-                )}
-              </MapView>
             )}
 
             <View style={styles.mapFooter}>
@@ -364,6 +388,13 @@ const styles = StyleSheet.create({
     width: 46, height: 46, borderRadius: 15, backgroundColor: "#fff",
     borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center",
   },
+  bellBadge: {
+    position: "absolute", top: -4, right: -4,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 4, borderWidth: 2, borderColor: "#fff",
+  },
+  bellBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   segmentWrap: {
     marginTop: 18, flexDirection: "row", backgroundColor: "#EEF3F8",
     borderRadius: 16, padding: 4, gap: 6,
@@ -378,8 +409,14 @@ const styles = StyleSheet.create({
   filterChipText: { color: COLORS.text, fontWeight: "800" },
   filterChipTextActive: { color: "#fff" },
   mapCard: { backgroundColor: "#fff", borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, padding: 14 },
-  mapPlaceholder: { borderRadius: 16, backgroundColor: "#EAF1F7", alignItems: "center", justifyContent: "center" },
-  mapSub: { marginTop: 10, color: COLORS.muted, fontWeight: "700" },
+  mapLoadingOverlay: {
+    position: "absolute", top: 14, left: 14, right: 14,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingVertical: 6, paddingHorizontal: 14,
+    backgroundColor: "rgba(255,255,255,0.88)", borderRadius: 20,
+    alignSelf: "center", width: 150,
+  },
+  mapLoadingText: { fontSize: 12, color: COLORS.navy, fontWeight: "700" },
   mapFooter: { marginTop: 10, flexDirection: "row", justifyContent: "space-between" },
   mapFooterText: { fontSize: 12, color: COLORS.muted, fontWeight: "800" },
   callout: { width: 200, padding: 10 },

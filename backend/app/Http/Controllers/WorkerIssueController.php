@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class WorkerIssueController extends Controller
@@ -62,35 +65,41 @@ class WorkerIssueController extends Controller
 
     public function assignToMe(Request $request, Issue $issue)
     {
-        if ($issue->assigned_to) {
+        return DB::transaction(function () use ($request, $issue) {
+            $issue = Issue::where('id', $issue->id)->lockForUpdate()->first();
+
+            if ($issue->assigned_to) {
+                return response()->json([
+                    'message' => 'This issue is already assigned to another worker.',
+                ], 409);
+            }
+
+            if ($issue->status !== 'pending') {
+                return response()->json([
+                    'message' => 'Only pending issues can be assigned.',
+                ], 422);
+            }
+
+            $issue->update([
+                'assigned_to' => $request->user()->id,
+                'status' => 'in_progress',
+            ]);
+
+            $notification = CommuTechNotification::create([
+                'user_id'        => $issue->user_id,
+                'issue_id'       => $issue->id,
+                'type'           => 'status_update',
+                'recipient_role' => 'citizen',
+                'title'          => 'Report Assigned',
+                'body'           => 'Your report "'.$issue->title.'" was assigned to a worker.',
+            ]);
+            try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+
             return response()->json([
-                'message' => 'This issue is already assigned to another worker.',
-            ], 409);
-        }
-
-        if ($issue->status !== 'pending') {
-            return response()->json([
-                'message' => 'Only pending issues can be assigned.',
-            ], 422);
-        }
-
-        $issue->update([
-            'assigned_to' => $request->user()->id,
-            'status' => 'in_progress',
-        ]);
-
-        CommuTechNotification::create([
-            'user_id' => $issue->user_id,
-            'issue_id' => $issue->id,
-            'type' => 'status_update',
-            'title' => 'Report Assigned',
-            'body' => 'Your report "'.$issue->title.'" was assigned to a worker.',
-        ]);
-
-        return response()->json([
-            'message' => 'Issue assigned successfully.',
-            'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
-        ]);
+                'message' => 'Issue assigned successfully.',
+                'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
+            ]);
+        });
     }
 
     public function updateStatus(Request $request, Issue $issue)
@@ -106,19 +115,25 @@ class WorkerIssueController extends Controller
         }
 
         $data = $request->validate([
-            'status' => ['required', Rule::in(['in_progress', 'resolved'])],
-            'worker_resolution_note' => ['required_if:status,resolved', 'nullable', 'string', 'min:5', 'max:1200'],
-            'worker_resolution_image_url' => ['nullable', 'url', 'max:2048'],
+            'status'                     => ['required', Rule::in(['in_progress', 'resolved'])],
+            'worker_resolution_note'     => ['required_if:status,resolved', 'nullable', 'string', 'min:5', 'max:1200'],
+            'worker_resolution_image_url'=> ['nullable', 'url', 'max:2048'],
+            'resolution_image'           => ['nullable', 'file', 'image', 'max:8192'],
         ]);
 
         $updates = [
-            'status' => $data['status'],
+            'status'      => $data['status'],
             'resolved_at' => $data['status'] === 'resolved' ? now() : null,
         ];
 
         if ($data['status'] === 'resolved') {
             $updates['worker_resolution_note'] = $data['worker_resolution_note'];
-            $updates['worker_resolution_image_url'] = $data['worker_resolution_image_url'] ?? null;
+
+            $imageUrl = $data['worker_resolution_image_url'] ?? null;
+            if ($request->hasFile('resolution_image')) {
+                $imageUrl = $this->uploadToSupabase($request->file('resolution_image'));
+            }
+            $updates['worker_resolution_image_url'] = $imageUrl;
             $updates['worker_resolved_at'] = now();
             $updates['citizen_resolution_confirmed'] = null;
             $updates['citizen_resolution_note'] = null;
@@ -128,18 +143,39 @@ class WorkerIssueController extends Controller
 
         $issue->update($updates);
 
-        CommuTechNotification::create([
-            'user_id' => $issue->user_id,
-            'issue_id' => $issue->id,
-            'type' => 'status_update',
-            'title' => 'Report Updated',
-            'body' => 'Your report "'.$issue->title.'" is now '.$data['status'].'.',
+        $notification = CommuTechNotification::create([
+            'user_id'        => $issue->user_id,
+            'issue_id'       => $issue->id,
+            'type'           => 'status_update',
+            'recipient_role' => 'citizen',
+            'title'          => 'Report Updated',
+            'body'           => 'Your report "'.$issue->title.'" is now '.$data['status'].'.',
         ]);
+        try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
 
         return response()->json([
             'message' => 'Issue status updated.',
             'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
         ]);
+    }
+
+    private function uploadToSupabase(\Illuminate\Http\UploadedFile $file): string
+    {
+        $filename     = Str::uuid().'.'.$file->getClientOriginalExtension();
+        $supabaseUrl  = config('services.supabase.url');
+        $serviceKey   = config('services.supabase.key');
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer '.$serviceKey,
+            'Content-Type'  => $file->getMimeType(),
+        ])->withBody(file_get_contents($file->getRealPath()), $file->getMimeType())
+          ->post("{$supabaseUrl}/storage/v1/object/issues/{$filename}");
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('Image upload failed: '.$response->body());
+        }
+
+        return "{$supabaseUrl}/storage/v1/object/public/issues/{$filename}";
     }
 
     private function distanceInMeters(float $lat1, float $lon1, float $lat2, float $lon2): float

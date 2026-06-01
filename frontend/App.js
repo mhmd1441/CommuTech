@@ -1,8 +1,11 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+
+import { initAuth } from "./src/services/api";
 
 import LoginScreen from "./src/containers/auth/LoginScreen.jsx";
 import SignupScreen from "./src/containers/auth/SignUpScreen.jsx";
@@ -15,14 +18,33 @@ import IssueDetailsScreen from "./src/containers/citizen/IssueDetailsScreen";
 import ProfileScreen from "./src/containers/citizen/ProfileScreen";
 import NotificationsScreen from "./src/containers/citizen/NotificationsScreen";
 import WorkerHomeScreen from "./src/containers/worker/WorkerHomeScreen";
+import TermsScreen from "./src/containers/shared/TermsScreen";
+import PrivacyPolicyScreen from "./src/containers/shared/PrivacyPolicyScreen";
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const [initialRoute, setInitialRoute] = useState(null);
+
+  useEffect(() => {
+    initAuth().then((user) => {
+      setInitialRoute(user ? "CitizenHome" : "Login");
+    });
+  }, []);
+
+  if (!initialRoute) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F7FAFC" }}>
+        <ActivityIndicator size="large" color="#19405F" />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
@@ -33,6 +55,8 @@ export default function App() {
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
           <Stack.Screen name="WorkerHome" component={WorkerHomeScreen} />
+          <Stack.Screen name="Terms" component={TermsScreen} />
+          <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

@@ -73,8 +73,9 @@ export default function CreateIssueScreen({ navigation }) {
       category &&
       title.trim().length >= 5 &&
       description.trim().length >= 20 &&
-      location.trim().length >= 4,
-    [category, title, description, location]
+      location.trim().length >= 4 &&
+      !!capturedPhoto,
+    [category, title, description, location, capturedPhoto]
   );
 
   const mapPickerRegion = useMemo(
@@ -225,38 +226,69 @@ export default function CreateIssueScreen({ navigation }) {
   const submitIssue = async () => {
     if (!canSubmit || submitting) return;
 
+    setSubmitting(true);
+
     try {
-      setSubmitting(true);
+      let lat = latitude;
+      let lng = longitude;
 
-      let response;
+      if (lat === null || lng === null) {
+        const geoResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location.trim())}&format=json&limit=1&countrycodes=lb&accept-language=en&addressdetails=1`,
+          { headers: { "User-Agent": "CommuTech/1.0" } }
+        );
+        const results = await geoResponse.json();
 
-      if (capturedPhoto) {
-        const formData = new FormData();
-        formData.append("title", title.trim());
-        formData.append("description", description.trim());
-        formData.append("category", category);
-        formData.append("location", location.trim());
-        if (latitude !== null && longitude !== null) {
-          formData.append("latitude", String(latitude));
-          formData.append("longitude", String(longitude));
+        if (!results || results.length === 0) {
+          Alert.alert(
+            "Location not found",
+            "We couldn't find this location. Use the GPS button or select from suggestions."
+          );
+          return;
         }
-        formData.append("image", imageFormFile(capturedPhoto, "issue-photo"));
 
-        response = await api.post("/issues", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      } else {
-        response = await api.post("/issues", {
-          title: title.trim(),
-          description: description.trim(),
-          category,
-          location: location.trim(),
-          ...(latitude !== null && longitude !== null ? { latitude, longitude } : {}),
-        });
+        const top = results[0];
+        const address = top.address || {};
+        const hasStreetLevel = !!(
+          address.road ||
+          address.neighbourhood ||
+          address.suburb ||
+          address.quarter ||
+          address.amenity ||
+          address.building ||
+          address.shop ||
+          address.tourism
+        );
+
+        if (!hasStreetLevel) {
+          Alert.alert(
+            "Location too general",
+            "Please be more specific. Add a street or landmark.\nExample: Hamra Street, Beirut"
+          );
+          return;
+        }
+
+        lat = parseFloat(top.lat);
+        lng = parseFloat(top.lon);
+        saveCoordinate(lat, lng);
       }
 
-      const { data } = response;
+      const formData = new FormData();
+      formData.append("title", title.trim());
+      formData.append("description", description.trim());
+      formData.append("category", category);
+      formData.append("location", location.trim());
+      if (lat !== null && lng !== null) {
+        formData.append("latitude", String(lat));
+        formData.append("longitude", String(lng));
+      }
+      formData.append("image", imageFormFile(capturedPhoto, "issue-photo"));
 
+      const response = await api.post("/issues", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const { data } = response;
       setSubmitted(true);
       setTimeout(() => navigation.replace("IssueDetails", { issue: data }), 300);
     } catch (err) {
@@ -389,7 +421,7 @@ export default function CreateIssueScreen({ navigation }) {
               </View>
             )}
 
-            <Text style={[styles.label, styles.mt]}>Photo</Text>
+            <Text style={[styles.label, styles.mt]}>Photo <Text style={{ color: "#B91C1C" }}>*</Text></Text>
             {capturedPhoto ? (
               <View style={styles.photoPreviewWrap}>
                 <Image source={{ uri: capturedPhoto.uri }} style={styles.photoPreview} />
@@ -399,10 +431,13 @@ export default function CreateIssueScreen({ navigation }) {
                 </Pressable>
               </View>
             ) : (
-              <Pressable style={styles.cameraBtn} onPress={captureIssuePhoto}>
-                <Ionicons name="camera-outline" size={20} color={C.navy} />
-                <Text style={styles.cameraBtnText}>Open Camera</Text>
-              </Pressable>
+              <>
+                <Pressable style={styles.cameraBtn} onPress={captureIssuePhoto}>
+                  <Ionicons name="camera-outline" size={20} color={C.navy} />
+                  <Text style={styles.cameraBtnText}>Open Camera</Text>
+                </Pressable>
+                <Text style={styles.photoHint}>A photo is required to submit your report.</Text>
+              </>
             )}
           </View>
 
@@ -551,6 +586,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cameraBtnText: { color: C.navy, fontSize: 15, fontWeight: "900" },
+  photoHint: { marginTop: 6, fontSize: 12, color: "#B91C1C", fontWeight: "600" },
   photoPreviewWrap: {
     borderRadius: 16, overflow: "hidden", borderWidth: 1,
     borderColor: C.border, backgroundColor: C.bg,

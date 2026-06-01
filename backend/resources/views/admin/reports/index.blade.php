@@ -21,6 +21,15 @@
     @endphp
 
     <section class="panel">
+        @if ($underInvestigationCount > 0)
+            <div style="margin-bottom: 14px;">
+                <a href="{{ route('admin.reports.index', ['status' => 'under_investigation']) }}"
+                   style="display:inline-flex;align-items:center;gap:8px;background:#FEF3C7;border:1px solid #F59E0B;color:#92400E;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;">
+                    ⚠️ {{ $underInvestigationCount }} report{{ $underInvestigationCount > 1 ? 's' : '' }} under investigation — requires admin review
+                </a>
+            </div>
+        @endif
+
         <form class="filters" method="GET" action="{{ route('admin.reports.index') }}">
             <input name="search" value="{{ $search }}" placeholder="Search by title, location, or description">
             <select name="status">

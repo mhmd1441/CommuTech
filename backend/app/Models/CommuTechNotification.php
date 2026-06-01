@@ -13,6 +13,7 @@ class CommuTechNotification extends Model
         'user_id',
         'issue_id',
         'type',
+        'recipient_role',
         'title',
         'body',
         'read_at',

@@ -9,14 +9,21 @@ class NotificationController extends Controller
 {
     public function index(Request $request)
     {
+        $role = $request->query('role', 'citizen');
+
         $notifications = $request->user()
             ->commuTechNotifications()
+            ->where('recipient_role', $role)
             ->with('issue:id,title,status,priority,category,location,image_url')
             ->latest()
             ->paginate(30);
 
         return response()->json([
-            'unread_count' => $request->user()->commuTechNotifications()->whereNull('read_at')->count(),
+            'unread_count' => $request->user()
+                ->commuTechNotifications()
+                ->where('recipient_role', $role)
+                ->whereNull('read_at')
+                ->count(),
             'notifications' => $notifications,
         ]);
     }

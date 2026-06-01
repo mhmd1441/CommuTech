@@ -2,10 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\AdminInvestigationMail;
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class IssueController extends Controller
@@ -56,10 +61,7 @@ class IssueController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            $data['image_url'] = $this->publicStorageUrl(
-                $request,
-                $request->file('image')->store('issue-images', 'public')
-            );
+            $data['image_url'] = $this->uploadToSupabase($request->file('image'));
         }
 
         unset($data['image']);
@@ -71,13 +73,15 @@ class IssueController extends Controller
             'ai_score' => $this->triageScore($data['description']),
         ]);
 
-        CommuTechNotification::create([
-            'user_id' => $request->user()->id,
-            'issue_id' => $issue->id,
-            'type' => 'new_report',
-            'title' => 'Report Submitted',
-            'body' => 'Your issue "'.$issue->title.'" was submitted successfully and is pending review.',
+        $notification = CommuTechNotification::create([
+            'user_id'        => $request->user()->id,
+            'issue_id'       => $issue->id,
+            'type'           => 'new_report',
+            'recipient_role' => 'citizen',
+            'title'          => 'Report Submitted',
+            'body'           => 'Your issue "'.$issue->title.'" was submitted successfully and is pending review.',
         ]);
+        try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
 
         return response()->json($issue->load('user:id,name,email,phone'), 201);
     }
@@ -160,13 +164,25 @@ class IssueController extends Controller
         ]);
 
         if (! $confirmed && $issue->assigned_to) {
-            CommuTechNotification::create([
-                'user_id' => $issue->assigned_to,
-                'issue_id' => $issue->id,
-                'type' => 'status_update',
-                'title' => 'Report Under Investigation',
-                'body' => 'The citizen challenged the resolution for "'.$issue->title.'".',
+            $notification = CommuTechNotification::create([
+                'user_id'        => $issue->assigned_to,
+                'issue_id'       => $issue->id,
+                'type'           => 'status_update',
+                'recipient_role' => 'worker',
+                'title'          => 'Report Under Investigation',
+                'body'           => 'The citizen challenged the resolution for "'.$issue->title.'".',
             ]);
+            try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+
+            $issue->load('user');
+            $admins = User::withRole(User::ROLE_ADMIN)->get(['email']);
+            foreach ($admins as $admin) {
+                try {
+                    Mail::to($admin->email)->send(new AdminInvestigationMail($issue));
+                } catch (\Throwable $e) {
+                    \Log::warning('Admin investigation email failed: '.$e->getMessage());
+                }
+            }
         }
 
         return response()->json([
@@ -193,9 +209,23 @@ class IssueController extends Controller
         return str_replace('-', '_', strtolower($status));
     }
 
-    private function publicStorageUrl(Request $request, string $path): string
+    private function uploadToSupabase(\Illuminate\Http\UploadedFile $file): string
     {
-        return rtrim($request->getSchemeAndHttpHost(), '/').Storage::url($path);
+        $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
+        $supabaseUrl = config('services.supabase.url');
+        $serviceKey  = config('services.supabase.key');
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer '.$serviceKey,
+            'Content-Type'  => $file->getMimeType(),
+        ])->withBody(file_get_contents($file->getRealPath()), $file->getMimeType())
+          ->post("{$supabaseUrl}/storage/v1/object/issues/{$filename}");
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('Image upload failed: '.$response->body());
+        }
+
+        return "{$supabaseUrl}/storage/v1/object/public/issues/{$filename}";
     }
 
     private function triagePriority(string $category, string $description): string

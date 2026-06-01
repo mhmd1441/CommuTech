@@ -19,7 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import BottomNav from "../shared/BottomNav";
-import api, { getAuthUser, setAuthUser as setStoredAuthUser } from "../../services/api";
+import api, { getAuthUser, setAuthUser as setStoredAuthUser, profileApi } from "../../services/api";
+import { disconnectPusher } from "../../services/echo";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -216,6 +217,7 @@ function ProfileScreen({ navigation }) {
   const [profileForm, setProfileForm] = useState(initialProfile);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
   const [district, setDistrict] = useState(formatDistrict(initialProfile));
   const [passwordForm, setPasswordForm] = useState({
     current: '',
@@ -270,7 +272,7 @@ function ProfileScreen({ navigation }) {
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }),
+        onPress: () => { disconnectPusher(); navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); },
       },
     ]);
   };
@@ -327,6 +329,28 @@ function ProfileScreen({ navigation }) {
       Alert.alert('Upload failed', requestErrorMessage(error));
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) {
+      Alert.alert('Missing fields', 'Please fill in all password fields.');
+      return;
+    }
+    if (passwordForm.next !== passwordForm.confirm) {
+      Alert.alert('Passwords do not match', 'New password and confirmation must match.');
+      return;
+    }
+    try {
+      setSavingPassword(true);
+      await profileApi.changePassword(passwordForm.current, passwordForm.next);
+      setPasswordForm({ current: '', next: '', confirm: '' });
+      setActiveModal(null);
+      Alert.alert('Password updated', 'Your password has been changed successfully.');
+    } catch (error) {
+      Alert.alert('Password not updated', error.message);
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -515,14 +539,14 @@ function ProfileScreen({ navigation }) {
             icon="shield-checkmark-outline"
             iconColor={C.muted}
             label="Privacy Policy"
-            onPress={() => {}}
+            onPress={() => navigation.navigate('PrivacyPolicy')}
           />
           <MenuDivider />
           <MenuItem
             icon="document-outline"
             iconColor={C.muted}
             label="Terms of Service"
-            onPress={() => {}}
+            onPress={() => navigation.navigate('Terms')}
           />
         </MenuGroup>
 
@@ -574,7 +598,7 @@ function ProfileScreen({ navigation }) {
                   ? 'Default District'
                   : 'Change Password'}
               </Text>
-              <TouchableOpacity style={styles.modalClose} onPress={() => setActiveModal(null)}>
+              <TouchableOpacity style={styles.modalClose} onPress={() => { setActiveModal(null); setPasswordForm({ current: '', next: '', confirm: '' }); }}>
                 <Ionicons name="close" size={20} color={C.navy} />
               </TouchableOpacity>
             </View>
@@ -641,7 +665,7 @@ function ProfileScreen({ navigation }) {
             {activeModal === 'password' && (
               <View style={styles.modalBody}>
                 <Text style={styles.modalHint}>
-                  Frontend view only. Backend validation will confirm the real current password.
+                 Enter your current password and choose a new one.
                 </Text>
                 <Text style={styles.inputLabel}>Current password</Text>
                 <TextInput
@@ -669,11 +693,15 @@ function ProfileScreen({ navigation }) {
 
             {activeModal !== 'district' && (
               <TouchableOpacity
-                style={[styles.modalPrimaryBtn, savingProfile && styles.modalPrimaryBtnDisabled]}
-                onPress={activeModal === 'personal' ? handleSaveProfile : () => setActiveModal(null)}
-                disabled={savingProfile}
+                style={[styles.modalPrimaryBtn, (savingProfile || savingPassword) && styles.modalPrimaryBtnDisabled]}
+                onPress={
+                  activeModal === 'personal' ? handleSaveProfile :
+                  activeModal === 'password' ? handleChangePassword :
+                  () => setActiveModal(null)
+                }
+                disabled={savingProfile || savingPassword}
               >
-                {savingProfile ? (
+                {(savingProfile || savingPassword) ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={styles.modalPrimaryText}>

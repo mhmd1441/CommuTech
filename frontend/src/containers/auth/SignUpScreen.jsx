@@ -50,6 +50,7 @@ export default function SignupScreen({ navigation }) {
   const [secure2, setSecure2] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const signupIssues = useMemo(() => {
     const e = email.trim();
@@ -72,8 +73,8 @@ export default function SignupScreen({ navigation }) {
   }, [firstName, lastName, email, gov, phone, password, confirmPassword]);
 
   const canSubmit = useMemo(() => {
-    return signupIssues.length === 0;
-  }, [signupIssues]);
+    return signupIssues.length === 0 && termsAccepted;
+  }, [signupIssues, termsAccepted]);
 
   const onSignup = async () => {
     setError("");
@@ -248,6 +249,25 @@ export default function SignupScreen({ navigation }) {
           )}
 
           <Pressable
+            onPress={() => setTermsAccepted((v) => !v)}
+            style={styles.termsRow}
+          >
+            <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+              {termsAccepted && <Ionicons name="checkmark" size={14} color="#fff" />}
+            </View>
+            <Text style={styles.termsText}>
+              I agree to the{" "}
+              <Text style={styles.termsLink} onPress={() => navigation.navigate("Terms")}>
+                Terms of Service
+              </Text>
+              {" "}and{" "}
+              <Text style={styles.termsLink} onPress={() => navigation.navigate("PrivacyPolicy")}>
+                Privacy Policy
+              </Text>
+            </Text>
+          </Pressable>
+
+          <Pressable
             onPress={onSignup}
             disabled={!canSubmit || loading}
             style={[
@@ -340,6 +360,38 @@ const styles = StyleSheet.create({
   requirementsTitle: { color: COLORS.text, fontWeight: "900", fontSize: 13 },
   requirementRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   requirementText: { flex: 1, color: COLORS.muted, fontWeight: "700", fontSize: 12 },
+  termsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 14,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.navy,
+    borderColor: COLORS.navy,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.muted,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: COLORS.navy,
+    fontWeight: "900",
+    textDecorationLine: "underline",
+  },
   signupBtn: {
     marginTop: 14,
     height: 52,

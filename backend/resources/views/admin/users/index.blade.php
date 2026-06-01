@@ -4,7 +4,7 @@
 @section('page_title', $role ? ucfirst($role).'s' : 'All Users')
 @section('page_subtitle', 'Manage citizens, workers, and admin accounts.')
 @section('page_actions')
-    <a class="button primary" href="{{ route('admin.users.create', ['role' => $role]) }}">Create User</a>
+    <a class="button primary" href="{{ route('admin.users.create', ['role' => $role]) }}">Create {{ $role ? ucfirst($role) : 'User' }}</a>
 @endsection
 
 @section('content')
