@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\NotificationSent;
 use App\Http\Controllers\Controller;
+use App\Models\CommuTechNotification;
 use App\Models\Issue;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -41,6 +43,7 @@ class ReportPageController extends Controller
             'status' => $data['status'] ?? null,
             'category' => $data['category'] ?? null,
             'search' => $data['search'] ?? '',
+            'underInvestigationCount' => Issue::where('status', 'under_investigation')->count(),
         ]);
     }
 
@@ -97,7 +100,21 @@ class ReportPageController extends Controller
             $data['resolved_at'] = null;
         }
 
+        $oldStatus = $report->status;
         $report->update($data);
+
+        if ($oldStatus !== $data['status']) {
+            $statusLabel = str_replace('_', ' ', $data['status']);
+            $notification = CommuTechNotification::create([
+                'user_id'        => $report->user_id,
+                'issue_id'       => $report->id,
+                'type'           => 'status_update',
+                'recipient_role' => 'citizen',
+                'title'          => 'Report Status Updated',
+                'body'           => 'Your report "'.$report->title.'" has been updated to: '.$statusLabel.'.',
+            ]);
+            try { NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+        }
 
         return redirect()
             ->route('admin.reports.index')

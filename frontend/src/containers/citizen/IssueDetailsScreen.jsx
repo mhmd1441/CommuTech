@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -60,9 +60,20 @@ function formatStatus(status) {
 }
 
 export default function IssueDetailsScreen({ navigation, route }) {
-  const [issue, setIssue] = useState({ ...FALLBACK_ISSUE, ...(route?.params?.issue || {}) });
+  const routeIssue = route?.params?.issue || {};
+  const [issue, setIssue] = useState(routeIssue.title ? routeIssue : { ...FALLBACK_ISSUE, ...routeIssue });
+  const [loadingIssue, setLoadingIssue] = useState(!routeIssue.title && !!routeIssue.id);
   const [auditNote, setAuditNote] = useState("");
   const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!routeIssue.title && routeIssue.id) {
+      api.get(`/issues/${routeIssue.id}`)
+        .then(({ data }) => setIssue(data))
+        .catch(() => {})
+        .finally(() => setLoadingIssue(false));
+    }
+  }, []);
   const status = formatStatus(issue.status);
   const priority = issue.priority === "high" ? "High" : issue.priority || "Medium";
   const canConfirmResolution =
@@ -91,6 +102,14 @@ export default function IssueDetailsScreen({ navigation, route }) {
       setConfirming(false);
     }
   };
+
+  if (loadingIssue) {
+    return (
+      <SafeAreaView style={[styles.safe, { alignItems: "center", justifyContent: "center" }]} edges={["top"]}>
+        <ActivityIndicator size="large" color={C.navy} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>

@@ -35,12 +35,14 @@ class AuthController extends Controller
 
         $user->syncRolesByName([User::ROLE_CITIZEN]);
 
-        CommuTechNotification::create([
-            'user_id' => $user->id,
-            'type' => 'system',
-            'title' => 'Welcome to CommuTech',
-            'body' => 'Your CommuTech account is ready. You can now submit and track civic reports.',
+        $notification = CommuTechNotification::create([
+            'user_id'        => $user->id,
+            'type'           => 'system',
+            'recipient_role' => 'citizen',
+            'title'          => 'Welcome to CommuTech',
+            'body'           => 'Your CommuTech account is ready. You can now submit and track civic reports.',
         ]);
+        try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
 
         return response()->json([
             'message' => 'Account created successfully.',

@@ -70,13 +70,15 @@ class IssueController extends Controller
             'ai_score' => $this->triageScore($data['description']),
         ]);
 
-        CommuTechNotification::create([
-            'user_id' => $request->user()->id,
-            'issue_id' => $issue->id,
-            'type' => 'new_report',
-            'title' => 'Report Submitted',
-            'body' => 'Your issue "'.$issue->title.'" was submitted successfully and is pending review.',
+        $notification = CommuTechNotification::create([
+            'user_id'        => $request->user()->id,
+            'issue_id'       => $issue->id,
+            'type'           => 'new_report',
+            'recipient_role' => 'citizen',
+            'title'          => 'Report Submitted',
+            'body'           => 'Your issue "'.$issue->title.'" was submitted successfully and is pending review.',
         ]);
+        try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
 
         return response()->json($issue->load('user:id,name,email,phone'), 201);
     }
@@ -159,13 +161,15 @@ class IssueController extends Controller
         ]);
 
         if (! $confirmed && $issue->assigned_to) {
-            CommuTechNotification::create([
-                'user_id' => $issue->assigned_to,
-                'issue_id' => $issue->id,
-                'type' => 'status_update',
-                'title' => 'Report Under Investigation',
-                'body' => 'The citizen challenged the resolution for "'.$issue->title.'".',
+            $notification = CommuTechNotification::create([
+                'user_id'        => $issue->assigned_to,
+                'issue_id'       => $issue->id,
+                'type'           => 'status_update',
+                'recipient_role' => 'worker',
+                'title'          => 'Report Under Investigation',
+                'body'           => 'The citizen challenged the resolution for "'.$issue->title.'".',
             ]);
+            try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
         }
 
         return response()->json([

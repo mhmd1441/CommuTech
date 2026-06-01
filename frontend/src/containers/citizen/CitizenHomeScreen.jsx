@@ -15,6 +15,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import BottomNav from "../shared/BottomNav";
 import api from "../../services/api";
+import { getAuthUser } from "../../services/api";
+import { getPusher } from "../../services/echo";
 
 const COLORS = {
   navy: "#19405F",
@@ -83,6 +85,7 @@ export default function CitizenHomeScreen({ navigation }) {
   const [userRegion, setUserRegion] = useState(null);
   const [locationStatus, setLocationStatus] = useState("idle");
   const [selectedMarker, setSelectedMarker] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const { height } = useWindowDimensions();
   const mapHeight = Math.max(420, height - 315);
   const mapRef = useRef(null);
@@ -133,8 +136,23 @@ export default function CitizenHomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       fetchIssues();
+      api.get('/notifications', { params: { role: 'citizen' } }).then(({ data }) => setUnreadCount(data.unread_count || 0)).catch(() => {});
     }, [selectedFilter])
   );
+
+  useEffect(() => {
+    const user = getAuthUser();
+    if (!user) return;
+    const pusher = getPusher();
+    if (!pusher) return;
+    const handler = () => setUnreadCount((prev) => prev + 1);
+    const channel = pusher.subscribe(`private-user.${user.id}`);
+    channel.bind('notification.sent', handler);
+    return () => {
+      channel.unbind('notification.sent', handler);
+      pusher.unsubscribe(`private-user.${user.id}`);
+    };
+  }, []);
 
   const fetchIssues = async () => {
     try {
@@ -212,10 +230,15 @@ export default function CitizenHomeScreen({ navigation }) {
             <Text style={styles.headerSub}>Smart Civic Reporting</Text>
           </View>
           <Pressable
-            onPress={() => navigation.navigate("Notifications")}
+            onPress={() => { navigation.navigate("Notifications", { role: "citizen" }); setUnreadCount(0); }}
             style={styles.notificationBtn}
           >
             <Ionicons name="notifications-outline" size={22} color={COLORS.navy} />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
           </Pressable>
         </View>
 
@@ -365,6 +388,13 @@ const styles = StyleSheet.create({
     width: 46, height: 46, borderRadius: 15, backgroundColor: "#fff",
     borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center",
   },
+  bellBadge: {
+    position: "absolute", top: -4, right: -4,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 4, borderWidth: 2, borderColor: "#fff",
+  },
+  bellBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   segmentWrap: {
     marginTop: 18, flexDirection: "row", backgroundColor: "#EEF3F8",
     borderRadius: 16, padding: 4, gap: 6,

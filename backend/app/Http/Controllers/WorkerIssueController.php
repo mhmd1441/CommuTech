@@ -83,13 +83,15 @@ class WorkerIssueController extends Controller
                 'status' => 'in_progress',
             ]);
 
-            CommuTechNotification::create([
-                'user_id' => $issue->user_id,
-                'issue_id' => $issue->id,
-                'type' => 'status_update',
-                'title' => 'Report Assigned',
-                'body' => 'Your report "'.$issue->title.'" was assigned to a worker.',
+            $notification = CommuTechNotification::create([
+                'user_id'        => $issue->user_id,
+                'issue_id'       => $issue->id,
+                'type'           => 'status_update',
+                'recipient_role' => 'citizen',
+                'title'          => 'Report Assigned',
+                'body'           => 'Your report "'.$issue->title.'" was assigned to a worker.',
             ]);
+            try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
 
             return response()->json([
                 'message' => 'Issue assigned successfully.',
@@ -133,13 +135,15 @@ class WorkerIssueController extends Controller
 
         $issue->update($updates);
 
-        CommuTechNotification::create([
-            'user_id' => $issue->user_id,
-            'issue_id' => $issue->id,
-            'type' => 'status_update',
-            'title' => 'Report Updated',
-            'body' => 'Your report "'.$issue->title.'" is now '.$data['status'].'.',
+        $notification = CommuTechNotification::create([
+            'user_id'        => $issue->user_id,
+            'issue_id'       => $issue->id,
+            'type'           => 'status_update',
+            'recipient_role' => 'citizen',
+            'title'          => 'Report Updated',
+            'body'           => 'Your report "'.$issue->title.'" is now '.$data['status'].'.',
         ]);
+        try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
 
         return response()->json([
             'message' => 'Issue status updated.',

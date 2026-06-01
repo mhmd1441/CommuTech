@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Callout, Circle, Marker } from "react-native-maps";
 import api from "../../services/api";
+import { getAuthUser } from "../../services/api";
+import { getPusher } from "../../services/echo";
 
 const COLORS = {
   navy: "#19405F",
@@ -73,6 +75,7 @@ function personName(person, fallback) {
 }
 
 export default function WorkerHomeScreen({ navigation }) {
+  const [unreadCount, setUnreadCount] = useState(0);
   const [activeView, setActiveView] = useState("map");
   const [workerTab, setWorkerTab] = useState("active");
   const [assignedIssues, setAssignedIssues] = useState([]);
@@ -152,8 +155,22 @@ export default function WorkerHomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadWorkerIssues();
+      api.get('/notifications', { params: { role: 'worker' } }).then(({ data }) => setUnreadCount(data.unread_count || 0)).catch(() => {});
     }, [loadWorkerIssues])
   );
+
+  useEffect(() => {
+    const user = getAuthUser();
+    if (!user) return;
+    const pusher = getPusher();
+    if (!pusher) return;
+    const handler = () => setUnreadCount((prev) => prev + 1);
+    const channel = pusher.subscribe(`private-user.${user.id}`);
+    channel.bind('notification.sent', handler);
+    return () => {
+      channel.unbind('notification.sent', handler);
+    };
+  }, []);
 
   const mapNearbyIssues = useMemo(() => {
     return nearbyIssues
@@ -459,13 +476,26 @@ export default function WorkerHomeScreen({ navigation }) {
           <Text style={styles.subtitle}>Nearby unassigned reports and your assigned work.</Text>
         </View>
 
-        <Pressable
-          onPress={() => navigation.reset({ index: 0, routes: [{ name: "CitizenHome" }] })}
-          style={styles.citizenBtn}
-        >
-          <Ionicons name="person-outline" size={17} color={COLORS.navy} />
-          <Text style={styles.citizenText}>Citizen</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => { navigation.navigate("Notifications", { role: "worker" }); setUnreadCount(0); }}
+            style={styles.workerBellBtn}
+          >
+            <Ionicons name="notifications-outline" size={20} color={COLORS.navy} />
+            {unreadCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.reset({ index: 0, routes: [{ name: "CitizenHome" }] })}
+            style={styles.citizenBtn}
+          >
+            <Ionicons name="person-outline" size={17} color={COLORS.navy} />
+            <Text style={styles.citizenText}>Citizen</Text>
+          </Pressable>
+        </View>
       </View>
 
       <Tabs />
@@ -653,6 +683,19 @@ const styles = StyleSheet.create({
   modePillText: { color: COLORS.navy, fontWeight: "900", fontSize: 11 },
   title: { color: COLORS.text, fontSize: 24, fontWeight: "900" },
   subtitle: { color: COLORS.muted, fontWeight: "700", fontSize: 12, marginTop: 4 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  workerBellBtn: {
+    width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.card,
+    borderWidth: 1, borderColor: COLORS.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  bellBadge: {
+    position: "absolute", top: -4, right: -4,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 4, borderWidth: 2, borderColor: "#fff",
+  },
+  bellBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   citizenBtn: {
     flexDirection: "row",
     alignItems: "center",
