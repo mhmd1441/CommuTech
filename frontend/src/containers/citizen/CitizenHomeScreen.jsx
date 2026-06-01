@@ -145,7 +145,7 @@ export default function CitizenHomeScreen({ navigation }) {
     if (!user) return;
     const pusher = getPusher();
     if (!pusher) return;
-    const handler = () => setUnreadCount((prev) => prev + 1);
+    const handler = (data) => { if (data?.recipient_role === 'citizen') setUnreadCount((prev) => prev + 1); };
     const channel = pusher.subscribe(`private-user.${user.id}`);
     channel.bind('notification.sent', handler);
     return () => {

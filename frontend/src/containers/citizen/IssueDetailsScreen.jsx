@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -65,6 +68,68 @@ export default function IssueDetailsScreen({ navigation, route }) {
   const [loadingIssue, setLoadingIssue] = useState(!routeIssue.title && !!routeIssue.id);
   const [auditNote, setAuditNote] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [editModal, setEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ title: "", description: "", location: "", category: "" });
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const canEdit = issue.id && (issue.status === "pending" || issue.status === "Pending");
+
+  const openEdit = () => {
+    setEditForm({
+      title: issue.title || "",
+      description: issue.description || "",
+      location: issue.location || "",
+      category: issue.category || "",
+    });
+    setEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (editForm.title.trim().length < 5) { Alert.alert("Validation", "Title must be at least 5 characters."); return; }
+    if (editForm.description.trim().length < 20) { Alert.alert("Validation", "Description must be at least 20 characters."); return; }
+    if (!editForm.location.trim()) { Alert.alert("Validation", "Location is required."); return; }
+    try {
+      setSaving(true);
+      const { data } = await api.patch(`/issues/${issue.id}`, {
+        title: editForm.title.trim(),
+        description: editForm.description.trim(),
+        location: editForm.location.trim(),
+        category: editForm.category,
+      });
+      setIssue(data);
+      setEditModal(false);
+    } catch (e) {
+      Alert.alert("Update Failed", e.message || "Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    Alert.alert(
+      "Cancel Report",
+      "Are you sure you want to withdraw this report? This cannot be undone.",
+      [
+        { text: "Keep it", style: "cancel" },
+        {
+          text: "Yes, withdraw",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setDeleting(true);
+              await api.delete(`/issues/${issue.id}`);
+              navigation.goBack();
+            } catch (e) {
+              Alert.alert("Failed", e.message || "Could not withdraw report.");
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     if (!routeIssue.title && routeIssue.id) {
@@ -188,10 +253,31 @@ export default function IssueDetailsScreen({ navigation, route }) {
           ))}
         </View>
 
-        {issue.worker_resolution_note && (
+        {(issue.worker_resolution_note || issue.worker_resolution_image_url) && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Worker Fix Description</Text>
-            <Text style={styles.description}>{issue.worker_resolution_note}</Text>
+            {issue.worker_resolution_note && (
+              <Text style={styles.description}>{issue.worker_resolution_note}</Text>
+            )}
+            {issue.worker_resolution_image_url && (
+              <Image
+                source={{ uri: issue.worker_resolution_image_url }}
+                style={styles.resolutionImage}
+                resizeMode="cover"
+              />
+            )}
+          </View>
+        )}
+
+        {issue.status === "rejected" && (
+          <View style={styles.rejectedCard}>
+            <Ionicons name="close-circle-outline" size={20} color={C.red} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rejectedTitle}>Report Rejected</Text>
+              <Text style={styles.rejectedText}>
+                {issue.rejection_reason || "This report was reviewed and could not be processed."}
+              </Text>
+            </View>
           </View>
         )}
 
@@ -243,6 +329,28 @@ export default function IssueDetailsScreen({ navigation, route }) {
           </View>
         )}
 
+        {canEdit && (
+          <View style={styles.actions}>
+            <Pressable style={styles.editBtn} onPress={openEdit}>
+              <Ionicons name="create-outline" size={18} color={C.navy} />
+              <Text style={styles.editBtnText}>Edit Report</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.cancelBtn, deleting && { opacity: 0.6 }]}
+              onPress={handleCancel}
+              disabled={deleting}
+            >
+              {deleting
+                ? <ActivityIndicator color={C.red} size="small" />
+                : <>
+                    <Ionicons name="trash-outline" size={18} color={C.red} />
+                    <Text style={styles.cancelBtnText}>Withdraw</Text>
+                  </>
+              }
+            </Pressable>
+          </View>
+        )}
+
         <View style={styles.actions}>
           <Pressable style={styles.secondaryBtn} onPress={() => navigation.navigate("MyReports")}>
             <Text style={styles.secondaryText}>My Reports</Text>
@@ -252,6 +360,60 @@ export default function IssueDetailsScreen({ navigation, route }) {
           </Pressable>
         </View>
       </ScrollView>
+
+      <Modal visible={editModal} animationType="slide" transparent onRequestClose={() => setEditModal(false)}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Report</Text>
+              <Pressable onPress={() => setEditModal(false)} style={styles.modalClose}>
+                <Ionicons name="close" size={20} color={C.navy} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.fieldLabel}>Title</Text>
+              <TextInput
+                value={editForm.title}
+                onChangeText={(v) => setEditForm((f) => ({ ...f, title: v }))}
+                style={styles.fieldInput}
+                placeholder="Min 5 characters"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={styles.fieldLabel}>Description</Text>
+              <TextInput
+                value={editForm.description}
+                onChangeText={(v) => setEditForm((f) => ({ ...f, description: v }))}
+                style={[styles.fieldInput, { height: 100, textAlignVertical: "top" }]}
+                placeholder="Min 20 characters"
+                placeholderTextColor="#94A3B8"
+                multiline
+              />
+
+              <Text style={styles.fieldLabel}>Location</Text>
+              <TextInput
+                value={editForm.location}
+                onChangeText={(v) => setEditForm((f) => ({ ...f, location: v }))}
+                style={styles.fieldInput}
+                placeholder="Street, area, city"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Pressable
+                onPress={handleSaveEdit}
+                disabled={saving}
+                style={[styles.primaryBtn, { marginTop: 16 }, saving && { opacity: 0.6 }]}
+              >
+                {saving
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={styles.primaryText}>Save Changes</Text>
+                }
+              </Pressable>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -328,6 +490,17 @@ const styles = StyleSheet.create({
   timelineText: { flex: 1 },
   timelineTitle: { color: C.text, fontWeight: "900" },
   timelineBody: { marginTop: 3, color: C.muted, fontWeight: "600", lineHeight: 18 },
+  resolutionImage: {
+    width: "100%", height: 200, borderRadius: 14,
+    marginTop: 12, backgroundColor: C.border,
+  },
+  rejectedCard: {
+    marginTop: 14, flexDirection: "row", gap: 12,
+    backgroundColor: "#FEF2F2", borderColor: "#FECACA",
+    borderWidth: 1, borderRadius: 18, padding: 16,
+  },
+  rejectedTitle: { color: C.red, fontWeight: "900", marginBottom: 4 },
+  rejectedText: { color: C.muted, fontWeight: "700", lineHeight: 19 },
   auditCard: {
     marginTop: 14,
     flexDirection: "row",
@@ -395,4 +568,37 @@ const styles = StyleSheet.create({
   },
   secondaryText: { color: C.navy, fontWeight: "900" },
   primaryText: { color: "#FFFFFF", fontWeight: "900" },
+  editBtn: {
+    flex: 1, height: 52, borderRadius: 16, borderWidth: 1,
+    borderColor: C.navy, backgroundColor: C.card,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+  },
+  editBtnText: { color: C.navy, fontWeight: "900" },
+  cancelBtn: {
+    flex: 1, height: 52, borderRadius: 16, borderWidth: 1,
+    borderColor: C.red, backgroundColor: "#FEF2F2",
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+  },
+  cancelBtnText: { color: C.red, fontWeight: "900" },
+  modalBackdrop: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "900", color: C.text },
+  modalClose: {
+    width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg,
+    alignItems: "center", justifyContent: "center",
+  },
+  fieldLabel: { color: C.muted, fontWeight: "800", fontSize: 13, marginBottom: 6, marginTop: 12 },
+  fieldInput: {
+    borderWidth: 1, borderColor: C.border, borderRadius: 14,
+    height: 50, paddingHorizontal: 14, backgroundColor: "#fff",
+    color: C.text, fontSize: 15,
+  },
 });

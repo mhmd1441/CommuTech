@@ -16,6 +16,7 @@ import * as Location from "expo-location";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Callout, Circle, Marker } from "react-native-maps";
+import * as ImagePicker from "expo-image-picker";
 import api from "../../services/api";
 import { getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
@@ -85,6 +86,7 @@ export default function WorkerHomeScreen({ navigation }) {
   const [busyIssueId, setBusyIssueId] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [resolutionNote, setResolutionNote] = useState("");
+  const [resolutionPhoto, setResolutionPhoto] = useState(null);
   const mapRef = useRef(null);
 
   const activeRegion = workerRegion || DEFAULT_REGION;
@@ -164,7 +166,7 @@ export default function WorkerHomeScreen({ navigation }) {
     if (!user) return;
     const pusher = getPusher();
     if (!pusher) return;
-    const handler = () => setUnreadCount((prev) => prev + 1);
+    const handler = (data) => { if (data?.recipient_role === 'worker') setUnreadCount((prev) => prev + 1); };
     const channel = pusher.subscribe(`private-user.${user.id}`);
     channel.bind('notification.sent', handler);
     return () => {
@@ -216,6 +218,43 @@ export default function WorkerHomeScreen({ navigation }) {
   const openIssue = (issue, assigned) => {
     setSelectedIssue({ issue, assigned });
     setResolutionNote(issue.worker_resolution_note || "");
+    setResolutionPhoto(null);
+  };
+
+  const captureResolutionPhoto = () => {
+    Alert.alert("Resolution Photo", "Choose a source", [
+      {
+        text: "Camera",
+        onPress: async () => {
+          const permission = await ImagePicker.requestCameraPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert("Permission needed", "Allow camera access to take a photo.");
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.7,
+          });
+          if (!result.canceled && result.assets?.[0]) setResolutionPhoto(result.assets[0]);
+        },
+      },
+      {
+        text: "Gallery",
+        onPress: async () => {
+          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert("Permission needed", "Allow gallery access to pick a photo.");
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.7,
+          });
+          if (!result.canceled && result.assets?.[0]) setResolutionPhoto(result.assets[0]);
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const assignToMe = async (issue) => {
@@ -241,10 +280,27 @@ export default function WorkerHomeScreen({ navigation }) {
 
     try {
       setBusyIssueId(issue.id);
-      await api.patch(`/worker/issues/${issue.id}/status`, {
-        status: "resolved",
-        worker_resolution_note: note,
-      });
+
+      if (resolutionPhoto) {
+        const formData = new FormData();
+        formData.append("status", "resolved");
+        formData.append("worker_resolution_note", note);
+        formData.append("resolution_image", {
+          uri: resolutionPhoto.uri,
+          name: "resolution-photo.jpg",
+          type: resolutionPhoto.mimeType || "image/jpeg",
+        });
+        await api.post(`/worker/issues/${issue.id}/status`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } else {
+        await api.patch(`/worker/issues/${issue.id}/status`, {
+          status: "resolved",
+          worker_resolution_note: note,
+        });
+      }
+
+      setResolutionPhoto(null);
       setSelectedIssue(null);
       await loadWorkerIssues();
     } catch (error) {
@@ -419,6 +475,21 @@ export default function WorkerHomeScreen({ navigation }) {
                 multiline
                 textAlignVertical="top"
               />
+              <Text style={[styles.inputHint, { marginTop: 12 }]}>Resolution photo (optional)</Text>
+              {resolutionPhoto ? (
+                <View style={styles.resolutionPhotoWrap}>
+                  <Image source={{ uri: resolutionPhoto.uri }} style={styles.resolutionPhotoPreview} />
+                  <Pressable style={styles.retakeResolutionBtn} onPress={captureResolutionPhoto}>
+                    <Ionicons name="camera" size={14} color={COLORS.navy} />
+                    <Text style={styles.retakeResolutionText}>Retake</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable style={styles.resolutionCameraBtn} onPress={captureResolutionPhoto}>
+                  <Ionicons name="camera-outline" size={18} color={COLORS.navy} />
+                  <Text style={styles.resolutionCameraBtnText}>Take Photo</Text>
+                </Pressable>
+              )}
             </View>
           )}
         </ScrollView>
@@ -967,6 +1038,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  resolutionCameraBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, height: 46, borderRadius: 14, borderWidth: 1,
+    borderColor: COLORS.border, backgroundColor: COLORS.bg,
+  },
+  resolutionCameraBtnText: { color: COLORS.navy, fontWeight: "900", fontSize: 14 },
+  resolutionPhotoWrap: { borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: COLORS.border },
+  resolutionPhotoPreview: { width: "100%", height: 160 },
+  retakeResolutionBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 10, backgroundColor: COLORS.bg,
+  },
+  retakeResolutionText: { color: COLORS.navy, fontWeight: "800", fontSize: 13 },
   detailActionBar: {
     position: "absolute",
     left: 16,

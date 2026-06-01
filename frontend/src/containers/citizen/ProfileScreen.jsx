@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import BottomNav from "../shared/BottomNav";
 import api, { getAuthUser, setAuthUser as setStoredAuthUser, profileApi } from "../../services/api";
+import { disconnectPusher } from "../../services/echo";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -271,7 +272,7 @@ function ProfileScreen({ navigation }) {
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }),
+        onPress: () => { disconnectPusher(); navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); },
       },
     ]);
   };

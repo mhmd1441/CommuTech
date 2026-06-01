@@ -100,18 +100,39 @@ export default function NotificationsScreen({ navigation, route }) {
   const role = route?.params?.role || 'citizen';
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const channelRef = useRef(null);
 
   const fetchNotifications = async () => {
     try {
-      const { data } = await api.get('/notifications', { params: { role } });
+      const { data } = await api.get('/notifications', { params: { role, page: 1 } });
       setNotifications(data.notifications?.data || []);
       setUnreadCount(data.unread_count || 0);
+      setCurrentPage(1);
+      setHasMore(!!data.notifications?.next_page_url);
     } catch (e) {
       console.error('Failed to fetch notifications', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    try {
+      setLoadingMore(true);
+      const nextPage = currentPage + 1;
+      const { data } = await api.get('/notifications', { params: { role, page: nextPage } });
+      setNotifications((prev) => [...prev, ...(data.notifications?.data || [])]);
+      setCurrentPage(nextPage);
+      setHasMore(!!data.notifications?.next_page_url);
+    } catch (e) {
+      console.error('Failed to load more', e);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -129,6 +150,7 @@ export default function NotificationsScreen({ navigation, route }) {
     if (!pusher) return;
 
     const handler = (data) => {
+      if (data?.recipient_role !== role) return;
       setNotifications((prev) => [data, ...prev]);
       setUnreadCount((prev) => prev + 1);
     };
@@ -228,7 +250,18 @@ export default function NotificationsScreen({ navigation, route }) {
               </View>
             </View>
           )}
-          ListFooterComponent={<View style={{ height: 100 }} />}
+          ListFooterComponent={
+            <View style={{ paddingBottom: 100 }}>
+              {hasMore && (
+                <TouchableOpacity onPress={loadMore} disabled={loadingMore} style={styles.loadMoreBtn}>
+                  {loadingMore
+                    ? <ActivityIndicator size="small" color={C.navy} />
+                    : <Text style={styles.loadMoreText}>Load more</Text>
+                  }
+                </TouchableOpacity>
+              )}
+            </View>
+          }
         />
       )}
     </SafeAreaView>
@@ -285,4 +318,10 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: C.text },
   emptyHint: { fontSize: 13, color: C.muted },
+  loadMoreBtn: {
+    marginTop: 16, marginHorizontal: 16, height: 46, borderRadius: 14,
+    borderWidth: 1, borderColor: C.border, backgroundColor: C.card,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  loadMoreText: { color: C.navy, fontWeight: '800', fontSize: 13 },
 });

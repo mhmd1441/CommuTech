@@ -62,6 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/nearby', 'nearby');
             Route::patch('/{issue}/assign-to-me', 'assignToMe');
             Route::patch('/{issue}/status', 'updateStatus');
+            Route::post('/{issue}/status', 'updateStatus');
         });
     });
 

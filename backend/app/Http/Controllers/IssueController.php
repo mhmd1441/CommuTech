@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\AdminInvestigationMail;
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -170,6 +173,16 @@ class IssueController extends Controller
                 'body'           => 'The citizen challenged the resolution for "'.$issue->title.'".',
             ]);
             try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+
+            $issue->load('user');
+            $admins = User::withRole(User::ROLE_ADMIN)->get(['email']);
+            foreach ($admins as $admin) {
+                try {
+                    Mail::to($admin->email)->send(new AdminInvestigationMail($issue));
+                } catch (\Throwable $e) {
+                    \Log::warning('Admin investigation email failed: '.$e->getMessage());
+                }
+            }
         }
 
         return response()->json([

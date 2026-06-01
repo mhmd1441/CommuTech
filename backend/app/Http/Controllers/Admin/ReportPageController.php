@@ -105,7 +105,8 @@ class ReportPageController extends Controller
 
         if ($oldStatus !== $data['status']) {
             $statusLabel = str_replace('_', ' ', $data['status']);
-            $notification = CommuTechNotification::create([
+
+            $citizenNotif = CommuTechNotification::create([
                 'user_id'        => $report->user_id,
                 'issue_id'       => $report->id,
                 'type'           => 'status_update',
@@ -113,7 +114,19 @@ class ReportPageController extends Controller
                 'title'          => 'Report Status Updated',
                 'body'           => 'Your report "'.$report->title.'" has been updated to: '.$statusLabel.'.',
             ]);
-            try { NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+            try { NotificationSent::dispatch($citizenNotif); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+
+            if ($report->assigned_to) {
+                $workerNotif = CommuTechNotification::create([
+                    'user_id'        => $report->assigned_to,
+                    'issue_id'       => $report->id,
+                    'type'           => 'status_update',
+                    'recipient_role' => 'worker',
+                    'title'          => 'Assigned Report Updated',
+                    'body'           => 'Admin updated "'.$report->title.'" to: '.$statusLabel.'.',
+                ]);
+                try { NotificationSent::dispatch($workerNotif); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+            }
         }
 
         return redirect()

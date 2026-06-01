@@ -32,13 +32,14 @@ class NotificationSent implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
-            'id'         => $this->notification->id,
-            'type'       => $this->notification->type,
-            'title'      => $this->notification->title,
-            'body'       => $this->notification->body,
-            'issue_id'   => $this->notification->issue_id,
-            'read_at'    => $this->notification->read_at,
-            'created_at' => $this->notification->created_at,
+            'id'             => $this->notification->id,
+            'type'           => $this->notification->type,
+            'recipient_role' => $this->notification->recipient_role,
+            'title'          => $this->notification->title,
+            'body'           => $this->notification->body,
+            'issue_id'       => $this->notification->issue_id,
+            'read_at'        => $this->notification->read_at,
+            'created_at'     => $this->notification->created_at,
         ];
     }
 }
