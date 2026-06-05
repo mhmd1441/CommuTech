@@ -51,8 +51,8 @@ function statusColor(status) {
 }
 
 function priorityColor(priority) {
-  if (priority === "Critical" || priority === "high") return C.red;
-  if (priority === "High" || priority === "medium") return C.orange;
+  if (priority === "Critical") return C.red;
+  if (priority === "High" || priority === "Medium") return C.orange;
   return C.navy;
 }
 
@@ -140,7 +140,9 @@ export default function IssueDetailsScreen({ navigation, route }) {
     }
   }, []);
   const status = formatStatus(issue.status);
-  const priority = issue.priority === "high" ? "High" : issue.priority || "Medium";
+  const priority = issue.priority
+    ? issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)
+    : "Medium";
   const canConfirmResolution =
     issue.id &&
     issue.status === "resolved" &&
