@@ -51,6 +51,8 @@ class Issue extends Model
         'citizen_resolution_note',
         'citizen_resolution_image_url',
         'citizen_confirmed_at',
+        'due_at',
+        'sla_breached',
     ];
 
     protected function casts(): array
@@ -63,7 +65,19 @@ class Issue extends Model
             'worker_resolved_at' => 'datetime',
             'citizen_resolution_confirmed' => 'boolean',
             'citizen_confirmed_at' => 'datetime',
+            'due_at' => 'datetime',
+            'sla_breached' => 'boolean',
         ];
+    }
+
+    public static function slaHours(string $priority): int
+    {
+        return match ($priority) {
+            'critical' => 24,
+            'high'     => 72,
+            'medium'   => 168,
+            default    => 336,
+        };
     }
 
     public function user()

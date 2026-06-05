@@ -66,11 +66,14 @@ class IssueController extends Controller
 
         unset($data['image']);
 
+        $priority = $this->triagePriority($data['category'], $data['description']);
+
         $issue = $request->user()->issues()->create([
             ...$data,
-            'status' => 'pending',
-            'priority' => $this->triagePriority($data['category'], $data['description']),
+            'status'   => 'pending',
+            'priority' => $priority,
             'ai_score' => $this->triageScore($data['description']),
+            'due_at'   => now()->addHours(Issue::slaHours($priority)),
         ]);
 
         $notification = CommuTechNotification::create([

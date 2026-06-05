@@ -232,6 +232,18 @@ export default function IssueDetailsScreen({ navigation, route }) {
               <Text style={styles.infoValue}>{issue.location || "Location unavailable"}</Text>
             </View>
           </View>
+
+          {issue.due_at && !["resolved", "rejected"].includes(issue.status) && (
+            <View style={[styles.locationBox, { marginTop: 10, borderColor: issue.sla_breached ? "#FECACA" : C.border, backgroundColor: issue.sla_breached ? "#FEF2F2" : "#fff" }]}>
+              <Ionicons name="time-outline" size={20} color={issue.sla_breached ? C.red : C.navy} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.infoLabel}>Resolution Deadline</Text>
+                <Text style={[styles.infoValue, { color: issue.sla_breached ? C.red : C.text }]}>
+                  {issue.sla_breached ? "⚠ Overdue — " : ""}{new Date(issue.due_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.card}>

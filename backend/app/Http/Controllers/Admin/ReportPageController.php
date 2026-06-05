@@ -16,21 +16,22 @@ class ReportPageController extends Controller
     public function index(Request $request)
     {
         $data = $request->validate([
-            'status' => ['nullable', Rule::in(Issue::STATUSES)],
+            'status'   => ['nullable', Rule::in(Issue::STATUSES)],
             'category' => ['nullable', Rule::in(Issue::CATEGORIES)],
-            'search' => ['nullable', 'string', 'max:100'],
+            'search'   => ['nullable', 'string', 'max:100'],
+            'sla'      => ['nullable', Rule::in(['breached'])],
         ]);
 
         $reports = Issue::query()
             ->with(['user:id,name,email,role', 'assignee:id,name,email,role'])
-            ->when($data['status'] ?? null, fn ($query, $status) => $query->where('status', $status))
-            ->when($data['category'] ?? null, fn ($query, $category) => $query->where('category', $category))
-            ->when($data['search'] ?? null, function ($query, $search) {
-                $query->where(function ($query) use ($search) {
-                    $query
-                        ->where('title', 'like', "%{$search}%")
-                        ->orWhere('location', 'like', "%{$search}%")
-                        ->orWhere('description', 'like', "%{$search}%");
+            ->when($data['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+            ->when($data['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
+            ->when(($data['sla'] ?? null) === 'breached', fn ($q) => $q->where('sla_breached', true))
+            ->when($data['search'] ?? null, function ($q, $search) {
+                $q->where(function ($q) use ($search) {
+                    $q->where('title', 'like', "%{$search}%")
+                      ->orWhere('location', 'like', "%{$search}%")
+                      ->orWhere('description', 'like', "%{$search}%");
                 });
             })
             ->latest()
@@ -38,12 +39,15 @@ class ReportPageController extends Controller
             ->withQueryString();
 
         return view('admin.reports.index', [
-            'reports' => $reports,
-            'categories' => Issue::CATEGORIES,
-            'status' => $data['status'] ?? null,
-            'category' => $data['category'] ?? null,
-            'search' => $data['search'] ?? '',
-            'underInvestigationCount' => Issue::where('status', 'under_investigation')->count(),
+            'reports'                => $reports,
+            'categories'             => Issue::CATEGORIES,
+            'status'                 => $data['status'] ?? null,
+            'category'               => $data['category'] ?? null,
+            'search'                 => $data['search'] ?? '',
+            'underInvestigationCount'=> Issue::where('status', 'under_investigation')->count(),
+            'slaBreachedCount'       => Issue::where('sla_breached', true)
+                                            ->whereNotIn('status', ['resolved', 'rejected'])
+                                            ->count(),
         ]);
     }
 

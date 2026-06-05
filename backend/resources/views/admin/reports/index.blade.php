@@ -21,6 +21,15 @@
     @endphp
 
     <section class="panel">
+        @if ($slaBreachedCount > 0)
+            <div style="margin-bottom: 10px;">
+                <a href="{{ route('admin.reports.index', ['sla' => 'breached']) }}"
+                   style="display:inline-flex;align-items:center;gap:8px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;">
+                    ⏰ {{ $slaBreachedCount }} overdue report{{ $slaBreachedCount > 1 ? 's' : '' }} — SLA breached
+                </a>
+            </div>
+        @endif
+
         @if ($underInvestigationCount > 0)
             <div style="margin-bottom: 14px;">
                 <a href="{{ route('admin.reports.index', ['status' => 'under_investigation']) }}"
@@ -56,6 +65,7 @@
                     <th>Worker</th>
                     <th>Status</th>
                     <th>Priority</th>
+                    <th>SLA</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -71,6 +81,24 @@
                         <td>{{ $report->assignee?->name ?? 'Unassigned' }}</td>
                         <td><span class="tag {{ $tagClass($report->status) }}">{{ str_replace('_', ' ', $report->status) }}</span></td>
                         <td><span class="tag">{{ $report->priority }}</span></td>
+                        <td>
+                            @if (in_array($report->status, ['resolved', 'rejected']))
+                                <span class="tag green">Met</span>
+                            @elseif ($report->sla_breached)
+                                <span class="tag red">Breached</span>
+                            @elseif ($report->due_at)
+                                @php $hoursLeft = now()->diffInHours($report->due_at, false); @endphp
+                                @if ($hoursLeft < 0)
+                                    <span class="tag red">Overdue</span>
+                                @elseif ($hoursLeft < 12)
+                                    <span class="tag orange">{{ $hoursLeft }}h left</span>
+                                @else
+                                    <span class="tag">{{ round($hoursLeft / 24, 1) }}d left</span>
+                                @endif
+                            @else
+                                <span class="tag">—</span>
+                            @endif
+                        </td>
                         <td>
                             <div class="row-actions">
                                 <a class="button" href="{{ route('admin.reports.edit', $report) }}">Edit</a>
