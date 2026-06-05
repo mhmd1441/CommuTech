@@ -17,7 +17,6 @@ class Issue extends Model
         'Water & Drainage',
         'Environment & Public Spaces',
         'Public Safety',
-        'Public Property',
         'Other',
     ];
 
@@ -42,6 +41,8 @@ class Issue extends Model
         'longitude',
         'image_url',
         'ai_score',
+        'ai_category',
+        'ai_confidence',
         'rejection_reason',
         'resolved_at',
         'worker_resolution_note',
@@ -61,6 +62,7 @@ class Issue extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'ai_score' => 'decimal:2',
+            'ai_confidence' => 'decimal:4',
             'resolved_at' => 'datetime',
             'worker_resolved_at' => 'datetime',
             'citizen_resolution_confirmed' => 'boolean',

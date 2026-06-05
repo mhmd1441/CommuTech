@@ -41,9 +41,21 @@ const CATEGORIES = [
   "Water & Drainage",
   "Environment & Public Spaces",
   "Public Safety",
-  "Public Property",
   "Other",
 ];
+
+const ML_TO_CATEGORY = {
+  pothole:          "Roads & Sidewalks",
+  broken_road_sign: "Traffic & Signals",
+  illegal_parking:  "Traffic & Signals",
+  garbage:          "Waste & Sanitation",
+  fallen_trees:     "Environment & Public Spaces",
+  fire:             "Public Safety",
+  roadway_flooding: "Water & Drainage",
+  water_pollution:  "Water & Drainage",
+  pipe_burst:       "Water & Drainage",
+  street_lighting:  "Street Lighting & Electricity",
+};
 
 const DEFAULT_COORDINATE = {
   latitude: 33.8938,
@@ -66,6 +78,8 @@ export default function CreateIssueScreen({ navigation }) {
   const [submitted, setSubmitted] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [aiPrediction, setAiPrediction] = useState(null);
+  const [analyzingPhoto, setAnalyzingPhoto] = useState(false);
   const searchTimeout = useRef(null);
 
   const canSubmit = useMemo(
@@ -201,6 +215,49 @@ export default function CreateIssueScreen({ navigation }) {
     };
   };
 
+  const predictCategory = async (photo) => {
+    setAnalyzingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", {
+        uri: photo.uri,
+        name: photo.fileName || "photo.jpg",
+        type: photo.mimeType || "image/jpeg",
+      });
+      const { data } = await api.post("/ml/predict", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (data.error === "ml_unavailable") return;
+
+      const mappedCategory = ML_TO_CATEGORY[data.category];
+      if (!mappedCategory) return;
+
+      const formattedClass = data.category
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+      setAiPrediction({
+        mappedCategory,
+        formattedClass,
+        confidence: data.confidence,
+        needsConfirmation: data.needs_confirmation,
+      });
+      setCategory(mappedCategory);
+    } catch {
+      // silent fail — citizen picks manually
+    } finally {
+      setAnalyzingPhoto(false);
+    }
+  };
+
+  const handleCategoryChange = (item) => {
+    setCategory(item);
+    if (aiPrediction && item !== aiPrediction.mappedCategory) {
+      setAiPrediction(null);
+    }
+  };
+
   const captureIssuePhoto = async () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -217,6 +274,7 @@ export default function CreateIssueScreen({ navigation }) {
 
       if (!result.canceled && result.assets?.[0]) {
         setCapturedPhoto(result.assets[0]);
+        predictCategory(result.assets[0]);
       }
     } catch {
       Alert.alert("Camera error", "Could not open the camera. Please try again.");
@@ -329,17 +387,48 @@ export default function CreateIssueScreen({ navigation }) {
             >
               {CATEGORIES.map((item) => {
                 const active = item === category;
+                const isAiSuggested = aiPrediction?.mappedCategory === item;
                 return (
                   <Pressable
                     key={item}
-                    onPress={() => setCategory(item)}
+                    onPress={() => handleCategoryChange(item)}
                     style={[styles.chip, active && styles.chipActive]}
                   >
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{item}</Text>
+                    {isAiSuggested && (
+                      <Text style={[styles.aiBadgeText, active && styles.aiBadgeTextActive]}>
+                        AI {Math.round(aiPrediction.confidence * 100)}%
+                      </Text>
+                    )}
                   </Pressable>
                 );
               })}
             </ScrollView>
+
+            {analyzingPhoto && (
+              <View style={styles.aiStatusBox}>
+                <ActivityIndicator size="small" color={C.navy} />
+                <Text style={styles.aiStatusText}>Analyzing image...</Text>
+              </View>
+            )}
+
+            {aiPrediction && !analyzingPhoto && !aiPrediction.needsConfirmation && (
+              <View style={[styles.aiStatusBox, styles.aiDetectedBox]}>
+                <Ionicons name="checkmark-circle-outline" size={15} color={C.green} />
+                <Text style={styles.aiDetectedText}>
+                  AI detected: {aiPrediction.formattedClass} ({Math.round(aiPrediction.confidence * 100)}% confidence)
+                </Text>
+              </View>
+            )}
+
+            {aiPrediction && !analyzingPhoto && aiPrediction.needsConfirmation && (
+              <View style={[styles.aiStatusBox, styles.aiConfirmBox]}>
+                <Ionicons name="help-circle-outline" size={15} color={C.orange} />
+                <Text style={styles.aiConfirmText}>
+                  We think this is {aiPrediction.mappedCategory} — is that right?
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Form */}
@@ -533,10 +622,23 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999,
     borderWidth: 1, borderColor: C.border, backgroundColor: C.card,
+    alignItems: "center",
   },
   chipActive: { backgroundColor: C.navy, borderColor: C.navy },
   chipText: { color: C.text, fontWeight: "800" },
   chipTextActive: { color: "#FFFFFF" },
+  aiBadgeText: { fontSize: 10, color: C.green, fontWeight: "900", marginTop: 2 },
+  aiBadgeTextActive: { color: "#FFFFFF" },
+  aiStatusBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginTop: 10, padding: 9, borderRadius: 10,
+    backgroundColor: "#EEF3F8",
+  },
+  aiStatusText: { fontSize: 12, color: C.navy, fontWeight: "700" },
+  aiDetectedBox: { backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#BBF7D0" },
+  aiDetectedText: { fontSize: 12, color: C.green, fontWeight: "700", flex: 1 },
+  aiConfirmBox: { backgroundColor: "#FFF7ED", borderWidth: 1, borderColor: "#FED7AA" },
+  aiConfirmText: { fontSize: 12, color: C.orange, fontWeight: "700", flex: 1 },
   card: {
     backgroundColor: C.card, borderWidth: 1,
     borderColor: C.border, borderRadius: 18, padding: 16,
