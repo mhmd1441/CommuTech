@@ -66,11 +66,27 @@ class IssueController extends Controller
 
         unset($data['image']);
 
+        $aiCategory   = null;
+        $aiConfidence = null;
+
+        if ($request->hasFile('image')) {
+            $prediction = MlController::callFlask($request->file('image'));
+            if ($prediction && isset($prediction['category'])) {
+                $aiCategory   = $prediction['category'];
+                $aiConfidence = $prediction['confidence'] ?? null;
+            }
+        }
+
+        $priority = $this->triagePriority($data['category'], $data['description']);
+
         $issue = $request->user()->issues()->create([
             ...$data,
-            'status' => 'pending',
-            'priority' => $this->triagePriority($data['category'], $data['description']),
-            'ai_score' => $this->triageScore($data['description']),
+            'status'        => 'pending',
+            'priority'      => $priority,
+            'ai_score'      => $this->triageScore($data['description']),
+            'ai_category'   => $aiCategory,
+            'ai_confidence' => $aiConfidence,
+            'due_at'        => now()->addHours(Issue::slaHours($priority)),
         ]);
 
         $notification = CommuTechNotification::create([

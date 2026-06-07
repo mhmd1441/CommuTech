@@ -40,7 +40,6 @@ const FILTERS = [
   "Water & Drainage",
   "Environment & Public Spaces",
   "Public Safety",
-  "Public Property",
   "Other",
 ];
 

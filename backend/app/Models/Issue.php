@@ -17,7 +17,6 @@ class Issue extends Model
         'Water & Drainage',
         'Environment & Public Spaces',
         'Public Safety',
-        'Public Property',
         'Other',
     ];
 
@@ -42,6 +41,8 @@ class Issue extends Model
         'longitude',
         'image_url',
         'ai_score',
+        'ai_category',
+        'ai_confidence',
         'rejection_reason',
         'resolved_at',
         'worker_resolution_note',
@@ -51,6 +52,8 @@ class Issue extends Model
         'citizen_resolution_note',
         'citizen_resolution_image_url',
         'citizen_confirmed_at',
+        'due_at',
+        'sla_breached',
     ];
 
     protected function casts(): array
@@ -59,11 +62,24 @@ class Issue extends Model
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
             'ai_score' => 'decimal:2',
+            'ai_confidence' => 'decimal:4',
             'resolved_at' => 'datetime',
             'worker_resolved_at' => 'datetime',
             'citizen_resolution_confirmed' => 'boolean',
             'citizen_confirmed_at' => 'datetime',
+            'due_at' => 'datetime',
+            'sla_breached' => 'boolean',
         ];
+    }
+
+    public static function slaHours(string $priority): int
+    {
+        return match ($priority) {
+            'critical' => 24,
+            'high'     => 72,
+            'medium'   => 168,
+            default    => 336,
+        };
     }
 
     public function user()

@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\IssueController;
 use App\Http\Controllers\MetaController;
+use App\Http\Controllers\MlController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
@@ -39,6 +40,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/profile-picture', 'updateProfilePicture');
         Route::put('/password', 'updatePassword');
     });
+
+    Route::post('/ml/predict', [MlController::class, 'predict']);
 
     Route::prefix('issues')->controller(IssueController::class)->group(function () {
         Route::get('/', 'index');

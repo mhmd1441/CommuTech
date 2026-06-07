@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   Image,
   RefreshControl,
   StatusBar,
@@ -46,60 +47,6 @@ const PRIORITY_META = {
   low: { label: 'Low', color: C.green },
 };
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const MY_ISSUES = [
-  {
-    id: '1',
-    title: 'Large pothole on Hamra Street',
-    description: 'Deep pothole near the intersection causing damage to vehicles and risk to motorcyclists.',
-    category: 'Roads & Sidewalks',
-    status: 'in-progress',
-    priority: 'high',
-    location: 'Hamra, Beirut',
-    date: 'Apr 10, 2025',
-    image: 'https://picsum.photos/seed/road1/200/120',
-    workerName: 'Ahmad K.',
-    updatedAt: '2h ago',
-  },
-  {
-    id: '2',
-    title: 'Street light out for 2 weeks',
-    description: 'The lamp post on Bliss Street near AUB gate has been non-functional.',
-    category: 'Street Lighting & Electricity',
-    status: 'open',
-    priority: 'medium',
-    location: 'Bliss St, Beirut',
-    date: 'Apr 9, 2025',
-    image: 'https://picsum.photos/seed/light2/200/120',
-    updatedAt: '5h ago',
-  },
-  {
-    id: '3',
-    title: 'Sewage overflow on main road',
-    description: 'Raw sewage spilling onto the road - strong odor and health hazard.',
-    category: 'Waste & Sanitation',
-    status: 'resolved',
-    priority: 'high',
-    location: 'Achrafieh, Beirut',
-    date: 'Apr 7, 2025',
-    image: 'https://picsum.photos/seed/sewer4/200/120',
-    workerName: 'Rami T.',
-    updatedAt: '1d ago',
-  },
-  {
-    id: '4',
-    title: 'Illegal waste dumping near school',
-    description: 'Residents dumping waste near the school gates. Smell is unbearable.',
-    category: 'Environment & Public Spaces',
-    status: 'rejected',
-    priority: 'low',
-    location: 'Dekwaneh, Beirut',
-    date: 'Apr 5, 2025',
-    image: 'https://picsum.photos/seed/waste5/200/120',
-    updatedAt: '3d ago',
-    rejectReason: 'Outside service area',
-  },
-];
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -314,30 +261,53 @@ export default function MyReportsScreen({ navigation }) {
       </View>
 
       {/* List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <IssueCard item={item} onPress={goToDetail} onImagePress={setSelectedImage} />}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[C.navy]}
-            tintColor={C.navy}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="document-text-outline" size={36} color={C.border} />
+      {loading ? (
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={styles.card}>
+              <View style={[styles.cardAccent, { backgroundColor: C.border }]} />
+              <View style={[styles.cardImage, { backgroundColor: '#EEF3F8' }]} />
+              <View style={styles.cardBody}>
+                <View style={styles.rowBetween}>
+                  <View style={[styles.skeletonLine, { width: '55%', height: 13 }]} />
+                  <View style={[styles.skeletonLine, { width: '20%', height: 13 }]} />
+                </View>
+                <View style={[styles.skeletonLine, { width: '90%', marginTop: 8 }]} />
+                <View style={[styles.skeletonLine, { width: '70%', marginTop: 6 }]} />
+                <View style={[styles.skeletonLine, { width: '35%', marginTop: 10 }]} />
+              </View>
             </View>
-            <Text style={styles.emptyTitle}>No reports here</Text>
-            <Text style={styles.emptyHint}>Issues with this status will appear here.</Text>
-          </View>
-        }
-      />
+          ))}
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <IssueCard item={item} onPress={goToDetail} onImagePress={setSelectedImage} />}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[C.navy]}
+              tintColor={C.navy}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="document-text-outline" size={36} color={C.border} />
+              </View>
+              <Text style={styles.emptyTitle}>No reports here</Text>
+              <Text style={styles.emptyHint}>Issues with this status will appear here.</Text>
+            </View>
+          }
+        />
+      )}
       <Modal
         visible={!!selectedImage}
         transparent
@@ -539,6 +509,13 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   rejectText: { fontSize: 10, color: C.red, fontWeight: '600' },
+
+  // Skeleton
+  skeletonLine: {
+    height: 11,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 6,
+  },
 
   // Empty
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 10 },
