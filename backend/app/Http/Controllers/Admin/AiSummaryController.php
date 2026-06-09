@@ -87,9 +87,9 @@ Data:
 - Top municipalities: {$byMunicipality}
 - Priority breakdown: {$byPriority}
 
-Write exactly 3 bullet points summarizing the week, then one line starting with "Key Insight:" and one line starting with "Recommendation:".
-Use the bullet character "•".
-Each bullet must be a complete sentence and the full briefing must finish with a final recommendation line.
+Start with a short, attention-grabbing opening sentence, then write exactly 3 bullet points summarizing the week, followed by one line starting with "Key Insight:" and one line starting with "Recommendation:".
+Use the bullet character "•". Make each bullet feel urgent, confident, and action-oriented for local government staff.
+Each bullet should be a complete sentence. The Key Insight and Recommendation lines must each be complete sentences and the Recommendation line must end with a period.
 Do not stop mid-sentence; if you reach the limit, continue until complete.
 Plain text only, no markdown.
 PROMPT;
@@ -112,9 +112,9 @@ PROMPT;
                             ['parts' => [['text' => $prompt]]],
                         ],
                         'generationConfig' => [
-                            'temperature'     => 0.0,
+                            'temperature'     => 0.2,
                             'topP'            => 0.8,
-                            'maxOutputTokens' => 1200,
+                            'maxOutputTokens' => 1600,
                         ],
                     ]);
 
