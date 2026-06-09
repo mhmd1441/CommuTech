@@ -8,6 +8,7 @@ use App\Models\CommuTechNotification;
 use App\Models\Issue;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -16,16 +17,18 @@ class ReportPageController extends Controller
     public function index(Request $request)
     {
         $data = $request->validate([
-            'status'   => ['nullable', Rule::in(Issue::STATUSES)],
-            'category' => ['nullable', Rule::in(Issue::CATEGORIES)],
-            'search'   => ['nullable', 'string', 'max:100'],
-            'sla'      => ['nullable', Rule::in(['breached'])],
+            'status'       => ['nullable', Rule::in(Issue::STATUSES)],
+            'category'     => ['nullable', Rule::in(Issue::CATEGORIES)],
+            'municipality' => ['nullable', 'string', 'max:120'],
+            'search'       => ['nullable', 'string', 'max:100'],
+            'sla'          => ['nullable', Rule::in(['breached'])],
         ]);
 
         $reports = Issue::query()
             ->with(['user:id,name,email,role', 'assignee:id,name,email,role'])
             ->when($data['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($data['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
+            ->when($data['municipality'] ?? null, fn ($q, $municipality) => $q->where('municipality_en', $municipality))
             ->when(($data['sla'] ?? null) === 'breached', fn ($q) => $q->where('sla_breached', true))
             ->when($data['search'] ?? null, function ($q, $search) {
                 $q->where(function ($q) use ($search) {
@@ -41,8 +44,10 @@ class ReportPageController extends Controller
         return view('admin.reports.index', [
             'reports'                => $reports,
             'categories'             => Issue::CATEGORIES,
+            'municipalities'         => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),
             'status'                 => $data['status'] ?? null,
             'category'               => $data['category'] ?? null,
+            'municipality'           => $data['municipality'] ?? null,
             'search'                 => $data['search'] ?? '',
             'underInvestigationCount'=> Issue::where('status', 'under_investigation')->count(),
             'slaBreachedCount'       => Issue::where('sla_breached', true)
