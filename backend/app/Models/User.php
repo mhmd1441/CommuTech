@@ -41,6 +41,7 @@ class User extends Authenticatable
         'country',
         'city',
         'area',
+        'assigned_municipality',
         'street',
         'building',
         'is_verified',

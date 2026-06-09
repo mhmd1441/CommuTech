@@ -26,14 +26,44 @@ class WorkerIssueController extends Controller
     public function nearby(Request $request)
     {
         $data = $request->validate([
-            'latitude' => ['required', 'numeric', 'between:-90,90'],
-            'longitude' => ['required', 'numeric', 'between:-180,180'],
-            'radius' => ['nullable', 'integer', 'min:50', 'max:5000'],
+            'latitude'  => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'radius'    => ['nullable', 'integer', 'min:50', 'max:5000'],
         ]);
 
-        $radius = (int) ($data['radius'] ?? 100);
-        $latitude = (float) $data['latitude'];
-        $longitude = (float) $data['longitude'];
+        $worker = $request->user();
+
+        if ($worker->assigned_municipality) {
+            // Municipality mode — exact match on municipality_en
+            $matched = Issue::query()
+                ->with(['user:id,name,email,phone'])
+                ->whereNull('assigned_to')
+                ->where('status', 'pending')
+                ->where('municipality_en', $worker->assigned_municipality)
+                ->latest()
+                ->get();
+
+            // Issues where PostGIS lookup failed at creation — surface to all workers
+            $unlocated = Issue::query()
+                ->with(['user:id,name,email,phone'])
+                ->whereNull('assigned_to')
+                ->where('status', 'pending')
+                ->whereNull('municipality_en')
+                ->latest()
+                ->get();
+
+            return response()->json([
+                'mode'      => 'municipality',
+                'municipality' => $worker->assigned_municipality,
+                'data'      => $matched,
+                'unlocated' => $unlocated,
+            ]);
+        }
+
+        // Fallback — GPS radius (worker has no assigned municipality)
+        $latitude  = (float) ($data['latitude'] ?? 0);
+        $longitude = (float) ($data['longitude'] ?? 0);
+        $radius    = (int) ($data['radius'] ?? 100);
 
         $issues = Issue::query()
             ->with(['user:id,name,email,phone'])
@@ -58,7 +88,8 @@ class WorkerIssueController extends Controller
             ->values();
 
         return response()->json([
-            'data' => $issues,
+            'mode'   => 'gps_fallback',
+            'data'   => $issues,
             'radius' => $radius,
         ]);
     }

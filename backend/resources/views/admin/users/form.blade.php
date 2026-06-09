@@ -7,6 +7,28 @@
     <a class="button" href="{{ route('admin.users.index') }}">Back to Users</a>
 @endsection
 
+@push('scripts')
+<script>
+    function toggleMunicipalityField() {
+        const workerChecked = document.querySelector('input[name="roles[]"][value="worker"]')?.checked;
+        const field = document.getElementById('municipality-field');
+        const input = document.querySelector('input[name="assigned_municipality"]');
+        if (!field) return;
+        field.style.display = workerChecked ? 'block' : 'none';
+        if (input) {
+            input.disabled = !workerChecked;
+            if (!workerChecked) input.value = '';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('input[name="roles[]"]').forEach(function (cb) {
+            cb.addEventListener('change', toggleMunicipalityField);
+        });
+        toggleMunicipalityField();
+    });
+</script>
+@endpush
+
 @section('content')
     <section class="panel">
         @php
@@ -80,6 +102,21 @@
                 <div>
                     <label>Profile Picture URL</label>
                     <input name="profile_picture_url" type="url" value="{{ old('profile_picture_url', $user->profile_picture_url) }}">
+                </div>
+                <div id="municipality-field" style="display: none;">
+                    <label>Assigned Municipality</label>
+                    <input
+                        name="assigned_municipality"
+                        list="municipalities-list"
+                        value="{{ old('assigned_municipality', $user->assigned_municipality) }}"
+                        placeholder="Type to search municipality..."
+                        autocomplete="off"
+                    >
+                    <datalist id="municipalities-list">
+                        @foreach ($municipalities as $m)
+                            <option value="{{ $m }}">
+                        @endforeach
+                    </datalist>
                 </div>
                 @if ($mode === 'create')
                     <div>

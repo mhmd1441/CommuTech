@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -42,10 +43,11 @@ class UserPageController extends Controller
     public function create()
     {
         return view('admin.users.form', [
-            'user' => new User,
-            'roles' => User::ROLES,
-            'selectedRoles' => [request('role', User::ROLE_CITIZEN)],
-            'mode' => 'create',
+            'user'           => new User,
+            'roles'          => User::ROLES,
+            'selectedRoles'  => [request('role', User::ROLE_CITIZEN)],
+            'municipalities' => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),
+            'mode'           => 'create',
         ]);
     }
 
@@ -64,7 +66,8 @@ class UserPageController extends Controller
             'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
-            'profile_picture_url' => ['nullable', 'url', 'max:2048'],
+            'profile_picture_url'   => ['nullable', 'url', 'max:2048'],
+            'assigned_municipality' => ['nullable', 'string', 'max:120'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 
@@ -88,10 +91,11 @@ class UserPageController extends Controller
         $user->load('roles');
 
         return view('admin.users.form', [
-            'user' => $user,
-            'roles' => User::ROLES,
-            'selectedRoles' => $user->role_names,
-            'mode' => 'edit',
+            'user'           => $user,
+            'roles'          => User::ROLES,
+            'selectedRoles'  => $user->role_names,
+            'municipalities' => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),
+            'mode'           => 'edit',
         ]);
     }
 
@@ -115,7 +119,8 @@ class UserPageController extends Controller
             'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
-            'profile_picture_url' => ['nullable', 'url', 'max:2048'],
+            'profile_picture_url'   => ['nullable', 'url', 'max:2048'],
+            'assigned_municipality' => ['nullable', 'string', 'max:120'],
             'password' => ['sometimes', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 

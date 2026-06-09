@@ -81,6 +81,8 @@ export default function WorkerHomeScreen({ navigation }) {
   const [workerTab, setWorkerTab] = useState("active");
   const [assignedIssues, setAssignedIssues] = useState([]);
   const [nearbyIssues, setNearbyIssues] = useState([]);
+  const [nearbyMode, setNearbyMode] = useState("gps_fallback");
+  const [nearbyMunicipality, setNearbyMunicipality] = useState(null);
   const [workerRegion, setWorkerRegion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busyIssueId, setBusyIssueId] = useState(null);
@@ -113,9 +115,18 @@ export default function WorkerHomeScreen({ navigation }) {
         Alert.alert("Location Needed", "Worker mode needs location permission to show nearby unassigned issues.");
         setWorkerRegion(DEFAULT_REGION);
 
-        const assignedResponse = await api.get("/worker/issues/assigned");
+        // Still call nearby — municipality workers don't need GPS
+        const [assignedResponse, nearbyResponse] = await Promise.all([
+          api.get("/worker/issues/assigned"),
+          api.get("/worker/issues/nearby"),
+        ]);
         setAssignedIssues(assignedResponse.data.data || []);
-        setNearbyIssues([]);
+        const mode = nearbyResponse.data.mode || "gps_fallback";
+        const main = nearbyResponse.data.data || [];
+        const unlocated = nearbyResponse.data.unlocated || [];
+        setNearbyMode(mode);
+        setNearbyMunicipality(nearbyResponse.data.municipality || null);
+        setNearbyIssues([...main, ...unlocated]);
         return;
       }
 
@@ -144,8 +155,13 @@ export default function WorkerHomeScreen({ navigation }) {
         }),
       ]);
 
+      const mode = nearbyResponse.data.mode || "gps_fallback";
+      const main = nearbyResponse.data.data || [];
+      const unlocated = nearbyResponse.data.unlocated || [];
+      setNearbyMode(mode);
+      setNearbyMunicipality(nearbyResponse.data.municipality || null);
       setAssignedIssues(assignedResponse.data.data || []);
-      setNearbyIssues(nearbyResponse.data.data || []);
+      setNearbyIssues([...main, ...unlocated]);
     } catch (error) {
       console.error("Failed to load worker issues:", error);
       Alert.alert("Worker Mode", error.message || "Could not load worker issues.");
@@ -581,12 +597,14 @@ export default function WorkerHomeScreen({ navigation }) {
             showsMyLocationButton
             onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
           >
-            <Circle
-              center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
-              radius={RADIUS_METERS}
-              strokeColor="rgba(25, 64, 95, 0.45)"
-              fillColor="rgba(25, 64, 95, 0.12)"
-            />
+            {nearbyMode !== "municipality" && (
+              <Circle
+                center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
+                radius={RADIUS_METERS}
+                strokeColor="rgba(25, 64, 95, 0.45)"
+                fillColor="rgba(25, 64, 95, 0.12)"
+              />
+            )}
             {/* Orange pins — nearby unassigned issues */}
             {mapNearbyIssues.map((issue) => (
               <Marker
@@ -631,8 +649,16 @@ export default function WorkerHomeScreen({ navigation }) {
           )}
 
           <View style={styles.radiusBadge}>
-            <Ionicons name="radio-button-on-outline" size={14} color={COLORS.navy} />
-            <Text style={styles.radiusText}>{RADIUS_LABEL} radius</Text>
+            <Ionicons
+              name={nearbyMode === "municipality" ? "business-outline" : "radio-button-on-outline"}
+              size={14}
+              color={COLORS.navy}
+            />
+            <Text style={styles.radiusText}>
+              {nearbyMode === "municipality"
+                ? (nearbyMunicipality || "Municipality")
+                : `${RADIUS_LABEL} radius`}
+            </Text>
           </View>
 
           {assignedWithoutCoords > 0 && (
@@ -654,6 +680,8 @@ export default function WorkerHomeScreen({ navigation }) {
               <Text style={styles.listSubtitle}>
                 {activeView === "assigned"
                   ? "Your assigned work."
+                  : nearbyMode === "municipality"
+                  ? `Unassigned reports in ${nearbyMunicipality || "your municipality"}.`
                   : `Unassigned reports within ${RADIUS_LABEL}.`}
               </Text>
             </View>
@@ -707,7 +735,9 @@ export default function WorkerHomeScreen({ navigation }) {
                   </Text>
                   <Text style={styles.emptyText}>
                     {activeView !== "assigned"
-                      ? "Unassigned issues in your radius will appear here."
+                      ? nearbyMode === "municipality"
+                        ? `Unassigned issues in ${nearbyMunicipality || "your municipality"} will appear here.`
+                        : "Unassigned issues in your radius will appear here."
                       : workerTab === "completed"
                       ? "Reports you mark as resolved will appear here."
                       : "Reports you assign to yourself will appear here."}
