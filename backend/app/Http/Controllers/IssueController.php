@@ -7,6 +7,7 @@ use App\Models\CommuTechNotification;
 use App\Models\Issue;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -77,16 +78,39 @@ class IssueController extends Controller
             }
         }
 
+        $municipalityEn = null;
+        $municipalityAr = null;
+
+        if (! empty($data['latitude']) && ! empty($data['longitude'])) {
+            try {
+                $row = DB::selectOne(
+                    "SELECT name_en, name_ar FROM municipalities
+                     WHERE ST_Contains(boundary, ST_SetSRID(ST_MakePoint(?, ?), 4326))
+                     LIMIT 1",
+                    [(float) $data['longitude'], (float) $data['latitude']]
+                );
+
+                if ($row) {
+                    $municipalityEn = $row->name_en;
+                    $municipalityAr = $row->name_ar;
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Municipality lookup failed: '.$e->getMessage());
+            }
+        }
+
         $priority = $this->triagePriority($data['category'], $data['description']);
 
         $issue = $request->user()->issues()->create([
             ...$data,
-            'status'        => 'pending',
-            'priority'      => $priority,
-            'ai_score'      => $this->triageScore($data['description']),
-            'ai_category'   => $aiCategory,
-            'ai_confidence' => $aiConfidence,
-            'due_at'        => now()->addHours(Issue::slaHours($priority)),
+            'status'          => 'pending',
+            'priority'        => $priority,
+            'ai_score'        => $this->triageScore($data['description']),
+            'ai_category'     => $aiCategory,
+            'ai_confidence'   => $aiConfidence,
+            'due_at'          => now()->addHours(Issue::slaHours($priority)),
+            'municipality_en' => $municipalityEn,
+            'municipality_ar' => $municipalityAr,
         ]);
 
         $notification = CommuTechNotification::create([

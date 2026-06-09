@@ -29,18 +29,6 @@ const C = {
   red: "#B91C1C",
 };
 
-const FALLBACK_ISSUE = {
-  title: "Traffic light not working",
-  priority: "Critical",
-  status: "Pending",
-  description:
-    "The traffic light at the intersection has stopped working since morning and is causing traffic confusion.",
-  location: "Beirut, Hamra",
-  date: "Today",
-  category: "Traffic & Signals",
-  image:
-    "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?q=80&w=800&auto=format&fit=crop",
-};
 
 function statusColor(status) {
   if (status === "Done" || status === "Resolved" || status === "resolved") return C.green;
@@ -64,7 +52,7 @@ function formatStatus(status) {
 
 export default function IssueDetailsScreen({ navigation, route }) {
   const routeIssue = route?.params?.issue || {};
-  const [issue, setIssue] = useState(routeIssue.title ? routeIssue : { ...FALLBACK_ISSUE, ...routeIssue });
+  const [issue, setIssue] = useState(routeIssue);
   const [loadingIssue, setLoadingIssue] = useState(!routeIssue.title && !!routeIssue.id);
   const [auditNote, setAuditNote] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -186,12 +174,12 @@ export default function IssueDetailsScreen({ navigation, route }) {
             <Ionicons name="chevron-back" size={22} color={C.navy} />
           </Pressable>
           <Text style={styles.headerTitle}>Issue Details</Text>
-          <Pressable onPress={() => navigation.navigate("Notifications")} style={styles.iconBtn}>
+          <Pressable onPress={() => navigation.navigate("Notifications", { role: "citizen" })} style={styles.iconBtn}>
             <Ionicons name="notifications-outline" size={20} color={C.navy} />
           </Pressable>
         </View>
 
-        <Image source={{ uri: issue.image_url || issue.image }} style={styles.heroImage} />
+        <Image source={{ uri: issue.image_url }} style={styles.heroImage} />
 
         <View style={styles.card}>
           <View style={styles.metaRow}>

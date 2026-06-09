@@ -54,6 +54,8 @@ class Issue extends Model
         'citizen_confirmed_at',
         'due_at',
         'sla_breached',
+        'municipality_en',
+        'municipality_ar',
     ];
 
     protected function casts(): array
