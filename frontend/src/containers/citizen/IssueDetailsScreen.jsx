@@ -174,7 +174,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
             <Ionicons name="chevron-back" size={22} color={C.navy} />
           </Pressable>
           <Text style={styles.headerTitle}>Issue Details</Text>
-          <Pressable onPress={() => navigation.navigate("Notifications")} style={styles.iconBtn}>
+          <Pressable onPress={() => navigation.navigate("Notifications", { role: "citizen" })} style={styles.iconBtn}>
             <Ionicons name="notifications-outline" size={20} color={C.navy} />
           </Pressable>
         </View>
