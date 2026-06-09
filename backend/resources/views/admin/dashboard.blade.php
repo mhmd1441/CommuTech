@@ -630,6 +630,23 @@
                 </table>
             </article>
         </section>
+
+        <section class="tables" style="margin-top: 14px;">
+            <article class="table-card" style="grid-column: 1 / -1;">
+                <div class="section-head">
+                    <div>
+                        <h2 style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:18px;">✦</span> AI Weekly Briefing
+                        </h2>
+                        <span class="muted" style="font-size:11px;">Powered by Gemini · refreshes hourly</span>
+                    </div>
+                    <button id="briefing-refresh" class="pill" style="font-size:12px; cursor:pointer; border:1px solid var(--line); background:var(--panel-2); color:var(--muted);">Refresh</button>
+                </div>
+                <div id="briefing-body" style="font-size:13px; line-height:1.75; color:var(--text); white-space:pre-wrap; min-height:60px;">
+                    <span style="color:var(--muted);">Loading briefing…</span>
+                </div>
+            </article>
+        </section>
     </main>
 </div>
 <script>
@@ -638,6 +655,36 @@
             document.querySelector('[name="range"]').value = 'custom';
         });
     });
+
+    function loadBriefing(refresh) {
+        const el = document.getElementById('briefing-body');
+        const btn = document.getElementById('briefing-refresh');
+        el.innerHTML = '<span style="color:var(--muted);">Loading briefing…</span>';
+        btn.disabled = true;
+
+        const url = '{{ route("admin.ai-briefing") }}' + (refresh ? '?refresh=1' : '');
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json())
+            .then(data => {
+                if (data.briefing) {
+                    el.textContent = data.briefing;
+                } else if (data.error === 'not_configured') {
+                    el.innerHTML = '<span style="color:var(--muted);">Add GEMINI_API_KEY to your .env to enable this feature.</span>';
+                } else {
+                    el.innerHTML = '<span style="color:var(--muted);">Briefing unavailable — Gemini API did not respond.</span>';
+                }
+            })
+            .catch(() => {
+                el.innerHTML = '<span style="color:var(--muted);">Could not load briefing.</span>';
+            })
+            .finally(() => { btn.disabled = false; });
+    }
+
+    document.getElementById('briefing-refresh').addEventListener('click', function () {
+        loadBriefing(true);
+    });
+
+    loadBriefing(false);
 </script>
 </body>
 </html>
