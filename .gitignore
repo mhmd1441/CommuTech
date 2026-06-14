@@ -3,3 +3,4 @@ PRIVATE_NOTES.md
 frontend/.expo-smoke/
 .env
 .env.*
+ml_service/
