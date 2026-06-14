@@ -3,7 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -293,28 +295,25 @@ export default function WorkerHomeScreen({ navigation }) {
       Alert.alert("Fix Description", "Please describe what you fixed before marking this report as resolved.");
       return;
     }
+    if (!resolutionPhoto) {
+      Alert.alert("Resolution Proof", "Please add a proof photo before marking this report as resolved.");
+      return;
+    }
 
     try {
       setBusyIssueId(issue.id);
 
-      if (resolutionPhoto) {
-        const formData = new FormData();
-        formData.append("status", "resolved");
-        formData.append("worker_resolution_note", note);
-        formData.append("resolution_image", {
-          uri: resolutionPhoto.uri,
-          name: "resolution-photo.jpg",
-          type: resolutionPhoto.mimeType || "image/jpeg",
-        });
-        await api.post(`/worker/issues/${issue.id}/status`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-      } else {
-        await api.patch(`/worker/issues/${issue.id}/status`, {
-          status: "resolved",
-          worker_resolution_note: note,
-        });
-      }
+      const formData = new FormData();
+      formData.append("status", "resolved");
+      formData.append("worker_resolution_note", note);
+      formData.append("resolution_image", {
+        uri: resolutionPhoto.uri,
+        name: resolutionPhoto.fileName || "resolution-photo.jpg",
+        type: resolutionPhoto.mimeType || "image/jpeg",
+      });
+      await api.post(`/worker/issues/${issue.id}/status`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       setResolutionPhoto(null);
       setSelectedIssue(null);
@@ -391,17 +390,26 @@ export default function WorkerHomeScreen({ navigation }) {
 
     return (
       <SafeAreaView style={styles.root}>
-        <View style={styles.detailHeader}>
-          <Pressable onPress={() => setSelectedIssue(null)} style={styles.iconBtn}>
-            <Ionicons name="chevron-back" size={22} color={COLORS.navy} />
-          </Pressable>
-          <Text style={styles.detailHeaderTitle}>Report Details</Text>
-          <Pressable onPress={loadWorkerIssues} style={styles.iconBtn}>
-            <Ionicons name="refresh-outline" size={20} color={COLORS.navy} />
-          </Pressable>
-        </View>
+        <KeyboardAvoidingView
+          style={styles.detailShell}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+        >
+          <View style={styles.detailHeader}>
+            <Pressable onPress={() => setSelectedIssue(null)} style={styles.iconBtn}>
+              <Ionicons name="chevron-back" size={22} color={COLORS.navy} />
+            </Pressable>
+            <Text style={styles.detailHeaderTitle}>Report Details</Text>
+            <Pressable onPress={loadWorkerIssues} style={styles.iconBtn}>
+              <Ionicons name="refresh-outline" size={20} color={COLORS.navy} />
+            </Pressable>
+          </View>
 
-        <ScrollView contentContainerStyle={styles.detailScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.detailScroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           {issue.image_url ? (
             <Image source={{ uri: issue.image_url }} style={styles.detailImage} />
           ) : (
@@ -491,7 +499,7 @@ export default function WorkerHomeScreen({ navigation }) {
                 multiline
                 textAlignVertical="top"
               />
-              <Text style={[styles.inputHint, { marginTop: 12 }]}>Resolution photo (optional)</Text>
+              <Text style={[styles.inputHint, { marginTop: 12 }]}>Resolution photo (required)</Text>
               {resolutionPhoto ? (
                 <View style={styles.resolutionPhotoWrap}>
                   <Image source={{ uri: resolutionPhoto.uri }} style={styles.resolutionPhotoPreview} />
@@ -508,9 +516,9 @@ export default function WorkerHomeScreen({ navigation }) {
               )}
             </View>
           )}
-        </ScrollView>
+          </ScrollView>
 
-        <View style={styles.detailActionBar}>
+          <View style={styles.detailActionBar}>
           {assigned && issue.latitude && issue.longitude && (
             <Pressable
               onPress={() => openMapsNavigation(issue)}
@@ -546,7 +554,8 @@ export default function WorkerHomeScreen({ navigation }) {
               )}
             </Pressable>
           )}
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -1003,7 +1012,8 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   detailHeaderTitle: { color: COLORS.navy, fontSize: 18, fontWeight: "900" },
-  detailScroll: { paddingTop: 14, paddingBottom: 100 },
+  detailShell: { flex: 1 },
+  detailScroll: { paddingTop: 14, paddingBottom: 24 },
   detailImage: {
     width: "100%",
     height: 220,
@@ -1082,14 +1092,11 @@ const styles = StyleSheet.create({
   },
   retakeResolutionText: { color: COLORS.navy, fontWeight: "800", fontSize: 13 },
   detailActionBar: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 12,
     flexDirection: "row",
     gap: 10,
     backgroundColor: COLORS.bg,
     paddingTop: 10,
+    paddingBottom: 12,
   },
   primaryAction: {
     flex: 1,

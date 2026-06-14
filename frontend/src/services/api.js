@@ -1,6 +1,7 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "../config.js";
+import { loadAppPreferences } from "./preferences";
 
 export { API_BASE_URL };
 let authToken = null;
@@ -37,8 +38,7 @@ export const authApi = {
       const { data } = await api.post("/auth/register", payload);
       authToken = data.access_token;
       authUser = data.user;
-      await AsyncStorage.setItem("auth_token", data.access_token);
-      await AsyncStorage.setItem("auth_user", JSON.stringify(data.user));
+      await AsyncStorage.multiRemove(["auth_token", "auth_user", "remember_auth"]);
 
       return data;
     } catch (error) {
@@ -48,11 +48,17 @@ export const authApi = {
 
   async login(payload) {
     try {
-      const { data } = await api.post("/auth/login", payload);
+      const { remember, ...credentials } = payload;
+      const { data } = await api.post("/auth/login", credentials);
       authToken = data.access_token;
       authUser = data.user;
-      await AsyncStorage.setItem("auth_token", data.access_token);
-      await AsyncStorage.setItem("auth_user", JSON.stringify(data.user));
+      if (remember) {
+        await AsyncStorage.setItem("auth_token", data.access_token);
+        await AsyncStorage.setItem("auth_user", JSON.stringify(data.user));
+        await AsyncStorage.setItem("remember_auth", "1");
+      } else {
+        await AsyncStorage.multiRemove(["auth_token", "auth_user", "remember_auth"]);
+      }
 
       return data;
     } catch (error) {
@@ -97,7 +103,7 @@ export const authApi = {
       const { data } = await api.post("/auth/logout");
       authToken = null;
       authUser = null;
-      await AsyncStorage.multiRemove(["auth_token", "auth_user"]);
+      await AsyncStorage.multiRemove(["auth_token", "auth_user", "remember_auth"]);
 
       return data;
     } catch (error) {
@@ -120,13 +126,16 @@ export function setAuthUser(user) {
 
 export async function initAuth() {
   try {
+    await loadAppPreferences();
     const token = await AsyncStorage.getItem("auth_token");
     const userJson = await AsyncStorage.getItem("auth_user");
-    if (token && userJson) {
+    const rememberAuth = await AsyncStorage.getItem("remember_auth");
+    if (rememberAuth === "1" && token && userJson) {
       authToken = token;
       authUser = JSON.parse(userJson);
       return authUser;
     }
+    await AsyncStorage.multiRemove(["auth_token", "auth_user", "remember_auth"]);
   } catch {
     // storage unreadable — stay logged out
   }

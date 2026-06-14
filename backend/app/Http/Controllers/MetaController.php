@@ -10,7 +10,7 @@ class MetaController extends Controller
     {
         return response()->json([
             'categories' => Issue::CATEGORIES,
-            'statuses' => ['pending', 'in_progress', 'resolved', 'rejected'],
+            'statuses' => ['pending', 'in_progress', 'resolved', 'under_investigation', 'rejected'],
             'priorities' => ['low', 'medium', 'high', 'critical'],
         ]);
     }

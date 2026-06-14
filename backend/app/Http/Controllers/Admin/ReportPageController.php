@@ -16,22 +16,22 @@ class ReportPageController extends Controller
     public function index(Request $request)
     {
         $data = $request->validate([
-            'status'   => ['nullable', Rule::in(Issue::STATUSES)],
+            'status' => ['nullable', Rule::in(Issue::STATUSES)],
             'category' => ['nullable', Rule::in(Issue::CATEGORIES)],
-            'search'   => ['nullable', 'string', 'max:100'],
-            'sla'      => ['nullable', Rule::in(['breached'])],
+            'search' => ['nullable', 'string', 'max:100'],
+            'sla' => ['nullable', Rule::in(['breached'])],
         ]);
 
         $reports = Issue::query()
-            ->with(['user:id,name,email,role', 'assignee:id,name,email,role'])
+            ->with(['user:id,name,email,phone,role', 'assignee:id,name,email,phone,role'])
             ->when($data['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($data['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
             ->when(($data['sla'] ?? null) === 'breached', fn ($q) => $q->where('sla_breached', true))
             ->when($data['search'] ?? null, function ($q, $search) {
                 $q->where(function ($q) use ($search) {
                     $q->where('title', 'like', "%{$search}%")
-                      ->orWhere('location', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%");
+                        ->orWhere('location', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%");
                 });
             })
             ->latest()
@@ -39,15 +39,31 @@ class ReportPageController extends Controller
             ->withQueryString();
 
         return view('admin.reports.index', [
-            'reports'                => $reports,
-            'categories'             => Issue::CATEGORIES,
-            'status'                 => $data['status'] ?? null,
-            'category'               => $data['category'] ?? null,
-            'search'                 => $data['search'] ?? '',
-            'underInvestigationCount'=> Issue::where('status', 'under_investigation')->count(),
-            'slaBreachedCount'       => Issue::where('sla_breached', true)
-                                            ->whereNotIn('status', ['resolved', 'rejected'])
-                                            ->count(),
+            'reports' => $reports,
+            'categories' => Issue::CATEGORIES,
+            'status' => $data['status'] ?? null,
+            'category' => $data['category'] ?? null,
+            'search' => $data['search'] ?? '',
+            'underInvestigationCount' => Issue::where('status', 'under_investigation')->count(),
+            'slaBreachedCount' => Issue::where('sla_breached', true)
+                ->whereNotIn('status', ['resolved', 'rejected'])
+                ->count(),
+        ]);
+    }
+
+    public function show(Issue $report)
+    {
+        $report->load(['user.roles', 'assignee.roles']);
+
+        $notifications = CommuTechNotification::query()
+            ->where('issue_id', $report->id)
+            ->latest()
+            ->take(8)
+            ->get();
+
+        return view('admin.reports.show', [
+            'report' => $report,
+            'notifications' => $notifications,
         ]);
     }
 
@@ -111,23 +127,23 @@ class ReportPageController extends Controller
             $statusLabel = str_replace('_', ' ', $data['status']);
 
             $citizenNotif = CommuTechNotification::create([
-                'user_id'        => $report->user_id,
-                'issue_id'       => $report->id,
-                'type'           => 'status_update',
+                'user_id' => $report->user_id,
+                'issue_id' => $report->id,
+                'type' => 'status_update',
                 'recipient_role' => 'citizen',
-                'title'          => 'Report Status Updated',
-                'body'           => 'Your report "'.$report->title.'" has been updated to: '.$statusLabel.'.',
+                'title' => 'Report Status Updated',
+                'body' => 'Your report "'.$report->title.'" has been updated to: '.$statusLabel.'.',
             ]);
             try { NotificationSent::dispatch($citizenNotif); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
 
             if ($report->assigned_to) {
                 $workerNotif = CommuTechNotification::create([
-                    'user_id'        => $report->assigned_to,
-                    'issue_id'       => $report->id,
-                    'type'           => 'status_update',
+                    'user_id' => $report->assigned_to,
+                    'issue_id' => $report->id,
+                    'type' => 'status_update',
                     'recipient_role' => 'worker',
-                    'title'          => 'Assigned Report Updated',
-                    'body'           => 'Admin updated "'.$report->title.'" to: '.$statusLabel.'.',
+                    'title' => 'Assigned Report Updated',
+                    'body' => 'Admin updated "'.$report->title.'" to: '.$statusLabel.'.',
                 ]);
                 try { NotificationSent::dispatch($workerNotif); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
             }
@@ -152,12 +168,12 @@ class ReportPageController extends Controller
         $data = $request->validate([
             'user_id' => ['required', Rule::exists('users', 'id')],
             'assigned_to' => ['nullable', Rule::exists('users', 'id')],
-            'title' => ['required', 'string', 'min:5', 'max:180'],
-            'description' => ['required', 'string', 'min:20'],
+            'title' => ['required', 'string', 'min:4', 'max:180'],
+            'description' => ['required', 'string', 'min:10'],
             'category' => ['required', Rule::in(Issue::CATEGORIES)],
             'status' => ['required', Rule::in(Issue::STATUSES)],
             'priority' => ['required', Rule::in(['low', 'medium', 'high', 'critical'])],
-            'location' => ['required', 'string', 'min:4', 'max:255'],
+            'location' => ['required', 'string', 'max:255'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'image_url' => ['nullable', 'url', 'max:2048'],

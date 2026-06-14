@@ -51,14 +51,14 @@ class IssueController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'title' => ['required', 'string', 'min:5', 'max:180'],
-            'description' => ['required', 'string', 'min:20'],
+            'title' => ['required', 'string', 'min:4', 'max:180'],
+            'description' => ['required', 'string', 'min:10'],
             'category' => ['required', Rule::in(Issue::CATEGORIES)],
-            'location' => ['required', 'string', 'min:4', 'max:255'],
+            'location' => ['required', 'string', 'max:255'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'image_url' => ['nullable', 'url', 'max:2048'],
-            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+            'image' => ['nullable', 'file', 'mimetypes:image/jpeg,image/png,image/webp,image/heic,image/heif', 'max:20480'],
         ]);
 
         if ($request->hasFile('image')) {
@@ -95,7 +95,7 @@ class IssueController extends Controller
                     $municipalityAr = $row->name_ar;
                 }
             } catch (\Throwable $e) {
-                \Log::warning('Municipality lookup failed: '.$e->getMessage());
+                \Log::warning('Municipality lookup failed: ' . $e->getMessage());
             }
         }
 
@@ -119,9 +119,13 @@ class IssueController extends Controller
             'type'           => 'new_report',
             'recipient_role' => 'citizen',
             'title'          => 'Report Submitted',
-            'body'           => 'Your issue "'.$issue->title.'" was submitted successfully and is pending review.',
+            'body'           => 'Your issue "' . $issue->title . '" was submitted successfully and is pending review.',
         ]);
-        try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+        try {
+            \App\Events\NotificationSent::dispatch($notification);
+        } catch (\Throwable $e) {
+            \Log::warning('Broadcast failed: ' . $e->getMessage());
+        }
 
         return response()->json($issue->load('user:id,name,email,phone'), 201);
     }
@@ -138,10 +142,10 @@ class IssueController extends Controller
     public function update(Request $request, Issue $issue)
     {
         $data = $request->validate([
-            'title' => ['sometimes', 'string', 'min:5', 'max:180'],
-            'description' => ['sometimes', 'string', 'min:20'],
+            'title' => ['sometimes', 'string', 'min:4', 'max:180'],
+            'description' => ['sometimes', 'string', 'min:10'],
             'category' => ['sometimes', Rule::in(Issue::CATEGORIES)],
-            'location' => ['sometimes', 'string', 'min:4', 'max:255'],
+            'location' => ['sometimes', 'string', 'max:255'],
             'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
             'image_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
@@ -210,9 +214,13 @@ class IssueController extends Controller
                 'type'           => 'status_update',
                 'recipient_role' => 'worker',
                 'title'          => 'Report Under Investigation',
-                'body'           => 'The citizen challenged the resolution for "'.$issue->title.'".',
+                'body'           => 'The citizen challenged the resolution for "' . $issue->title . '".',
             ]);
-            try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+            try {
+                \App\Events\NotificationSent::dispatch($notification);
+            } catch (\Throwable $e) {
+                \Log::warning('Broadcast failed: ' . $e->getMessage());
+            }
 
             $issue->load('user');
             $admins = User::withRole(User::ROLE_ADMIN)->get(['email']);
@@ -220,7 +228,7 @@ class IssueController extends Controller
                 try {
                     Mail::to($admin->email)->send(new AdminInvestigationMail($issue));
                 } catch (\Throwable $e) {
-                    \Log::warning('Admin investigation email failed: '.$e->getMessage());
+                    \Log::warning('Admin investigation email failed: ' . $e->getMessage());
                 }
             }
         }
@@ -251,18 +259,18 @@ class IssueController extends Controller
 
     private function uploadToSupabase(\Illuminate\Http\UploadedFile $file): string
     {
-        $filename = Str::uuid().'.'.$file->getClientOriginalExtension();
+        $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
         $supabaseUrl = config('services.supabase.url');
         $serviceKey  = config('services.supabase.key');
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer '.$serviceKey,
+            'Authorization' => 'Bearer ' . $serviceKey,
             'Content-Type'  => $file->getMimeType(),
         ])->withBody(file_get_contents($file->getRealPath()), $file->getMimeType())
-          ->post("{$supabaseUrl}/storage/v1/object/issues/{$filename}");
+            ->post("{$supabaseUrl}/storage/v1/object/issues/{$filename}");
 
         if (! $response->successful()) {
-            throw new \RuntimeException('Image upload failed: '.$response->body());
+            throw new \RuntimeException('Image upload failed: ' . $response->body());
         }
 
         return "{$supabaseUrl}/storage/v1/object/public/issues/{$filename}";
@@ -270,7 +278,7 @@ class IssueController extends Controller
 
     private function triagePriority(string $category, string $description): string
     {
-        $text = strtolower($category.' '.$description);
+        $text = strtolower($category . ' ' . $description);
 
         if (str_contains($text, 'emergency') || str_contains($text, 'injury')) {
             return 'critical';

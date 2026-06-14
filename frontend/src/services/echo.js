@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "../config";
 import { getAuthToken } from "./api";
+import { notificationsEnabled } from "./preferences";
 
 const PUSHER_KEY    = "ebc6b1cb30cb336d6f2d";
 const PUSHER_CLUSTER = "eu";
@@ -106,6 +107,7 @@ class PusherClient {
 let instance = null;
 
 export function getPusher() {
+  if (!notificationsEnabled()) return null;
   const token = getAuthToken();
   if (!token) return null;
   if (instance) return instance;

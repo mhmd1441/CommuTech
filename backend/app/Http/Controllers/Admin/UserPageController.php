@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Issue;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -40,14 +42,177 @@ class UserPageController extends Controller
         ]);
     }
 
+    public function workerShow(Request $request, User $worker)
+    {
+        $worker->load('roles');
+        abort_unless($worker->hasRole(User::ROLE_WORKER), 404);
+
+        $data = $request->validate([
+            'range' => ['nullable', Rule::in(['today', 'week', 'month', 'year', 'all'])],
+        ]);
+
+        $range = $data['range'] ?? 'month';
+        [$rangeStart, $rangeEnd, $rangeLabel] = $this->workerAnalyticsRange($range);
+
+        $baseReports = $this->workerReportQuery($worker->id, $rangeStart, $rangeEnd);
+        $activeStatuses = ['pending', 'in_progress', 'under_investigation'];
+
+        $resolvedReports = (clone $baseReports)
+            ->where('status', 'resolved')
+            ->get(['created_at', 'resolved_at', 'worker_resolved_at']);
+
+        $resolutionHours = $resolvedReports
+            ->map(fn (Issue $issue) => $this->hoursBetween($issue->created_at, $issue->worker_resolved_at ?? $issue->resolved_at))
+            ->filter(fn ($hours) => $hours !== null);
+
+        $statusCounts = (clone $baseReports)
+            ->select('status', DB::raw('count(*) as total'))
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $priorityCounts = (clone $baseReports)
+            ->select('priority', DB::raw('count(*) as total'))
+            ->groupBy('priority')
+            ->pluck('total', 'priority');
+
+        $dailyActivity = $this->workerDailyActivity($worker->id, $rangeStart, $rangeEnd);
+        $weeklyActivity = $this->workerWeeklyActivity($worker->id, $rangeStart, $rangeEnd);
+
+        $recentReports = (clone $baseReports)
+            ->with('user:id,name,email,phone')
+            ->latest()
+            ->take(12)
+            ->get();
+
+        return view('admin.workers.show', [
+            'worker' => $worker,
+            'range' => $range,
+            'rangeLabel' => $rangeLabel,
+            'rangeOptions' => [
+                'today' => 'Today',
+                'week' => 'This Week',
+                'month' => 'This Month',
+                'year' => 'This Year',
+                'all' => 'All Time',
+            ],
+            'totalReports' => (clone $baseReports)->count(),
+            'activeReports' => (clone $baseReports)->whereIn('status', $activeStatuses)->count(),
+            'resolvedReports' => (clone $baseReports)->where('status', 'resolved')->count(),
+            'underInvestigationReports' => (clone $baseReports)->where('status', 'under_investigation')->count(),
+            'rejectedReports' => (clone $baseReports)->where('status', 'rejected')->count(),
+            'resolvedToday' => $this->resolvedCountBetween($worker->id, now()->startOfDay(), now()->endOfDay()),
+            'resolvedThisWeek' => $this->resolvedCountBetween($worker->id, now()->startOfWeek(), now()->endOfWeek()),
+            'resolvedThisMonth' => $this->resolvedCountBetween($worker->id, now()->startOfMonth(), now()->endOfMonth()),
+            'averageResolutionHours' => $resolutionHours->isNotEmpty() ? round($resolutionHours->avg(), 1) : null,
+            'statusCounts' => $statusCounts,
+            'priorityCounts' => $priorityCounts,
+            'dailyActivity' => $dailyActivity,
+            'weeklyActivity' => $weeklyActivity,
+            'dailyActivityTitle' => ($rangeStart && $rangeStart->diffInDays($rangeEnd) <= 31) ? 'Daily Work' : 'Recent Daily Work',
+            'weeklyActivityTitle' => ($rangeStart && $rangeStart->diffInWeeks($rangeEnd) <= 8) ? 'Weekly Work' : 'Recent Weekly Work',
+            'recentReports' => $recentReports,
+        ]);
+    }
+
+    private function workerAnalyticsRange(string $range): array
+    {
+        return match ($range) {
+            'today' => [now()->startOfDay(), now()->endOfDay(), 'Today'],
+            'week' => [now()->startOfWeek(), now()->endOfWeek(), 'This Week'],
+            'year' => [now()->startOfYear(), now()->endOfYear(), 'This Year'],
+            'all' => [null, null, 'All Time'],
+            default => [now()->startOfMonth(), now()->endOfMonth(), 'This Month'],
+        };
+    }
+
+    private function workerReportQuery(int $workerId, ?Carbon $start, ?Carbon $end)
+    {
+        $query = Issue::query()->where('assigned_to', $workerId);
+
+        if ($start && $end) {
+            $query->where(function ($query) use ($start, $end) {
+                $query->whereBetween('created_at', [$start, $end])
+                    ->orWhereBetween('updated_at', [$start, $end])
+                    ->orWhereBetween('worker_resolved_at', [$start, $end])
+                    ->orWhereBetween('resolved_at', [$start, $end]);
+            });
+        }
+
+        return $query;
+    }
+
+    private function workerDailyActivity(int $workerId, ?Carbon $rangeStart, ?Carbon $rangeEnd)
+    {
+        $start = $rangeStart?->copy()->startOfDay() ?? now()->subDays(6)->startOfDay();
+        $end = $rangeEnd?->copy()->endOfDay() ?? now()->endOfDay();
+
+        if ($start->diffInDays($end) > 31) {
+            $start = now()->subDays(6)->startOfDay();
+            $end = now()->endOfDay();
+        }
+
+        $rows = collect();
+        $current = $start->copy();
+
+        while ($current->lte($end)) {
+            $dayStart = $current->copy()->startOfDay();
+            $dayEnd = $current->copy()->endOfDay();
+
+            $rows->push([
+                'label' => $current->format('M j'),
+                'new_work' => Issue::query()
+                    ->where('assigned_to', $workerId)
+                    ->whereBetween('created_at', [$dayStart, $dayEnd])
+                    ->count(),
+                'resolved' => $this->resolvedCountBetween($workerId, $dayStart, $dayEnd),
+            ]);
+
+            $current->addDay();
+        }
+
+        return $rows;
+    }
+
+    private function workerWeeklyActivity(int $workerId, ?Carbon $rangeStart, ?Carbon $rangeEnd)
+    {
+        $start = $rangeStart?->copy()->startOfWeek() ?? now()->subWeeks(3)->startOfWeek();
+        $end = $rangeEnd?->copy()->endOfWeek() ?? now()->endOfWeek();
+
+        if ($start->diffInWeeks($end) > 8) {
+            $start = now()->subWeeks(3)->startOfWeek();
+            $end = now()->endOfWeek();
+        }
+
+        $rows = collect();
+        $current = $start->copy();
+
+        while ($current->lte($end)) {
+            $weekStart = $current->copy()->startOfWeek();
+            $weekEnd = $current->copy()->endOfWeek();
+
+            $rows->push([
+                'label' => $weekStart->format('M j').' - '.$weekEnd->format('M j'),
+                'new_work' => Issue::query()
+                    ->where('assigned_to', $workerId)
+                    ->whereBetween('created_at', [$weekStart, $weekEnd])
+                    ->count(),
+                'resolved' => $this->resolvedCountBetween($workerId, $weekStart, $weekEnd),
+            ]);
+
+            $current->addWeek();
+        }
+
+        return $rows;
+    }
+
     public function create()
     {
         return view('admin.users.form', [
-            'user'           => new User,
-            'roles'          => User::ROLES,
-            'selectedRoles'  => [request('role', User::ROLE_CITIZEN)],
+            'user' => new User,
+            'roles' => User::ROLES,
+            'selectedRoles' => [request('role', User::ROLE_CITIZEN)],
             'municipalities' => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),
-            'mode'           => 'create',
+            'mode' => 'create',
         ]);
     }
 
@@ -66,7 +231,7 @@ class UserPageController extends Controller
             'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
-            'profile_picture_url'   => ['nullable', 'url', 'max:2048'],
+            'profile_picture_url' => ['nullable', 'url', 'max:2048'],
             'assigned_municipality' => ['nullable', 'string', 'max:120'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
@@ -91,11 +256,11 @@ class UserPageController extends Controller
         $user->load('roles');
 
         return view('admin.users.form', [
-            'user'           => $user,
-            'roles'          => User::ROLES,
-            'selectedRoles'  => $user->role_names,
+            'user' => $user,
+            'roles' => User::ROLES,
+            'selectedRoles' => $user->role_names,
             'municipalities' => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),
-            'mode'           => 'edit',
+            'mode' => 'edit',
         ]);
     }
 
@@ -119,7 +284,7 @@ class UserPageController extends Controller
             'area' => ['nullable', 'string', 'max:120'],
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
-            'profile_picture_url'   => ['nullable', 'url', 'max:2048'],
+            'profile_picture_url' => ['nullable', 'url', 'max:2048'],
             'assigned_municipality' => ['nullable', 'string', 'max:120'],
             'password' => ['sometimes', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
@@ -151,6 +316,29 @@ class UserPageController extends Controller
         return redirect()
             ->route('admin.users.index', ['role' => $role])
             ->with('status', 'User deleted successfully.');
+    }
+
+    private function resolvedCountBetween(int $workerId, $start, $end): int
+    {
+        return Issue::query()
+            ->where('assigned_to', $workerId)
+            ->where(function ($query) use ($start, $end) {
+                $query->whereBetween('worker_resolved_at', [$start, $end])
+                    ->orWhere(function ($query) use ($start, $end) {
+                        $query->whereNull('worker_resolved_at')
+                            ->whereBetween('resolved_at', [$start, $end]);
+                    });
+            })
+            ->count();
+    }
+
+    private function hoursBetween($start, $end): ?float
+    {
+        if (! $start || ! $end) {
+            return null;
+        }
+
+        return round(Carbon::parse($start)->diffInMinutes(Carbon::parse($end)) / 60, 1);
     }
 
     private function displayName(array $data): string

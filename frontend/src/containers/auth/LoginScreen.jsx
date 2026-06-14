@@ -36,6 +36,7 @@ export default function LoginScreen({ navigation }) {
   const [secure, setSecure] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
 
   const shimmerX = useRef(new Animated.Value(-1)).current;
 
@@ -72,6 +73,7 @@ export default function LoginScreen({ navigation }) {
       await authApi.login({
         email: email.trim(),
         password,
+        remember: rememberMe,
       });
 
       navigation.replace("CitizenHome");
@@ -149,16 +151,29 @@ export default function LoginScreen({ navigation }) {
             </Pressable>
           </View>
 
-          {!!error && <Text style={styles.error}>{error}</Text>}
+          <View style={styles.optionsRow}>
+            <Pressable
+              onPress={() => setRememberMe((value) => !value)}
+              style={styles.rememberBtn}
+              hitSlop={8}
+            >
+              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                {rememberMe && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+              </View>
+              <Text style={styles.rememberText}>Remember me</Text>
+            </Pressable>
 
-          <Pressable
-            onPress={() => {
-              navigation.navigate("ForgotPassword");
-            }}
-            style={styles.forgot}
-          >
-            <Text style={styles.forgotText}>Forgot password?</Text>
-          </Pressable>
+            <Pressable
+              onPress={() => {
+                navigation.navigate("ForgotPassword");
+              }}
+              style={styles.forgot}
+            >
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </Pressable>
+          </View>
+
+          {!!error && <Text style={styles.error}>{error}</Text>}
 
           <Pressable
             onPress={onLogin}
@@ -217,8 +232,15 @@ export default function LoginScreen({ navigation }) {
               pressed && { opacity: 0.9 },
             ]}
           >
-            <Ionicons name="logo-google" size={18} color={COLORS.text} />
-            <Text style={styles.googleText}>Continue with Google</Text>
+            <Text style={styles.googleText}>Continue with</Text>
+            <View style={styles.googleWord} accessible={false}>
+              <Text style={[styles.googleLetter, { color: "#4285F4" }]}>G</Text>
+              <Text style={[styles.googleLetter, { color: "#DB4437" }]}>o</Text>
+              <Text style={[styles.googleLetter, { color: "#F4B400" }]}>o</Text>
+              <Text style={[styles.googleLetter, { color: "#4285F4" }]}>g</Text>
+              <Text style={[styles.googleLetter, { color: "#0F9D58" }]}>l</Text>
+              <Text style={[styles.googleLetter, { color: "#DB4437" }]}>e</Text>
+            </View>
           </Pressable>
 
           <View style={styles.signupRow}>
@@ -332,9 +354,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  forgot: {
-    alignSelf: "flex-end",
+  optionsRow: {
     marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  rememberBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+    flexShrink: 1,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.navy,
+    borderColor: COLORS.navy,
+  },
+  rememberText: {
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  forgot: {
     paddingVertical: 6,
   },
   forgotText: {
@@ -406,12 +459,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 10,
+    gap: 6,
   },
   googleText: {
     fontSize: 15,
     fontWeight: "800",
     color: COLORS.text,
+  },
+  googleWord: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  googleLetter: {
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 0,
   },
   signupRow: {
     marginTop: 14,

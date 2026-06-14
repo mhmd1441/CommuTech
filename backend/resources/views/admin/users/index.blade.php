@@ -46,10 +46,15 @@
             </thead>
             <tbody>
                 @forelse ($users as $user)
+                    @php $isWorker = in_array(\App\Models\User::ROLE_WORKER, $user->role_names, true); @endphp
                     <tr>
                         <td>#{{ $user->id }}</td>
                         <td>
-                            {{ $user->name }}
+                            @if ($isWorker)
+                                <a href="{{ route('admin.workers.show', $user) }}" style="font-weight:900;text-decoration:none;color:#ffd09a;">{{ $user->name }}</a>
+                            @else
+                                {{ $user->name }}
+                            @endif
                             <div class="muted">{{ $user->email }}</div>
                         </td>
                         <td>{{ $user->phone ?? 'N/A' }}</td>
@@ -61,6 +66,9 @@
                         <td>{{ $user->city ?? 'N/A' }}</td>
                         <td>
                             <div class="row-actions">
+                                @if ($isWorker)
+                                    <a class="button" href="{{ route('admin.workers.show', $user) }}">Analytics</a>
+                                @endif
                                 <a class="button" href="{{ route('admin.users.edit', $user) }}">Edit</a>
                                 <form method="POST" action="{{ route('admin.users.destroy', $user) }}" onsubmit="return confirm('Delete this user?')">
                                     @csrf

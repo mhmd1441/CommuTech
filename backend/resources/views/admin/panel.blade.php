@@ -265,7 +265,7 @@
         <nav class="nav">
             <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">Dashboard</a>
             <a href="{{ route('admin.reports.index') }}" class="{{ request()->routeIs('admin.reports.*') ? 'active' : '' }}">Reports</a>
-            <a href="{{ route('admin.workers.index') }}" class="{{ request('role') === 'worker' ? 'active' : '' }}">Workers</a>
+            <a href="{{ route('admin.workers.index') }}" class="{{ request()->routeIs('admin.workers.*') || request('role') === 'worker' ? 'active' : '' }}">Workers</a>
             <a href="{{ route('admin.citizens.index') }}" class="{{ request('role') === 'citizen' ? 'active' : '' }}">Citizens</a>
             <a href="{{ route('admin.admins.index') }}" class="{{ request('role') === 'admin' ? 'active' : '' }}">Admins</a>
         </nav>

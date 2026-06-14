@@ -13,6 +13,7 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import BottomNav from "../shared/BottomNav";
 import api, { getAuthUser, setAuthUser as setStoredAuthUser, profileApi } from "../../services/api";
 import { disconnectPusher } from "../../services/echo";
+import { loadAppPreferences, setAppPreference } from "../../services/preferences";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -198,8 +200,9 @@ const MenuToggle = ({ icon, iconColor = C.navy, label, value, onToggle }) => (
     <Switch
       value={value}
       onValueChange={onToggle}
-      trackColor={{ false: C.border, true: C.navy + '60' }}
-      thumbColor={value ? C.navy : '#f4f3f4'}
+      trackColor={{ false: '#CBD5E1', true: C.navy + '75' }}
+      thumbColor={value ? C.navy : '#FFFFFF'}
+      ios_backgroundColor="#CBD5E1"
       style={{ marginLeft: 'auto' }}
     />
   </View>
@@ -208,8 +211,8 @@ const MenuToggle = ({ icon, iconColor = C.navy, label, value, onToggle }) => (
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 function ProfileScreen({ navigation }) {
   const initialProfile = normalizeProfile(getAuthUser() || {});
-  const [notifEnabled, setNotifEnabled] = useState(true);
-  const [locationEnabled, setLocationEnabled] = useState(true);
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [locationEnabled, setLocationEnabled] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
   const [authUser, setAuthUserState] = useState(getAuthUser());
   const [stats, setStats] = useState(EMPTY_STATS);
@@ -227,6 +230,19 @@ function ProfileScreen({ navigation }) {
 
   useEffect(() => {
     let isMounted = true;
+
+    const loadPreferences = async () => {
+      try {
+        const saved = await loadAppPreferences();
+
+        if (!isMounted) return;
+
+        setNotifEnabled(saved.notifications);
+        setLocationEnabled(saved.autoLocation);
+      } catch {
+        // Keep app preferences off if storage is unavailable.
+      }
+    };
 
     const loadProfile = async () => {
       try {
@@ -251,6 +267,7 @@ function ProfileScreen({ navigation }) {
       }
     };
 
+    loadPreferences();
     loadProfile();
 
     return () => {
@@ -281,6 +298,23 @@ function ProfileScreen({ navigation }) {
     navigation.reset({ index: 0, routes: [{ name: 'WorkerHome' }] });
   };
 
+  const handleToggleNotifications = async (value) => {
+    setNotifEnabled(value);
+    await setAppPreference('notifications', value);
+    if (!value) disconnectPusher();
+  };
+
+  const handleToggleLocation = async (value) => {
+    setLocationEnabled(value);
+    await setAppPreference('autoLocation', value);
+  };
+
+  const handleOpenAppSettings = () => {
+    Linking.openSettings().catch(() => {
+      Alert.alert('Settings', 'Open CommuTech from your phone settings to manage permissions.');
+    });
+  };
+
   const handleOpenPersonalInfo = () => {
     setProfileForm(personalInfo);
     setActiveModal('personal');
@@ -296,7 +330,14 @@ function ProfileScreen({ navigation }) {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permission needed', 'Allow photo library access to update your profile picture.');
+        Alert.alert(
+          'Photo Access Needed',
+          'Enable photo library access from Settings to update your profile picture.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: handleOpenAppSettings },
+          ]
+        );
         return;
       }
 
@@ -491,14 +532,14 @@ function ProfileScreen({ navigation }) {
             icon="notifications-outline"
             label="Push Notifications"
             value={notifEnabled}
-            onToggle={setNotifEnabled}
+            onToggle={handleToggleNotifications}
           />
           <MenuDivider />
           <MenuToggle
             icon="navigate-outline"
             label="Auto-detect Location"
             value={locationEnabled}
-            onToggle={setLocationEnabled}
+            onToggle={handleToggleLocation}
           />
           <MenuDivider />
           <MenuItem
@@ -514,7 +555,7 @@ function ProfileScreen({ navigation }) {
           <MenuItem
             icon="document-text-outline"
             label="My Reports"
-            onPress={() => navigation.navigate('MyReports')}
+            onPress={() => navigation.navigate('ReportHistory')}
           />
           <MenuDivider />
           <MenuItem
@@ -608,7 +649,12 @@ function ProfileScreen({ navigation }) {
                 <Text style={styles.modalHint}>
                   Required fields must stay filled. Change your profile picture by tapping the photo beside your name.
                 </Text>
-                <ScrollView style={styles.profileFieldsScroll} showsVerticalScrollIndicator={false}>
+                <ScrollView
+                  style={styles.profileFieldsScroll}
+                  contentContainerStyle={styles.profileFieldsContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
                   {PROFILE_FIELDS.map((field) => (
                     <View key={field.key} style={styles.inputGroup}>
                       <Text style={styles.inputLabel}>
@@ -822,7 +868,7 @@ const styles = StyleSheet.create({
 
   // Menu
   menuGroup: { marginBottom: 12 },
-  menuGroupTitle: { fontSize: 12, fontWeight: '700', color: C.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  menuGroupTitle: { fontSize: 12, fontWeight: '800', color: C.navy, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   menuCard: {
     backgroundColor: C.card,
     borderRadius: 16,
@@ -883,10 +929,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-  modalBody: { gap: 9 },
+  modalBody: { gap: 9, flexShrink: 1 },
   modalHint: { color: C.muted, fontSize: 12, fontWeight: '600', lineHeight: 18 },
-  profileFieldsScroll: { maxHeight: 430 },
-  inputGroup: { marginBottom: 9 },
+  profileFieldsScroll: {
+    flexShrink: 1,
+    maxHeight: Platform.OS === 'ios' ? 300 : 360,
+  },
+  profileFieldsContent: { paddingBottom: 8 },
+  inputGroup: { marginBottom: 10 },
   inputLabel: { color: C.muted, fontSize: 12, fontWeight: '800', marginTop: 4 },
   requiredMark: { color: C.red },
   modalInput: {

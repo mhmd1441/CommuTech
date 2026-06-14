@@ -23,6 +23,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('/create', 'create')->name('create');
             Route::post('/', 'store')->name('store');
+            Route::get('/{report}', 'show')->name('show');
             Route::get('/{report}/edit', 'edit')->name('edit');
             Route::put('/{report}', 'update')->name('update');
             Route::delete('/{report}', 'destroy')->name('destroy');
@@ -37,6 +38,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::delete('/{user}', 'destroy')->name('destroy');
         });
 
+        Route::get('/workers/{worker}', [UserPageController::class, 'workerShow'])->name('workers.show');
         Route::get('/citizens', fn () => redirect()->route('admin.users.index', ['role' => 'citizen']))->name('citizens.index');
         Route::get('/workers', fn () => redirect()->route('admin.users.index', ['role' => 'worker']))->name('workers.index');
         Route::get('/admins', fn () => redirect()->route('admin.users.index', ['role' => 'admin']))->name('admins.index');

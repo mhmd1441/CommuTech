@@ -149,7 +149,7 @@ class WorkerIssueController extends Controller
             'status'                     => ['required', Rule::in(['in_progress', 'resolved'])],
             'worker_resolution_note'     => ['required_if:status,resolved', 'nullable', 'string', 'min:5', 'max:1200'],
             'worker_resolution_image_url'=> ['nullable', 'url', 'max:2048'],
-            'resolution_image'           => ['nullable', 'file', 'image', 'max:8192'],
+            'resolution_image'           => ['required_if:status,resolved', 'file', 'mimetypes:image/jpeg,image/png,image/webp,image/heic,image/heif', 'max:20480'],
         ]);
 
         $updates = [

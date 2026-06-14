@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import * as Location from "expo-location";
 import MapView, { Marker } from "react-native-maps";
 import BottomNav from "../shared/BottomNav";
 import api from "../../services/api";
+import { getAppPreferences } from "../../services/preferences";
 
 const C = {
   navy: "#19405F",
@@ -62,6 +63,14 @@ const DEFAULT_COORDINATE = {
   longitude: 35.5018,
 };
 
+const TITLE_EXAMPLES = [
+  "Broken streetlight",
+  "Large pothole",
+  "Overflowing garbage",
+  "Water leak",
+  "Blocked drain",
+];
+
 export default function CreateIssueScreen({ navigation }) {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [title, setTitle] = useState("");
@@ -80,17 +89,41 @@ export default function CreateIssueScreen({ navigation }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [aiPrediction, setAiPrediction] = useState(null);
   const [analyzingPhoto, setAnalyzingPhoto] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const searchTimeout = useRef(null);
 
   const canSubmit = useMemo(
     () =>
       category &&
-      title.trim().length >= 5 &&
-      description.trim().length >= 20 &&
-      location.trim().length >= 4 &&
+      title.trim().length >= 4 &&
+      description.trim().length >= 10 &&
+      location.trim().length > 0 &&
       !!capturedPhoto,
     [category, title, description, location, capturedPhoto]
   );
+
+  const submitHint = useMemo(() => {
+    if (title.trim().length === 0) {
+      return "Add a short title like Broken streetlight.";
+    }
+    if (title.trim().length < 4) {
+      return "Use a clearer title like Pothole on road.";
+    }
+    if (description.trim().length === 0) {
+      return "Add a short description of what happened.";
+    }
+    if (description.trim().length < 10) {
+      return "Add a little more detail in the description.";
+    }
+    if (location.trim().length === 0) {
+      return "Add the location or choose it from the map.";
+    }
+    if (!capturedPhoto) {
+      return "Capture a photo to submit your report.";
+    }
+
+    return "";
+  }, [title, description, location, capturedPhoto]);
 
   const mapPickerRegion = useMemo(
     () => ({
@@ -183,6 +216,12 @@ export default function CreateIssueScreen({ navigation }) {
     }
   };
 
+  useEffect(() => {
+    if (getAppPreferences().autoLocation) {
+      detectLocation();
+    }
+  }, []);
+
   const openMapPicker = () => {
     setPickedCoordinate({
       latitude: latitude ?? DEFAULT_COORDINATE.latitude,
@@ -213,6 +252,15 @@ export default function CreateIssueScreen({ navigation }) {
       name: asset.fileName || `${fallbackName}.${extension}`,
       type,
     };
+  };
+
+  const readableSubmitError = (error) => {
+    const errors = error.response?.data?.errors;
+    if (errors) {
+      return Object.values(errors).flat().join("\n");
+    }
+
+    return error.response?.data?.message || error.message || "Please try again.";
   };
 
   const predictCategory = async (photo) => {
@@ -285,6 +333,7 @@ export default function CreateIssueScreen({ navigation }) {
     if (!canSubmit || submitting) return;
 
     setSubmitting(true);
+    setSubmitError("");
 
     try {
       let lat = latitude;
@@ -350,7 +399,7 @@ export default function CreateIssueScreen({ navigation }) {
       setSubmitted(true);
       setTimeout(() => navigation.replace("IssueDetails", { issue: data }), 300);
     } catch (err) {
-      Alert.alert("Submission Failed", err.message || "Please try again.");
+      setSubmitError(readableSubmitError(err));
     } finally {
       setSubmitting(false);
     }
@@ -437,21 +486,33 @@ export default function CreateIssueScreen({ navigation }) {
             <TextInput
               value={title}
               onChangeText={setTitle}
-              placeholder="Example: Large pothole near intersection"
+              placeholder="Broken streetlight"
               placeholderTextColor="#94A3B8"
               style={styles.input}
             />
+            <View style={styles.exampleRow}>
+              {TITLE_EXAMPLES.map((example) => (
+                <Pressable
+                  key={example}
+                  style={styles.exampleChip}
+                  onPress={() => setTitle(example)}
+                >
+                  <Text style={styles.exampleText}>{example}</Text>
+                </Pressable>
+              ))}
+            </View>
 
             <Text style={[styles.label, styles.mt]}>Description</Text>
             <TextInput
               value={description}
               onChangeText={setDescription}
-              placeholder="Describe what happened, how dangerous it is, and when you noticed it."
+              placeholder="Briefly describe what you saw and why it needs attention."
               placeholderTextColor="#94A3B8"
               style={[styles.input, styles.textarea]}
               multiline
               textAlignVertical="top"
             />
+            <Text style={styles.fieldHint}>A short note is enough if the photo and location are clear.</Text>
 
             <Text style={[styles.label, styles.mt]}>Location</Text>
             <View style={styles.locationRow}>
@@ -529,6 +590,20 @@ export default function CreateIssueScreen({ navigation }) {
               </>
             )}
           </View>
+
+          {!!submitError && (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle-outline" size={17} color={C.red} />
+              <Text style={styles.errorText}>{submitError}</Text>
+            </View>
+          )}
+
+          {!canSubmit && !!submitHint && (
+            <View style={styles.submitHintBox}>
+              <Ionicons name="information-circle-outline" size={16} color={C.navy} />
+              <Text style={styles.submitHintText}>{submitHint}</Text>
+            </View>
+          )}
 
           <Pressable
             onPress={submitIssue}
@@ -649,6 +724,17 @@ const styles = StyleSheet.create({
     borderColor: C.border, backgroundColor: "#FFFFFF",
     paddingHorizontal: 12, color: C.text, fontSize: 15,
   },
+  exampleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  exampleChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bg,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  exampleText: { color: C.navy, fontSize: 11, fontWeight: "800" },
+  fieldHint: { marginTop: 6, color: C.muted, fontSize: 12, fontWeight: "600", lineHeight: 17 },
   textarea: { minHeight: 112, paddingTop: 12, lineHeight: 20 },
   locationRow: { flexDirection: "row", gap: 10 },
   mapPickBtn: {
@@ -689,6 +775,30 @@ const styles = StyleSheet.create({
   },
   cameraBtnText: { color: C.navy, fontSize: 15, fontWeight: "900" },
   photoHint: { marginTop: 6, fontSize: 12, color: "#B91C1C", fontWeight: "600" },
+  errorBox: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2",
+  },
+  errorText: { flex: 1, color: C.red, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  submitHintBox: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#D8E5F1",
+    backgroundColor: "#EEF5FA",
+    padding: 11,
+  },
+  submitHintText: { flex: 1, color: C.navy, fontSize: 12, lineHeight: 17, fontWeight: "800" },
   photoPreviewWrap: {
     borderRadius: 16, overflow: "hidden", borderWidth: 1,
     borderColor: C.border, backgroundColor: C.bg,

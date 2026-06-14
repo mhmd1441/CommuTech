@@ -13,7 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "CommuTech uses the camera to capture report photos and worker resolution proof.",
+        "NSPhotoLibraryUsageDescription": "CommuTech uses your photo library so you can update your profile picture.",
+        "NSLocationWhenInUseUsageDescription": "CommuTech uses your location to place reports accurately and show nearby issues."
+      }
     },
     "android": {
       "adaptiveIcon": {

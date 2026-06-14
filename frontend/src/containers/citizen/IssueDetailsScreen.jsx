@@ -74,8 +74,8 @@ export default function IssueDetailsScreen({ navigation, route }) {
   };
 
   const handleSaveEdit = async () => {
-    if (editForm.title.trim().length < 5) { Alert.alert("Validation", "Title must be at least 5 characters."); return; }
-    if (editForm.description.trim().length < 20) { Alert.alert("Validation", "Description must be at least 20 characters."); return; }
+    if (editForm.title.trim().length < 4) { Alert.alert("Validation", "Use a clearer title, like Broken streetlight."); return; }
+    if (editForm.description.trim().length < 10) { Alert.alert("Validation", "Add a little more detail in the description."); return; }
     if (!editForm.location.trim()) { Alert.alert("Validation", "Location is required."); return; }
     try {
       setSaving(true);
@@ -145,12 +145,13 @@ export default function IssueDetailsScreen({ navigation, route }) {
       });
       setIssue(data.issue || issue);
       setAuditNote("");
-      Alert.alert(
-        resolved ? "Resolution Confirmed" : "Sent to Admin",
-        resolved
-          ? "Thank you. This report remains resolved."
-          : "This report is now under investigation for admin review."
-      );
+      if (resolved) {
+        Alert.alert("Resolution Confirmed", "Thank you. This report remains resolved.", [
+          { text: "OK", onPress: () => navigation.navigate("MyReports") },
+        ]);
+      } else {
+        Alert.alert("Review Requested", "Thanks. This report will be reviewed again.");
+      }
     } catch (error) {
       Alert.alert("Confirmation Failed", error.response?.data?.message || error.message || "Please try again.");
     } finally {
@@ -237,11 +238,11 @@ export default function IssueDetailsScreen({ navigation, route }) {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Routing Timeline</Text>
+          <Text style={styles.sectionTitle}>Report Progress</Text>
           {[
-            ["Report submitted", "Citizen report stored with photo and location.", true],
-            ["Supervisor review", "Admin validates and assigns a worker.", status !== "Pending"],
-            ["Worker proof", "Worker submits the fix description after repair.", status === "Resolved"],
+            ["Report received", "Your report has been saved with its photo and location.", true],
+            ["Field review", "Available field workers can review and claim this report.", status !== "Pending"],
+            ["Resolution update", "When the issue is marked resolved, you can confirm the result.", status === "Resolved"],
           ].map(([title, body, done], index) => (
             <View key={title} style={styles.timelineRow}>
               <View style={[styles.timelineDot, done && styles.timelineDotDone]}>
@@ -289,7 +290,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
             <View style={{ flex: 1 }}>
               <Text style={styles.auditTitle}>Under Investigation</Text>
               <Text style={styles.auditText}>
-                Your answer did not match the worker resolution. The admin will review this report.
+                Your response was sent for review because the resolution was not confirmed.
               </Text>
             </View>
           </View>
@@ -314,7 +315,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
                 disabled={confirming}
                 style={[styles.auditNoBtn, confirming && styles.disabledBtn]}
               >
-                <Text style={styles.auditNoText}>No, Audit</Text>
+                <Text style={styles.auditNoText}>No, Request Review</Text>
               </Pressable>
               <Pressable
                 onPress={() => confirmResolution(true)}
@@ -379,7 +380,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
                 value={editForm.title}
                 onChangeText={(v) => setEditForm((f) => ({ ...f, title: v }))}
                 style={styles.fieldInput}
-                placeholder="Min 5 characters"
+                placeholder="Broken streetlight"
                 placeholderTextColor="#94A3B8"
               />
 
@@ -388,7 +389,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
                 value={editForm.description}
                 onChangeText={(v) => setEditForm((f) => ({ ...f, description: v }))}
                 style={[styles.fieldInput, { height: 100, textAlignVertical: "top" }]}
-                placeholder="Min 20 characters"
+                placeholder="Briefly describe what you saw"
                 placeholderTextColor="#94A3B8"
                 multiline
               />
