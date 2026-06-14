@@ -39,8 +39,16 @@
             </div>
         @endif
 
-        <form class="filters" method="GET" action="{{ route('admin.reports.index') }}">
+        <form class="filters" method="GET" action="{{ route('admin.reports.index') }}" style="grid-template-columns: 1fr 240px 180px 220px auto;">
             <input name="search" value="{{ $search }}" placeholder="Search by title, location, or description">
+            <div style="position:relative;">
+                <input list="municipalities-list" name="municipality" value="{{ $municipality }}" placeholder="Search municipality">
+                <datalist id="municipalities-list">
+                    @foreach ($municipalities as $item)
+                        <option value="{{ $item }}"></option>
+                    @endforeach
+                </datalist>
+            </div>
             <select name="status">
                 <option value="">All statuses</option>
                 @foreach (\App\Models\Issue::STATUSES as $item)

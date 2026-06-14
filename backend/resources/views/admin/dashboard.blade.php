@@ -630,6 +630,27 @@
                 </table>
             </article>
         </section>
+
+        <section class="tables" style="margin-top: 14px;">
+            <article class="table-card" style="grid-column: 1 / -1; padding: 24px; background: rgba(20,26,37,0.04); border: 1px solid rgba(103,116,146,0.18); box-shadow: 0 18px 36px rgba(20,26,37,0.04);">
+                <div class="section-head" style="align-items: flex-start; gap: 12px;">
+                    <div>
+                        <h2 style="display:flex; align-items:center; gap:8px; margin:0;">
+                            <span style="font-size:18px;">✦</span> AI Weekly Briefing
+                        </h2>
+                        <div style="display:flex; align-items:center; gap:10px; margin-top:6px;">
+                            <span class="muted" style="font-size:11px;">Powered by Gemini · refreshes hourly</span>
+                            <span style="font-size:11px; color:var(--success); background:rgba(82,196,26,0.12); padding:2px 8px; border-radius:999px;">insight</span>
+                        </div>
+                    </div>
+                    <button id="briefing-refresh" class="pill" style="font-size:12px; cursor:pointer; border:1px solid var(--line); background:var(--panel-2); color:var(--muted);">Refresh</button>
+                </div>
+                <div id="briefing-body" style="font-size:13px; line-height:1.75; color:var(--text); min-height:140px; margin-top:18px;">
+                    <span style="color:var(--muted);">Loading briefing…</span>
+                </div>
+                <div id="briefing-note" style="font-size:12px; color:var(--muted); margin-top:16px;">Briefing updates hourly. Refresh to get the latest summary.</div>
+            </article>
+        </section>
     </main>
 </div>
 <script>
@@ -638,6 +659,65 @@
             document.querySelector('[name="range"]').value = 'custom';
         });
     });
+
+    function loadBriefing(refresh) {
+        const el = document.getElementById('briefing-body');
+        const btn = document.getElementById('briefing-refresh');
+        el.innerHTML = '<span style="color:var(--muted);">Loading briefing…</span>';
+        btn.disabled = true;
+
+        const url = '{{ route("admin.ai-briefing") }}' + (refresh ? '?refresh=1' : '');
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json())
+            .then(data => {
+                if (data.briefing) {
+                    el.innerHTML = formatBriefing(data.briefing);
+                } else if (data.error === 'not_configured') {
+                    el.innerHTML = '<span style="color:var(--muted);">Add GEMINI_API_KEY to your .env to enable this feature.</span>';
+                } else {
+                    el.innerHTML = '<span style="color:var(--muted);">Briefing unavailable — Gemini API did not respond.</span>';
+                }
+            })
+            .catch(() => {
+                el.innerHTML = '<span style="color:var(--muted);">Could not load briefing.</span>';
+            })
+            .finally(() => { btn.disabled = false; });
+    }
+
+    function formatBriefing(text) {
+        const escapeHtml = (value) => value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+        const bullets = [];
+        let html = '';
+
+        lines.forEach(line => {
+            if (line.startsWith('•')) {
+                bullets.push(`<li style="margin-bottom:10px; line-height:1.65;">${escapeHtml(line.slice(1).trim())}</li>`);
+            } else if (line.startsWith('Key Insight:')) {
+                html += `<p style="margin:18px 0 8px; color:var(--text); font-weight:700;">${escapeHtml(line)}</p>`;
+            } else if (line.startsWith('Recommendation:')) {
+                html += `<p style="margin:0; color:var(--primary); font-weight:700;">${escapeHtml(line)}</p>`;
+            } else {
+                html += `<p style="margin:0 0 10px; color:var(--muted);">${escapeHtml(line)}</p>`;
+            }
+        });
+
+        if (bullets.length) {
+            html = `<ul style="margin:0 0 16px 18px; padding:0; list-style:none;">${bullets.join('')}</ul>` + html;
+        }
+
+        return html;
+    }
+
+    document.getElementById('briefing-refresh').addEventListener('click', function () {
+        loadBriefing(true);
+    });
+
+    loadBriefing(false);
 </script>
 </body>
 </html>

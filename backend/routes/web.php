@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AiSummaryController;
 use App\Http\Controllers\Admin\AuthPageController;
 use App\Http\Controllers\Admin\DashboardPageController;
 use App\Http\Controllers\Admin\ReportPageController;
@@ -18,6 +19,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     Route::middleware(['auth', 'role:admin'])->group(function () {
         Route::get('/dashboard', [DashboardPageController::class, 'index'])->name('dashboard');
+        Route::get('/ai-briefing', AiSummaryController::class)->name('ai-briefing');
 
         Route::prefix('reports')->name('reports.')->controller(ReportPageController::class)->group(function () {
             Route::get('/', 'index')->name('index');

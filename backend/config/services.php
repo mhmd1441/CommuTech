@@ -44,4 +44,9 @@ return [
         'url' => env('ML_SERVICE_URL', 'http://127.0.0.1:5000'),
     ],
 
+    'gemini' => [
+    'key' => env('GEMINI_API_KEY'),
+    'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+],
+
 ];

@@ -8,6 +8,7 @@ use App\Models\CommuTechNotification;
 use App\Models\Issue;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -26,6 +27,7 @@ class ReportPageController extends Controller
             ->with(['user:id,name,email,phone,role', 'assignee:id,name,email,phone,role'])
             ->when($data['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($data['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
+            ->when($data['municipality'] ?? null, fn ($q, $municipality) => $q->where('municipality_en', $municipality))
             ->when(($data['sla'] ?? null) === 'breached', fn ($q) => $q->where('sla_breached', true))
             ->when($data['search'] ?? null, function ($q, $search) {
                 $q->where(function ($q) use ($search) {
@@ -39,6 +41,7 @@ class ReportPageController extends Controller
             ->withQueryString();
 
         return view('admin.reports.index', [
+<<<<<<< HEAD
             'reports' => $reports,
             'categories' => Issue::CATEGORIES,
             'status' => $data['status'] ?? null,
@@ -64,6 +67,19 @@ class ReportPageController extends Controller
         return view('admin.reports.show', [
             'report' => $report,
             'notifications' => $notifications,
+=======
+            'reports'                => $reports,
+            'categories'             => Issue::CATEGORIES,
+            'municipalities'         => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),
+            'status'                 => $data['status'] ?? null,
+            'category'               => $data['category'] ?? null,
+            'municipality'           => $data['municipality'] ?? null,
+            'search'                 => $data['search'] ?? '',
+            'underInvestigationCount'=> Issue::where('status', 'under_investigation')->count(),
+            'slaBreachedCount'       => Issue::where('sla_breached', true)
+                                            ->whereNotIn('status', ['resolved', 'rejected'])
+                                            ->count(),
+>>>>>>> 4e299a7390c630f10757fe7ec6eda4c4aa03479d
         ]);
     }
 
