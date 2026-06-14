@@ -13,13 +13,19 @@ class AiSummaryController extends Controller
 {
     public function __invoke(Request $request)
     {
-        if ($request->boolean('refresh')) {
+        $refresh = $request->boolean('refresh');
+
+        if ($refresh) {
             Cache::forget('admin_ai_briefing');
         }
 
         $cached = Cache::get('admin_ai_briefing');
         if ($cached) {
             return response()->json(['briefing' => $cached, 'cached' => true]);
+        }
+
+        if ($request->boolean('cached_only')) {
+            return response()->json(['briefing' => null, 'cached' => false, 'skipped' => true]);
         }
 
         $apiKey = config('services.gemini.key');
@@ -40,11 +46,16 @@ class AiSummaryController extends Controller
     {
         $from = now()->subDays(7);
 
-        $total      = Issue::where('created_at', '>=', $from)->count();
-        $resolved   = Issue::where('created_at', '>=', $from)->where('status', 'resolved')->count();
-        $pending    = Issue::where('created_at', '>=', $from)->where('status', 'pending')->count();
-        $inProgress = Issue::where('created_at', '>=', $from)->where('status', 'in_progress')->count();
-        $breached   = Issue::where('created_at', '>=', $from)->where('sla_breached', true)->count();
+        $statusCounts = Issue::where('created_at', '>=', $from)
+            ->select('status', DB::raw('count(*) as total'))
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $total = (int) $statusCounts->sum();
+        $resolved = (int) ($statusCounts['resolved'] ?? 0);
+        $pending = (int) ($statusCounts['pending'] ?? 0);
+        $inProgress = (int) ($statusCounts['in_progress'] ?? 0);
+        $breached = Issue::where('created_at', '>=', $from)->where('sla_breached', true)->count();
         $rate       = $total > 0 ? round(($resolved / $total) * 100) : 0;
 
         $byCategory = Issue::where('created_at', '>=', $from)
@@ -97,12 +108,13 @@ PROMPT;
         $model = config('services.gemini.model', 'gemini-2.0-flash');
         $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
 
-        $maxAttempts = 4;
+        $maxAttempts = 1;
         $baseDelay = 1; // seconds
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
-                $response = Http::timeout(20)
+                $response = Http::connectTimeout(4)
+                    ->timeout(10)
                     ->withHeaders([
                         'x-goog-api-key' => $apiKey,
                         'Content-Type'   => 'application/json',

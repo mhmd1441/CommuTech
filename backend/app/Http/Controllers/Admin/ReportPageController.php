@@ -19,16 +19,17 @@ class ReportPageController extends Controller
         $data = $request->validate([
             'status' => ['nullable', Rule::in(Issue::STATUSES)],
             'category' => ['nullable', Rule::in(Issue::CATEGORIES)],
+            'municipality' => ['nullable', 'string', 'max:120'],
             'search' => ['nullable', 'string', 'max:100'],
             'sla' => ['nullable', Rule::in(['breached'])],
         ]);
 
         $reports = Issue::query()
             ->with(['user:id,name,email,phone,role', 'assignee:id,name,email,phone,role'])
-            ->when($data['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
-            ->when($data['category'] ?? null, fn ($q, $category) => $q->where('category', $category))
-            ->when($data['municipality'] ?? null, fn ($q, $municipality) => $q->where('municipality_en', $municipality))
-            ->when(($data['sla'] ?? null) === 'breached', fn ($q) => $q->where('sla_breached', true))
+            ->when($data['status'] ?? null, fn($q, $status) => $q->where('status', $status))
+            ->when($data['category'] ?? null, fn($q, $category) => $q->where('category', $category))
+            ->when($data['municipality'] ?? null, fn($q, $municipality) => $q->where('municipality_en', $municipality))
+            ->when(($data['sla'] ?? null) === 'breached', fn($q) => $q->where('sla_breached', true))
             ->when($data['search'] ?? null, function ($q, $search) {
                 $q->where(function ($q) use ($search) {
                     $q->where('title', 'like', "%{$search}%")
@@ -41,11 +42,12 @@ class ReportPageController extends Controller
             ->withQueryString();
 
         return view('admin.reports.index', [
-<<<<<<< HEAD
             'reports' => $reports,
             'categories' => Issue::CATEGORIES,
             'status' => $data['status'] ?? null,
             'category' => $data['category'] ?? null,
+            'municipality' => $data['municipality'] ?? '',
+            'municipalities' => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),
             'search' => $data['search'] ?? '',
             'underInvestigationCount' => Issue::where('status', 'under_investigation')->count(),
             'slaBreachedCount' => Issue::where('sla_breached', true)
@@ -67,19 +69,6 @@ class ReportPageController extends Controller
         return view('admin.reports.show', [
             'report' => $report,
             'notifications' => $notifications,
-=======
-            'reports'                => $reports,
-            'categories'             => Issue::CATEGORIES,
-            'municipalities'         => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),
-            'status'                 => $data['status'] ?? null,
-            'category'               => $data['category'] ?? null,
-            'municipality'           => $data['municipality'] ?? null,
-            'search'                 => $data['search'] ?? '',
-            'underInvestigationCount'=> Issue::where('status', 'under_investigation')->count(),
-            'slaBreachedCount'       => Issue::where('sla_breached', true)
-                                            ->whereNotIn('status', ['resolved', 'rejected'])
-                                            ->count(),
->>>>>>> 4e299a7390c630f10757fe7ec6eda4c4aa03479d
         ]);
     }
 
@@ -148,9 +137,13 @@ class ReportPageController extends Controller
                 'type' => 'status_update',
                 'recipient_role' => 'citizen',
                 'title' => 'Report Status Updated',
-                'body' => 'Your report "'.$report->title.'" has been updated to: '.$statusLabel.'.',
+                'body' => 'Your report "' . $report->title . '" has been updated to: ' . $statusLabel . '.',
             ]);
-            try { NotificationSent::dispatch($citizenNotif); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+            try {
+                NotificationSent::dispatch($citizenNotif);
+            } catch (\Throwable $e) {
+                \Log::warning('Broadcast failed: ' . $e->getMessage());
+            }
 
             if ($report->assigned_to) {
                 $workerNotif = CommuTechNotification::create([
@@ -159,9 +152,13 @@ class ReportPageController extends Controller
                     'type' => 'status_update',
                     'recipient_role' => 'worker',
                     'title' => 'Assigned Report Updated',
-                    'body' => 'Admin updated "'.$report->title.'" to: '.$statusLabel.'.',
+                    'body' => 'Admin updated "' . $report->title . '" to: ' . $statusLabel . '.',
                 ]);
-                try { NotificationSent::dispatch($workerNotif); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+                try {
+                    NotificationSent::dispatch($workerNotif);
+                } catch (\Throwable $e) {
+                    \Log::warning('Broadcast failed: ' . $e->getMessage());
+                }
             }
         }
 

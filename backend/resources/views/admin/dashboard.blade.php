@@ -666,12 +666,14 @@
         el.innerHTML = '<span style="color:var(--muted);">Loading briefing…</span>';
         btn.disabled = true;
 
-        const url = '{{ route("admin.ai-briefing") }}' + (refresh ? '?refresh=1' : '');
+        const url = '{{ route("admin.ai-briefing") }}' + (refresh ? '?refresh=1' : '?cached_only=1');
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(r => r.json())
             .then(data => {
                 if (data.briefing) {
                     el.innerHTML = formatBriefing(data.briefing);
+                } else if (data.skipped) {
+                    el.innerHTML = '<span style="color:var(--muted);">Refresh to generate the latest briefing.</span>';
                 } else if (data.error === 'not_configured') {
                     el.innerHTML = '<span style="color:var(--muted);">Add GEMINI_API_KEY to your .env to enable this feature.</span>';
                 } else {

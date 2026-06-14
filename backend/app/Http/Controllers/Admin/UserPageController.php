@@ -57,14 +57,6 @@ class UserPageController extends Controller
         $baseReports = $this->workerReportQuery($worker->id, $rangeStart, $rangeEnd);
         $activeStatuses = ['pending', 'in_progress', 'under_investigation'];
 
-        $resolvedReports = (clone $baseReports)
-            ->where('status', 'resolved')
-            ->get(['created_at', 'resolved_at', 'worker_resolved_at']);
-
-        $resolutionHours = $resolvedReports
-            ->map(fn (Issue $issue) => $this->hoursBetween($issue->created_at, $issue->worker_resolved_at ?? $issue->resolved_at))
-            ->filter(fn ($hours) => $hours !== null);
-
         $statusCounts = (clone $baseReports)
             ->select('status', DB::raw('count(*) as total'))
             ->groupBy('status')
@@ -74,6 +66,14 @@ class UserPageController extends Controller
             ->select('priority', DB::raw('count(*) as total'))
             ->groupBy('priority')
             ->pluck('total', 'priority');
+
+        $totalReports = (int) $statusCounts->sum();
+        $activeReports = collect($activeStatuses)->sum(fn ($status) => (int) ($statusCounts[$status] ?? 0));
+        $resolvedMilestones = $this->resolvedCountsForPeriods($worker->id, [
+            'today' => [now()->startOfDay(), now()->endOfDay()],
+            'week' => [now()->startOfWeek(), now()->endOfWeek()],
+            'month' => [now()->startOfMonth(), now()->endOfMonth()],
+        ]);
 
         $dailyActivity = $this->workerDailyActivity($worker->id, $rangeStart, $rangeEnd);
         $weeklyActivity = $this->workerWeeklyActivity($worker->id, $rangeStart, $rangeEnd);
@@ -95,15 +95,15 @@ class UserPageController extends Controller
                 'year' => 'This Year',
                 'all' => 'All Time',
             ],
-            'totalReports' => (clone $baseReports)->count(),
-            'activeReports' => (clone $baseReports)->whereIn('status', $activeStatuses)->count(),
-            'resolvedReports' => (clone $baseReports)->where('status', 'resolved')->count(),
-            'underInvestigationReports' => (clone $baseReports)->where('status', 'under_investigation')->count(),
-            'rejectedReports' => (clone $baseReports)->where('status', 'rejected')->count(),
-            'resolvedToday' => $this->resolvedCountBetween($worker->id, now()->startOfDay(), now()->endOfDay()),
-            'resolvedThisWeek' => $this->resolvedCountBetween($worker->id, now()->startOfWeek(), now()->endOfWeek()),
-            'resolvedThisMonth' => $this->resolvedCountBetween($worker->id, now()->startOfMonth(), now()->endOfMonth()),
-            'averageResolutionHours' => $resolutionHours->isNotEmpty() ? round($resolutionHours->avg(), 1) : null,
+            'totalReports' => $totalReports,
+            'activeReports' => $activeReports,
+            'resolvedReports' => (int) ($statusCounts['resolved'] ?? 0),
+            'underInvestigationReports' => (int) ($statusCounts['under_investigation'] ?? 0),
+            'rejectedReports' => (int) ($statusCounts['rejected'] ?? 0),
+            'resolvedToday' => $resolvedMilestones['today'],
+            'resolvedThisWeek' => $resolvedMilestones['week'],
+            'resolvedThisMonth' => $resolvedMilestones['month'],
+            'averageResolutionHours' => $this->workerAverageResolutionHours($baseReports),
             'statusCounts' => $statusCounts,
             'priorityCounts' => $priorityCounts,
             'dailyActivity' => $dailyActivity,
@@ -151,20 +151,18 @@ class UserPageController extends Controller
             $end = now()->endOfDay();
         }
 
+        $newWorkByDay = $this->createdActivityBuckets($workerId, $start, $end, 'day');
+        $resolvedByDay = $this->resolvedActivityBuckets($workerId, $start, $end, 'day');
+
         $rows = collect();
         $current = $start->copy();
-
         while ($current->lte($end)) {
-            $dayStart = $current->copy()->startOfDay();
-            $dayEnd = $current->copy()->endOfDay();
+            $key = $current->toDateString();
 
             $rows->push([
                 'label' => $current->format('M j'),
-                'new_work' => Issue::query()
-                    ->where('assigned_to', $workerId)
-                    ->whereBetween('created_at', [$dayStart, $dayEnd])
-                    ->count(),
-                'resolved' => $this->resolvedCountBetween($workerId, $dayStart, $dayEnd),
+                'new_work' => (int) ($newWorkByDay[$key] ?? 0),
+                'resolved' => (int) ($resolvedByDay[$key] ?? 0),
             ]);
 
             $current->addDay();
@@ -183,20 +181,20 @@ class UserPageController extends Controller
             $end = now()->endOfWeek();
         }
 
+        $newWorkByWeek = $this->createdActivityBuckets($workerId, $start, $end, 'week');
+        $resolvedByWeek = $this->resolvedActivityBuckets($workerId, $start, $end, 'week');
+
         $rows = collect();
         $current = $start->copy();
-
         while ($current->lte($end)) {
             $weekStart = $current->copy()->startOfWeek();
             $weekEnd = $current->copy()->endOfWeek();
+            $key = $weekStart->toDateString();
 
             $rows->push([
                 'label' => $weekStart->format('M j').' - '.$weekEnd->format('M j'),
-                'new_work' => Issue::query()
-                    ->where('assigned_to', $workerId)
-                    ->whereBetween('created_at', [$weekStart, $weekEnd])
-                    ->count(),
-                'resolved' => $this->resolvedCountBetween($workerId, $weekStart, $weekEnd),
+                'new_work' => (int) ($newWorkByWeek[$key] ?? 0),
+                'resolved' => (int) ($resolvedByWeek[$key] ?? 0),
             ]);
 
             $current->addWeek();
@@ -318,27 +316,72 @@ class UserPageController extends Controller
             ->with('status', 'User deleted successfully.');
     }
 
-    private function resolvedCountBetween(int $workerId, $start, $end): int
+    private function createdActivityBuckets(int $workerId, Carbon $start, Carbon $end, string $bucket)
     {
+        $expression = $bucket === 'week'
+            ? "DATE_TRUNC('week', created_at)::date"
+            : 'DATE(created_at)';
+
         return Issue::query()
             ->where('assigned_to', $workerId)
-            ->where(function ($query) use ($start, $end) {
-                $query->whereBetween('worker_resolved_at', [$start, $end])
-                    ->orWhere(function ($query) use ($start, $end) {
-                        $query->whereNull('worker_resolved_at')
-                            ->whereBetween('resolved_at', [$start, $end]);
-                    });
-            })
-            ->count();
+            ->whereBetween('created_at', [$start, $end])
+            ->selectRaw("{$expression} as bucket, COUNT(*) as total")
+            ->groupByRaw($expression)
+            ->orderByRaw($expression)
+            ->pluck('total', 'bucket');
     }
 
-    private function hoursBetween($start, $end): ?float
+    private function resolvedActivityBuckets(int $workerId, Carbon $start, Carbon $end, string $bucket)
     {
-        if (! $start || ! $end) {
-            return null;
+        $resolvedAt = 'COALESCE(worker_resolved_at, resolved_at)';
+        $expression = $bucket === 'week'
+            ? "DATE_TRUNC('week', {$resolvedAt})::date"
+            : "DATE({$resolvedAt})";
+
+        return Issue::query()
+            ->where('assigned_to', $workerId)
+            ->whereRaw("{$resolvedAt} IS NOT NULL")
+            ->whereRaw("{$resolvedAt} BETWEEN ? AND ?", [$start, $end])
+            ->selectRaw("{$expression} as bucket, COUNT(*) as total")
+            ->groupByRaw($expression)
+            ->orderByRaw($expression)
+            ->pluck('total', 'bucket');
+    }
+
+    private function resolvedCountsForPeriods(int $workerId, array $periods): array
+    {
+        $resolvedAt = 'COALESCE(worker_resolved_at, resolved_at)';
+        $selects = [];
+        $bindings = [];
+
+        foreach ($periods as $key => [$start, $end]) {
+            $selects[] = "SUM(CASE WHEN {$resolvedAt} BETWEEN ? AND ? THEN 1 ELSE 0 END) as {$key}";
+            $bindings[] = $start;
+            $bindings[] = $end;
         }
 
-        return round(Carbon::parse($start)->diffInMinutes(Carbon::parse($end)) / 60, 1);
+        $row = Issue::query()
+            ->where('assigned_to', $workerId)
+            ->whereRaw("{$resolvedAt} IS NOT NULL")
+            ->selectRaw(implode(', ', $selects), $bindings)
+            ->first();
+
+        return collect(array_keys($periods))
+            ->mapWithKeys(fn ($key) => [$key => (int) ($row->{$key} ?? 0)])
+            ->all();
+    }
+
+    private function workerAverageResolutionHours($baseReports): ?float
+    {
+        $resolvedAt = 'COALESCE(worker_resolved_at, resolved_at)';
+
+        $average = (clone $baseReports)
+            ->where('status', 'resolved')
+            ->whereRaw("{$resolvedAt} IS NOT NULL")
+            ->selectRaw("AVG(EXTRACT(EPOCH FROM ({$resolvedAt} - created_at)) / 3600) as average_hours")
+            ->value('average_hours');
+
+        return $average !== null ? round((float) $average, 1) : null;
     }
 
     private function displayName(array $data): string

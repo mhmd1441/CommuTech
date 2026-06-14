@@ -27,22 +27,30 @@ class DashboardPageController extends Controller
         $statusLabels = Issue::STATUSES;
         $priorityLabels = ['low', 'medium', 'high', 'critical'];
 
-        $statusCounts = $this->countIssuesBy('status', $statusLabels, $dateRange['start'], $dateRange['end']);
-        $priorityCounts = $this->countIssuesBy('priority', $priorityLabels, $dateRange['start'], $dateRange['end']);
-        $categoryCounts = $this->countIssuesBy('category', Issue::CATEGORIES, $dateRange['start'], $dateRange['end']);
+        $userSummary = $this->userSummary();
+        $issueSummary = $this->issueSummary($dateRange['start'], $dateRange['end'], $statusLabels);
+        $statusCounts = $this->formatCounts($statusLabels, $issueSummary['statusTotals']);
+        $priorityCounts = $this->formatCounts(
+            $priorityLabels,
+            $this->issueTotalsBy('priority', $dateRange['start'], $dateRange['end'])
+        );
+        $categoryCounts = $this->formatCounts(
+            Issue::CATEGORIES,
+            $this->issueTotalsBy('category', $dateRange['start'], $dateRange['end'])
+        );
         $trend = $this->issueTrend($dateRange['start'], $dateRange['end']);
 
         return view('admin.dashboard', [
             'summary' => [
-                'totalUsers' => User::count(),
-                'citizens' => User::withRole(User::ROLE_CITIZEN)->count(),
-                'workers' => User::withRole(User::ROLE_WORKER)->count(),
-                'admins' => User::withRole(User::ROLE_ADMIN)->count(),
-                'totalIssues' => $this->issuesInRange($dateRange['start'], $dateRange['end'])->count(),
-                'pendingIssues' => $this->issuesInRange($dateRange['start'], $dateRange['end'])->where('status', 'pending')->count(),
-                'inProgressIssues' => $this->issuesInRange($dateRange['start'], $dateRange['end'])->where('status', 'in_progress')->count(),
-                'resolvedIssues' => $this->issuesInRange($dateRange['start'], $dateRange['end'])->where('status', 'resolved')->count(),
-                'unassignedIssues' => $this->issuesInRange($dateRange['start'], $dateRange['end'])->whereNull('assigned_to')->count(),
+                'totalUsers' => $userSummary['totalUsers'],
+                'citizens' => $userSummary['citizens'],
+                'workers' => $userSummary['workers'],
+                'admins' => $userSummary['admins'],
+                'totalIssues' => $issueSummary['totalIssues'],
+                'pendingIssues' => $issueSummary['pendingIssues'],
+                'inProgressIssues' => $issueSummary['inProgressIssues'],
+                'resolvedIssues' => $issueSummary['resolvedIssues'],
+                'unassignedIssues' => $issueSummary['unassignedIssues'],
             ],
             'statusCounts' => $statusCounts,
             'priorityCounts' => $priorityCounts,
@@ -67,13 +75,74 @@ class DashboardPageController extends Controller
         ]);
     }
 
-    private function countIssuesBy(string $column, array $labels, Carbon $start, Carbon $end): array
+    private function userSummary(): array
     {
-        $counts = $this->issuesInRange($start, $end)
+        $row = DB::table('users')
+            ->leftJoin('role_user', 'users.id', '=', 'role_user.user_id')
+            ->leftJoin('roles', 'roles.id', '=', 'role_user.role_id')
+            ->selectRaw('COUNT(DISTINCT users.id) as total_users')
+            ->selectRaw('COUNT(DISTINCT CASE WHEN users.role = ? OR roles.name = ? THEN users.id END) as citizens', [
+                User::ROLE_CITIZEN,
+                User::ROLE_CITIZEN,
+            ])
+            ->selectRaw('COUNT(DISTINCT CASE WHEN users.role = ? OR roles.name = ? THEN users.id END) as workers', [
+                User::ROLE_WORKER,
+                User::ROLE_WORKER,
+            ])
+            ->selectRaw('COUNT(DISTINCT CASE WHEN users.role = ? OR roles.name = ? THEN users.id END) as admins', [
+                User::ROLE_ADMIN,
+                User::ROLE_ADMIN,
+            ])
+            ->first();
+
+        return [
+            'totalUsers' => (int) ($row->total_users ?? 0),
+            'citizens' => (int) ($row->citizens ?? 0),
+            'workers' => (int) ($row->workers ?? 0),
+            'admins' => (int) ($row->admins ?? 0),
+        ];
+    }
+
+    private function issueSummary(Carbon $start, Carbon $end, array $statuses): array
+    {
+        $selects = [
+            'COUNT(*) as total_issues',
+            'SUM(CASE WHEN assigned_to IS NULL THEN 1 ELSE 0 END) as unassigned_issues',
+        ];
+        $bindings = [];
+
+        foreach ($statuses as $status) {
+            $selects[] = "SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as {$status}_issues";
+            $bindings[] = $status;
+        }
+
+        $row = $this->issuesInRange($start, $end)
+            ->selectRaw(implode(', ', $selects), $bindings)
+            ->first();
+
+        $statusTotals = collect($statuses)
+            ->mapWithKeys(fn (string $status) => [$status => (int) ($row->{$status.'_issues'} ?? 0)]);
+
+        return [
+            'totalIssues' => (int) ($row->total_issues ?? 0),
+            'pendingIssues' => (int) ($statusTotals['pending'] ?? 0),
+            'inProgressIssues' => (int) ($statusTotals['in_progress'] ?? 0),
+            'resolvedIssues' => (int) ($statusTotals['resolved'] ?? 0),
+            'unassignedIssues' => (int) ($row->unassigned_issues ?? 0),
+            'statusTotals' => $statusTotals,
+        ];
+    }
+
+    private function issueTotalsBy(string $column, Carbon $start, Carbon $end)
+    {
+        return $this->issuesInRange($start, $end)
             ->select($column, DB::raw('count(*) as total'))
             ->groupBy($column)
             ->pluck('total', $column);
+    }
 
+    private function formatCounts(array $labels, $counts): array
+    {
         return collect($labels)
             ->map(fn (string $label) => [
                 'label' => $label,
@@ -85,12 +154,6 @@ class DashboardPageController extends Controller
 
     private function issueTrend(Carbon $start, Carbon $end): array
     {
-        $rows = $this->issuesInRange($start, $end)
-            ->selectRaw('DATE(created_at) as report_date, COUNT(*) as total')
-            ->groupBy('report_date')
-            ->orderBy('report_date')
-            ->pluck('total', 'report_date');
-
         $days = (int) $start->diffInDays($end);
         $bucket = match (true) {
             $days > 186 => 'month',
@@ -98,17 +161,19 @@ class DashboardPageController extends Controller
             default => 'day',
         };
 
-        $bucketedRows = $rows->reduce(function (array $totals, $total, string $date) use ($bucket) {
-            $key = match ($bucket) {
-                'month' => Carbon::parse($date)->startOfMonth()->toDateString(),
-                'week' => Carbon::parse($date)->startOfWeek()->toDateString(),
-                default => $date,
-            };
+        $expression = match ($bucket) {
+            'month' => "DATE_TRUNC('month', created_at)::date",
+            'week' => "DATE_TRUNC('week', created_at)::date",
+            default => 'DATE(created_at)',
+        };
 
-            $totals[$key] = ($totals[$key] ?? 0) + (int) $total;
-
-            return $totals;
-        }, []);
+        $bucketedRows = $this->issuesInRange($start, $end)
+            ->selectRaw("{$expression} as bucket_date, COUNT(*) as total")
+            ->groupByRaw($expression)
+            ->orderByRaw($expression)
+            ->pluck('total', 'bucket_date')
+            ->map(fn ($total) => (int) $total)
+            ->all();
 
         $points = [];
         $cursor = match ($bucket) {

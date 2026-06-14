@@ -231,7 +231,78 @@
             font-weight: 800;
         }
 
-        .pagination { margin-top: 16px; color: var(--muted); }
+        .pagination {
+            margin-top: 16px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .pagination nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .pagination nav > div:first-child {
+            display: none;
+        }
+
+        .pagination nav > div:last-child {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .pagination p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .pagination span,
+        .pagination a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 34px;
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid var(--line);
+            background: var(--panel-2);
+            color: var(--text);
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .pagination a:hover {
+            border-color: var(--blue);
+            color: #9bd4ff;
+        }
+
+        .pagination [aria-current="page"] span,
+        .pagination span[aria-current="page"] {
+            background: var(--blue);
+            border-color: var(--blue);
+            color: #fff;
+        }
+
+        .pagination [aria-disabled="true"] span,
+        .pagination span[aria-disabled="true"] {
+            opacity: .45;
+        }
+
+        .pagination svg {
+            width: 14px;
+            height: 14px;
+            display: block;
+        }
 
         @media (max-width: 1100px) {
             .app { grid-template-columns: 1fr; }
