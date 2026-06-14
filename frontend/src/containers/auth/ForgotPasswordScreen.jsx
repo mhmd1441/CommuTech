@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, StyleSheet, TextInput, Pressable,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
@@ -24,9 +24,9 @@ const STEPS = [
   { icon: "lock-closed-outline",    title: "New Password",       sub: "Choose a strong new password for your CommuTech account." },
 ];
 
-export default function ForgotPasswordScreen({ navigation }) {
+export default function ForgotPasswordScreen({ navigation, route }) {
   const [step, setStep]                 = useState(0);
-  const [email, setEmail]               = useState("");
+  const [email, setEmail]               = useState(route.params?.email ?? "");
   const [otp, setOtp]                   = useState("");
   const [password, setPassword]         = useState("");
   const [confirm, setConfirm]           = useState("");
@@ -34,6 +34,13 @@ export default function ForgotPasswordScreen({ navigation }) {
   const [secure2, setSecure2]           = useState(true);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
 
   const clearError = () => setError("");
 
@@ -43,8 +50,10 @@ export default function ForgotPasswordScreen({ navigation }) {
     try {
       setLoading(true); clearError();
       await authApi.sendOtp(trimmed);
+      setResendCooldown(60);
       setStep(1);
     } catch (e) {
+      if (e.retryAfter) setResendCooldown(e.retryAfter);
       setError(e.message || "Could not send code. Try again.");
     } finally {
       setLoading(false);
@@ -79,33 +88,73 @@ export default function ForgotPasswordScreen({ navigation }) {
   };
 
   const handleResend = async () => {
+    if (resendCooldown > 0) return;
     try {
       setLoading(true); clearError();
       await authApi.sendOtp(email.trim().toLowerCase());
-      setError("");
       setOtp("");
+      setResendCooldown(60);
     } catch (e) {
+      if (e.retryAfter) setResendCooldown(e.retryAfter);
       setError(e.message || "Could not resend code.");
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Password strength (step 2) ─────────────────────────────────────────────
+  const pwHasUpper   = /[A-Z]/.test(password);
+  const pwHasNumber  = /[0-9]/.test(password);
+  const pwLongEnough = password.length >= 8;
+  const pwScore      = [pwLongEnough, pwHasUpper, pwHasNumber].filter(Boolean).length;
+  const strengthMeta = password.length === 0 ? null
+    : pwScore === 1 ? { pct: 1, color: C.danger,  label: "Weak"   }
+    : pwScore === 2 ? { pct: 2, color: C.orange,  label: "Fair"   }
+    :                 { pct: 3, color: C.green,   label: "Strong" };
+  const passwordsMatch    = confirm.length > 0 && password === confirm;
+  const passwordsMismatch = confirm.length > 0 && password !== confirm;
+
   // ── Success screen ──────────────────────────────────────────────────────────
   if (step === 3) {
     return (
       <View style={styles.root}>
+        <View style={styles.successTopBg} />
         <View style={styles.successScreen}>
-          <View style={styles.successIconWrap}>
-            <Ionicons name="checkmark-circle" size={64} color={C.green} />
+
+          <View style={styles.successRingOuter}>
+            <View style={styles.successRingInner}>
+              <View style={styles.successIconCircle}>
+                <Ionicons name="checkmark" size={52} color="#fff" />
+              </View>
+            </View>
           </View>
+
           <Text style={styles.successTitle}>Password Reset!</Text>
           <Text style={styles.successSub}>
-            Your CommuTech password has been updated. You can now log in with your new password.
+            Your CommuTech password has been updated successfully.
           </Text>
-          <Pressable style={styles.primaryBtn} onPress={() => navigation.replace("Login")}>
-            <Text style={styles.primaryBtnText}>Back to Login</Text>
-          </Pressable>
+
+          <View style={styles.successCard}>
+            <View style={styles.successBadgeRow}>
+              <Ionicons name="shield-checkmark" size={16} color={C.green} />
+              <Text style={styles.successBadgeText}>Account Secured</Text>
+            </View>
+
+            <View style={styles.successDivider} />
+
+            <Pressable
+              style={({ pressed }) => [styles.successBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => navigation.replace("Login")}
+            >
+              <Ionicons name="log-in-outline" size={18} color="#fff" />
+              <Text style={styles.successBtnText}>Back to Login</Text>
+            </Pressable>
+
+            <Text style={styles.successHint}>
+              You can now sign in with your new password.
+            </Text>
+          </View>
+
         </View>
       </View>
     );
@@ -184,9 +233,16 @@ export default function ForgotPasswordScreen({ navigation }) {
                 maxLength={6}
                 style={styles.otpInput}
               />
-              <Pressable onPress={handleResend} disabled={loading} style={styles.resendRow}>
+              <Pressable
+                onPress={handleResend}
+                disabled={loading || resendCooldown > 0}
+                style={styles.resendRow}
+              >
                 <Text style={styles.resendText}>Didn't receive a code? </Text>
-                <Text style={styles.resendLink}>Resend</Text>
+                {resendCooldown > 0
+                  ? <Text style={[styles.resendLink, { color: C.muted }]}>Resend in {resendCooldown}s</Text>
+                  : <Text style={styles.resendLink}>Resend</Text>
+                }
               </Pressable>
             </>
           )}
@@ -195,7 +251,10 @@ export default function ForgotPasswordScreen({ navigation }) {
           {step === 2 && (
             <>
               <Text style={styles.label}>New password</Text>
-              <View style={styles.inputWrap}>
+              <View style={[
+                styles.inputWrap,
+                strengthMeta && { borderColor: strengthMeta.color },
+              ]}>
                 <Ionicons name="lock-closed-outline" size={18} color={C.muted} />
                 <TextInput
                   value={password}
@@ -211,8 +270,52 @@ export default function ForgotPasswordScreen({ navigation }) {
                 </Pressable>
               </View>
 
-              <Text style={[styles.label, { marginTop: 14 }]}>Confirm password</Text>
-              <View style={styles.inputWrap}>
+              {/* Strength bar */}
+              {strengthMeta && (
+                <View style={styles.strengthRow}>
+                  <View style={styles.strengthBars}>
+                    {[1, 2, 3].map((threshold) => (
+                      <View
+                        key={threshold}
+                        style={[
+                          styles.strengthSegment,
+                          { backgroundColor: pwScore >= threshold ? strengthMeta.color : C.border },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <Text style={[styles.strengthLabel, { color: strengthMeta.color }]}>
+                    {strengthMeta.label}
+                  </Text>
+                </View>
+              )}
+
+              {/* Requirements */}
+              <View style={styles.requirementsBox}>
+                {[
+                  { met: pwLongEnough, label: "At least 8 characters" },
+                  { met: pwHasUpper,   label: "One uppercase letter"  },
+                  { met: pwHasNumber,  label: "One number"            },
+                ].map(({ met, label }) => (
+                  <View key={label} style={styles.requirementRow}>
+                    <Ionicons
+                      name={met ? "checkmark-circle" : "ellipse-outline"}
+                      size={13}
+                      color={met ? C.green : C.muted}
+                    />
+                    <Text style={[styles.requirementText, { color: met ? C.green : C.muted }]}>
+                      {label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <Text style={[styles.label, { marginTop: 18 }]}>Confirm password</Text>
+              <View style={[
+                styles.inputWrap,
+                passwordsMatch    && { borderColor: C.green  },
+                passwordsMismatch && { borderColor: C.danger },
+              ]}>
                 <Ionicons name="shield-checkmark-outline" size={18} color={C.muted} />
                 <TextInput
                   value={confirm}
@@ -227,6 +330,20 @@ export default function ForgotPasswordScreen({ navigation }) {
                   <Ionicons name={secure2 ? "eye-outline" : "eye-off-outline"} size={18} color={C.muted} />
                 </Pressable>
               </View>
+
+              {/* Match status */}
+              {confirm.length > 0 && (
+                <View style={styles.matchRow}>
+                  <Ionicons
+                    name={passwordsMatch ? "checkmark-circle" : "close-circle"}
+                    size={13}
+                    color={passwordsMatch ? C.green : C.danger}
+                  />
+                  <Text style={[styles.matchText, { color: passwordsMatch ? C.green : C.danger }]}>
+                    {passwordsMatch ? "Passwords match" : "Passwords do not match"}
+                  </Text>
+                </View>
+              )}
             </>
           )}
 
@@ -329,18 +446,69 @@ const styles = StyleSheet.create({
   backToLogin: { marginTop: 12, alignItems: "center" },
   backToLoginText: { color: C.muted, fontWeight: "700", fontSize: 13 },
 
+  // Step 2 — strength & match
+  strengthRow: {
+    flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8,
+  },
+  strengthBars: { flex: 1, flexDirection: "row", gap: 4 },
+  strengthSegment: { flex: 1, height: 4, borderRadius: 2 },
+  strengthLabel: { fontSize: 12, fontWeight: "800", minWidth: 42, textAlign: "right" },
+  requirementsBox: { marginTop: 10, gap: 5 },
+  requirementRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  requirementText: { fontSize: 12, fontWeight: "600" },
+  matchRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  matchText: { fontSize: 12, fontWeight: "700" },
+
   // Success screen
+  successTopBg: {
+    position: "absolute", top: 0, left: 0, right: 0, height: "48%",
+    backgroundColor: "#EAF1F7",
+    borderBottomLeftRadius: 48, borderBottomRightRadius: 48,
+  },
   successScreen: {
-    flex: 1, alignItems: "center", justifyContent: "center", padding: 32,
+    flex: 1, alignItems: "center", justifyContent: "center", padding: 28,
   },
-  successIconWrap: {
-    width: 100, height: 100, borderRadius: 32,
-    backgroundColor: "#ECFDF5",
-    alignItems: "center", justifyContent: "center", marginBottom: 24,
+  successRingOuter: {
+    width: 168, height: 168, borderRadius: 84,
+    backgroundColor: "rgba(74,168,92,0.10)",
+    alignItems: "center", justifyContent: "center", marginBottom: 32,
   },
-  successTitle: { fontSize: 26, fontWeight: "900", color: C.text, marginBottom: 12 },
+  successRingInner: {
+    width: 128, height: 128, borderRadius: 64,
+    backgroundColor: "rgba(74,168,92,0.20)",
+    alignItems: "center", justifyContent: "center",
+  },
+  successIconCircle: {
+    width: 92, height: 92, borderRadius: 46,
+    backgroundColor: C.green,
+    alignItems: "center", justifyContent: "center",
+  },
+  successTitle: {
+    fontSize: 30, fontWeight: "900", color: C.text,
+    textAlign: "center", marginBottom: 10,
+  },
   successSub: {
-    fontSize: 14, color: C.muted, fontWeight: "600",
-    textAlign: "center", lineHeight: 22, marginBottom: 32,
+    fontSize: 15, color: C.muted, fontWeight: "600",
+    textAlign: "center", lineHeight: 24, marginBottom: 36,
+  },
+  successCard: {
+    width: "100%", backgroundColor: C.card,
+    borderRadius: 22, borderWidth: 1, borderColor: C.border,
+    padding: 20,
+  },
+  successBadgeRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, paddingBottom: 16,
+  },
+  successBadgeText: { color: C.green, fontWeight: "800", fontSize: 14 },
+  successDivider: { height: 1, backgroundColor: C.border, marginBottom: 16 },
+  successBtn: {
+    height: 54, borderRadius: 16, backgroundColor: C.navy,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+  },
+  successBtnText: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  successHint: {
+    marginTop: 14, textAlign: "center",
+    color: C.muted, fontWeight: "600", fontSize: 13,
   },
 });

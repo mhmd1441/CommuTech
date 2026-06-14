@@ -71,7 +71,9 @@ export const authApi = {
       const { data } = await api.post("/auth/forgot-password", { email });
       return data;
     } catch (error) {
-      throw apiError(error);
+      const err = apiError(error);
+      err.retryAfter = error.response?.data?.retry_after ?? 0;
+      throw err;
     }
   },
 
