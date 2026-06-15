@@ -10,6 +10,7 @@ import { initAuth } from "./src/services/api";
 import LoginScreen from "./src/containers/auth/LoginScreen.jsx";
 import SignupScreen from "./src/containers/auth/SignUpScreen.jsx";
 import ForgotPasswordScreen from "./src/containers/auth/ForgotPasswordScreen.jsx";
+import EmailVerificationScreen from "./src/containers/auth/EmailVerificationScreen.jsx";
 
 import CitizenHomeScreen from "./src/containers/citizen/CitizenHomeScreen.jsx";
 import CreateIssueScreen from "./src/containers/citizen/CreateIssueScreen";
@@ -49,6 +50,7 @@ export default function App() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
           <Stack.Screen name="CitizenHome" component={CitizenHomeScreen} />
           <Stack.Screen name="CreateIssue" component={CreateIssueScreen} />
           <Stack.Screen name="MyReports" component={MyReportsScreen} />

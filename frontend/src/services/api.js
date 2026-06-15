@@ -36,11 +36,8 @@ export const authApi = {
   async register(payload) {
     try {
       const { data } = await api.post("/auth/register", payload);
-      authToken = data.access_token;
-      authUser = data.user;
-      await AsyncStorage.multiRemove(["auth_token", "auth_user", "remember_auth"]);
-
-      return data;
+      // No token yet — user must verify email first
+      return data; // { message, email }
     } catch (error) {
       throw apiError(error);
     }
@@ -159,6 +156,31 @@ export async function initAuth() {
   }
   return null;
 }
+
+export const emailVerificationApi = {
+  async resend(email) {
+    try {
+      const { data } = await api.post("/auth/email/resend", { email });
+      return data;
+    } catch (error) {
+      const err = apiError(error);
+      err.retryAfter = error.response?.data?.retry_after ?? 0;
+      throw err;
+    }
+  },
+
+  async verify(email, otp) {
+    try {
+      const { data } = await api.post("/auth/email/verify", { email, otp });
+      authToken = data.access_token;
+      authUser = data.user;
+      await AsyncStorage.multiRemove(["auth_token", "auth_user", "remember_auth"]);
+      return data;
+    } catch (error) {
+      throw apiError(error);
+    }
+  },
+};
 
 export const profileApi = {
   async changePassword(currentPassword, newPassword) {

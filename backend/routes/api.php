@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\IssueController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MlController;
@@ -19,12 +20,19 @@ Route::get('/health', fn () => [
 
 Route::get('/categories', [MetaController::class, 'categories']);
 
-Route::prefix('auth')->controller(AuthController::class)->group(function () {
-    Route::post('/register', 'register');
-    Route::post('/login', 'login')->middleware('throttle:10,1');
-    Route::post('/forgot-password', 'forgotPassword')->middleware('throttle:5,1');
-    Route::post('/verify-otp', 'verifyOtp')->middleware('throttle:5,1');
-    Route::post('/reset-password', 'resetPassword')->middleware('throttle:5,1');
+Route::prefix('auth')->group(function () {
+    Route::controller(AuthController::class)->group(function () {
+        Route::post('/register', 'register')->middleware('throttle:5,1');
+        Route::post('/login', 'login')->middleware('throttle:10,1');
+        Route::post('/forgot-password', 'forgotPassword')->middleware('throttle:5,1');
+        Route::post('/verify-otp', 'verifyOtp')->middleware('throttle:5,1');
+        Route::post('/reset-password', 'resetPassword')->middleware('throttle:5,1');
+    });
+
+    Route::controller(EmailVerificationController::class)->prefix('email')->middleware('throttle:5,1')->group(function () {
+        Route::post('/resend', 'resend');
+        Route::post('/verify', 'verify');
+    });
 });
 
 Broadcast::routes(['middleware' => ['auth:sanctum']]);
