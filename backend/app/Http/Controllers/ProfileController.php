@@ -107,13 +107,17 @@ class ProfileController extends Controller
 
     private function stats(Request $request): array
     {
-        $issues = $request->user()->issues();
+        $stats = $request->user()
+            ->issues()
+            ->selectRaw('COUNT(*) as submitted')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END), 0) as resolved")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0) as in_progress")
+            ->first();
 
         return [
-            'submitted' => (clone $issues)->count(),
-            'resolved' => (clone $issues)->where('status', 'resolved')->count(),
-            'in_progress' => (clone $issues)->where('status', 'in_progress')->count(),
-            'points' => (clone $issues)->where('status', 'resolved')->count() * 20,
+            'submitted' => (int) ($stats->submitted ?? 0),
+            'resolved' => (int) ($stats->resolved ?? 0),
+            'in_progress' => (int) ($stats->in_progress ?? 0),
         ];
     }
 

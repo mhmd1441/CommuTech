@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import BottomNav from "../shared/BottomNav";
+import JumpingDots from "../shared/LoadingPage/JumpingDots";
 import api, { getAuthUser, setAuthUser as setStoredAuthUser, profileApi } from "../../services/api";
 import { disconnectPusher } from "../../services/echo";
 import { loadAppPreferences, setAppPreference } from "../../services/preferences";
@@ -42,7 +43,6 @@ const EMPTY_STATS = {
   submitted: 0,
   resolved: 0,
   inProgress: 0,
-  points: 0,
 };
 
 const roleLabel = (role) => role.charAt(0).toUpperCase() + role.slice(1);
@@ -115,6 +115,10 @@ function formatDistrict(profile) {
   return [profile.area, profile.city].filter(Boolean).join(', ') || profile.city || 'No district yet';
 }
 
+function hasVerifiedProfileSnapshot(profile) {
+  return Boolean(profile.email && profile.profile_picture_url && profile.is_verified);
+}
+
 function formatJoinDate(date) {
   if (!date) return '';
 
@@ -156,9 +160,15 @@ function getRoleNames(user) {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-const StatBox = ({ label, value, color }) => (
+const StatBox = ({ label, value, color, loading }) => (
   <View style={styles.statBox}>
-    <Text style={[styles.statValue, { color: color || C.navy }]}>{value}</Text>
+    {loading ? (
+      <View style={styles.statLoading}>
+        <JumpingDots color={color || C.navy} />
+      </View>
+    ) : (
+      <Text style={[styles.statValue, { color: color || C.navy }]}>{value}</Text>
+    )}
     <Text style={styles.statLabel}>{label}</Text>
   </View>
 );
@@ -211,13 +221,16 @@ const MenuToggle = ({ icon, iconColor = C.navy, label, value, onToggle }) => (
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 function ProfileScreen({ navigation }) {
   const initialProfile = normalizeProfile(getAuthUser() || {});
+  const initialProfileNeedsRefresh = !hasVerifiedProfileSnapshot(initialProfile);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
   const [authUser, setAuthUserState] = useState(getAuthUser());
   const [stats, setStats] = useState(EMPTY_STATS);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [personalInfo, setPersonalInfo] = useState(initialProfile);
   const [profileForm, setProfileForm] = useState(initialProfile);
+  const [profileLoading, setProfileLoading] = useState(initialProfileNeedsRefresh);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -256,14 +269,19 @@ function ProfileScreen({ navigation }) {
           submitted: data.stats?.submitted ?? EMPTY_STATS.submitted,
           resolved: data.stats?.resolved ?? EMPTY_STATS.resolved,
           inProgress: data.stats?.in_progress ?? EMPTY_STATS.inProgress,
-          points: data.stats?.points ?? EMPTY_STATS.points,
         });
+        setStatsLoading(false);
         const profile = normalizeProfile(user);
         setPersonalInfo(profile);
         setProfileForm(profile);
         setDistrict(formatDistrict(profile));
       } catch (error) {
         console.error('Failed to load profile:', error);
+        setStatsLoading(false);
+      } finally {
+        if (isMounted) {
+          setProfileLoading(false);
+        }
       }
     };
 
@@ -280,8 +298,8 @@ function ProfileScreen({ navigation }) {
   const displayRole = roleNames.length > 0 ? roleNames.map(roleLabel).join(' / ') : 'Citizen';
   const currentDisplayName = displayName(personalInfo);
   const avatarUrl = personalInfo.profile_picture_url;
-  const verificationLabel = personalInfo.is_verified ? 'Verified' : 'Complete profile';
-  const verificationColor = personalInfo.is_verified ? C.green : C.orange;
+  const verificationLabel = profileLoading ? 'Checking profile' : personalInfo.is_verified ? 'Verified' : 'Complete profile';
+  const verificationColor = profileLoading ? C.muted : personalInfo.is_verified ? C.green : C.orange;
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -452,7 +470,11 @@ function ProfileScreen({ navigation }) {
             onPress={handlePickProfilePicture}
             disabled={uploadingAvatar}
           >
-            {avatarUrl ? (
+            {profileLoading && !avatarUrl ? (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <JumpingDots color={C.navy} size={6} />
+              </View>
+            ) : avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
@@ -495,13 +517,11 @@ function ProfileScreen({ navigation }) {
 
         {/* ── Stats ── */}
         <View style={styles.statsCard}>
-          <StatBox label="Submitted" value={stats.submitted} />
+          <StatBox label="Submitted" value={stats.submitted} loading={statsLoading} />
           <View style={styles.statsDiv} />
-          <StatBox label="Resolved" value={stats.resolved} color={C.green} />
+          <StatBox label="Resolved" value={stats.resolved} color={C.green} loading={statsLoading} />
           <View style={styles.statsDiv} />
-          <StatBox label="In Progress" value={stats.inProgress} color={C.orange} />
-          <View style={styles.statsDiv} />
-          <StatBox label="Points" value={stats.points} color={C.navy} />
+          <StatBox label="In Progress" value={stats.inProgress} color={C.orange} loading={statsLoading} />
         </View>
 
         {/* ── Account ── */}
@@ -857,14 +877,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: C.border,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
     marginBottom: 20,
     alignItems: 'center',
   },
-  statBox: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '800' },
-  statLabel: { fontSize: 10, color: C.muted, marginTop: 3, fontWeight: '500' },
-  statsDiv: { width: 1, height: 36, backgroundColor: C.border },
+  statBox: { flex: 1, alignItems: 'center', gap: 4 },
+  statValue: { fontSize: 22, fontWeight: '850' },
+  statLoading: { minHeight: 27, alignItems: 'center', justifyContent: 'center' },
+  statLabel: { fontSize: 11, color: C.muted, fontWeight: '700' },
+  statsDiv: { width: 1, height: 40, backgroundColor: C.border },
 
   // Menu
   menuGroup: { marginBottom: 12 },

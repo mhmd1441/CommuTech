@@ -76,6 +76,35 @@ function getCoordsFromLocation(location) {
   return { latitude: 33.8938 + (Math.random() - 0.5) * 0.05, longitude: 35.5018 + (Math.random() - 0.5) * 0.05 };
 }
 
+function IssueListImage({ imageUrl }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  if (!imageUrl || failed) {
+    return (
+      <View style={[styles.issueImage, styles.noImage]}>
+        <Ionicons name="image-outline" size={24} color={COLORS.muted} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.issueImageFrame}>
+      {!loaded && (
+        <View style={styles.issueImageLoader}>
+          <ActivityIndicator size="small" color={COLORS.navy} />
+        </View>
+      )}
+      <Image
+        source={{ uri: imageUrl }}
+        style={[styles.issueImage, !loaded && styles.issueImageHidden]}
+        onLoadEnd={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </View>
+  );
+}
+
 export default function CitizenHomeScreen({ navigation }) {
   const [viewMode, setViewMode] = useState("map");
   const [selectedFilter, setSelectedFilter] = useState("All");
@@ -340,31 +369,23 @@ export default function CitizenHomeScreen({ navigation }) {
                   onPress={() => navigation.navigate("IssueDetails", { issue })}
                   style={styles.issueCard}
                 >
-                  {issue.image_url ? (
-                    <Image source={{ uri: issue.image_url }} style={styles.issueImage} />
-                  ) : (
-                    <View style={[styles.issueImage, styles.noImage]}>
-                      <Ionicons name="image-outline" size={32} color={COLORS.muted} />
-                    </View>
-                  )}
                   <View style={styles.issueRight}>
-                    <View style={styles.topMetaRow}>
+                    <View style={styles.cardHeaderRow}>
                       <Text style={[styles.statusText, { color: getStatusColor(issue.status) }]}>
                         {formatStatus(issue.status)}
                       </Text>
-                    </View>
-                    <View style={styles.titlePriorityRow}>
-                      <Text style={styles.issueTitle} numberOfLines={1}>{issue.title}</Text>
-                      <Text style={[styles.priorityText, { color: getPriorityColor(issue.priority) }]}>
+                      <Text style={[styles.priorityChip, { color: getPriorityColor(issue.priority), borderColor: getPriorityColor(issue.priority) + "35" }]}>
                         {issue.priority}
                       </Text>
                     </View>
+                    <Text style={styles.issueTitle} numberOfLines={1}>{issue.title}</Text>
                     <Text style={styles.issueDescription} numberOfLines={2}>{issue.description}</Text>
                     <View style={styles.bottomMetaRow}>
                       <Text style={styles.metaText}>{issue.location}</Text>
                       <Text style={styles.metaText}>{formatDate(issue.created_at)}</Text>
                     </View>
                   </View>
+                  <IssueListImage imageUrl={issue.image_url} />
                 </Pressable>
               ))
             )}
@@ -423,19 +444,52 @@ const styles = StyleSheet.create({
   calloutCategory: { fontSize: 12, color: COLORS.muted, fontWeight: "700" },
   calloutPriority: { fontSize: 12, fontWeight: "900", marginTop: 2 },
   calloutTap: { marginTop: 6, fontSize: 11, color: COLORS.navy, fontWeight: "700" },
-  listWrap: { gap: 14 },
-  issueCard: { flexDirection: "row", backgroundColor: "#fff", borderWidth: 1, borderColor: COLORS.border, borderRadius: 18, overflow: "hidden" },
-  issueImage: { width: 118, height: 132 },
+  listWrap: { gap: 12 },
+  issueCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    padding: 12,
+  },
+  issueImage: { width: 76, height: 76, borderRadius: 16 },
+  issueImageFrame: {
+    width: 76,
+    height: 76,
+    borderRadius: 16,
+    backgroundColor: "#EEF3F8",
+    position: "relative",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  issueImageLoader: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEF3F8",
+  },
+  issueImageHidden: { opacity: 0 },
   noImage: { alignItems: "center", justifyContent: "center", backgroundColor: "#EEF3F8" },
-  issueRight: { flex: 1, padding: 12 },
-  topMetaRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 6 },
+  issueRight: { flex: 1, minWidth: 0 },
+  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 5 },
   statusText: { fontWeight: "800", fontSize: 12 },
-  titlePriorityRow: { flexDirection: "row", justifyContent: "space-between", gap: 8, alignItems: "center" },
-  issueTitle: { flex: 1, fontSize: 15, fontWeight: "900", color: COLORS.text },
-  priorityText: { fontSize: 12, fontWeight: "900" },
-  issueDescription: { marginTop: 8, color: COLORS.muted, fontWeight: "600", lineHeight: 18 },
-  bottomMetaRow: { marginTop: 12, flexDirection: "row", justifyContent: "space-between" },
-  metaText: { flex: 1, fontSize: 12, color: COLORS.muted, fontWeight: "700" },
+  priorityChip: {
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "capitalize",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  issueTitle: { fontSize: 15, fontWeight: "900", color: COLORS.text },
+  issueDescription: { marginTop: 5, color: COLORS.muted, fontWeight: "600", lineHeight: 17, fontSize: 12 },
+  bottomMetaRow: { marginTop: 9, flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  metaText: { flex: 1, fontSize: 11, color: COLORS.muted, fontWeight: "700" },
   emptyWrap: { alignItems: "center", marginTop: 60, gap: 12 },
   emptyText: { color: COLORS.muted, fontWeight: "700", fontSize: 16 },
 });

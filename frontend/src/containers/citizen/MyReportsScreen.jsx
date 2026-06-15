@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  ScrollView,
   Image,
   RefreshControl,
   StatusBar,
@@ -15,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import BottomNav from "../shared/BottomNav";
+import ReportsLoadingAnimation from "../shared/LoadingPage/ReportsLoadingAnimation";
 import api from "../../services/api";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
@@ -262,26 +262,7 @@ export default function MyReportsScreen({ navigation }) {
 
       {/* List */}
       {loading ? (
-        <ScrollView
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {[1, 2, 3].map((i) => (
-            <View key={i} style={styles.card}>
-              <View style={[styles.cardAccent, { backgroundColor: C.border }]} />
-              <View style={[styles.cardImage, { backgroundColor: '#EEF3F8' }]} />
-              <View style={styles.cardBody}>
-                <View style={styles.rowBetween}>
-                  <View style={[styles.skeletonLine, { width: '55%', height: 13 }]} />
-                  <View style={[styles.skeletonLine, { width: '20%', height: 13 }]} />
-                </View>
-                <View style={[styles.skeletonLine, { width: '90%', marginTop: 8 }]} />
-                <View style={[styles.skeletonLine, { width: '70%', marginTop: 6 }]} />
-                <View style={[styles.skeletonLine, { width: '35%', marginTop: 10 }]} />
-              </View>
-            </View>
-          ))}
-        </ScrollView>
+        <ReportsLoadingAnimation />
       ) : (
         <FlatList
           data={filtered}
@@ -509,13 +490,6 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   rejectText: { fontSize: 10, color: C.red, fontWeight: '600' },
-
-  // Skeleton
-  skeletonLine: {
-    height: 11,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 6,
-  },
 
   // Empty
   emptyState: { alignItems: 'center', paddingTop: 60, gap: 10 },

@@ -122,6 +122,22 @@ export function getAuthUser() {
 
 export function setAuthUser(user) {
   authUser = user;
+
+  AsyncStorage.getItem("remember_auth")
+    .then((rememberAuth) => {
+      if (rememberAuth === "1" && user) {
+        return AsyncStorage.setItem("auth_user", JSON.stringify(user));
+      }
+
+      if (!user) {
+        return AsyncStorage.removeItem("auth_user");
+      }
+
+      return null;
+    })
+    .catch(() => {
+      // Keep the in-memory user even if local storage is unavailable.
+    });
 }
 
 export async function initAuth() {

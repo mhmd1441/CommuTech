@@ -27,101 +27,102 @@ const SECTIONS = [
     icon: "list-outline",
     title: "Data CommuTech Collects",
     bullets: [
-      "Account details: first name, last name, email, phone number, governorate, and password (stored as a secure hash — never in plain text).",
-      "Profile details: father name, city, street, building, and profile picture (all optional).",
-      "Report content: issue title, description, category, photos, and GPS coordinates you submit.",
-      "Location data: GPS coordinates collected only at the moment of report submission, with your explicit permission. CommuTech does not track your location in the background.",
-      "Usage data: actions inside the app such as reports submitted, notifications received, and status updates viewed.",
+      "Account information: your name, email address, phone number, governorate or city, and encrypted login credentials. Passwords are stored as secure hashes and are never stored in plain text.",
+      "Profile information: father or middle name, address details, verification status, and profile photo when you choose to provide them.",
+      "Report information: issue title, description, category, priority, status, photos, location text, and GPS coordinates when submitted.",
+      "Location information: GPS coordinates are collected only when you actively use location features, such as identifying your current location while submitting a report. CommuTech does not track your location in the background.",
+      "Service activity: reports submitted, notifications received, status updates viewed, and similar actions required to operate the platform.",
     ],
   },
   {
     icon: "help-circle-outline",
     title: "Why CommuTech Collects This",
     bullets: [
-      "To create and manage your account.",
-      "To process civic reports and route them to the correct municipal workers.",
-      "To send you status notifications about your submitted reports.",
-      "To display issues on the civic map for transparency and tracking.",
-      "To improve platform accuracy and service quality over time.",
-      "To comply with applicable Lebanese laws and regulations.",
+      "To create, secure, and manage your account.",
+      "To verify user profiles and reduce misuse of the reporting system.",
+      "To process civic reports and make them available to the appropriate workers, administrators, or municipal authorities.",
+      "To notify you about report status changes, review outcomes, and important platform updates.",
+      "To display civic issues on the map and report history screens for transparency and follow-up.",
+      "To improve service reliability, reporting accuracy, and operational decision-making.",
+      "To comply with applicable laws, regulations, and lawful requests.",
     ],
   },
   {
     icon: "server-outline",
     title: "How Your Data Is Stored",
     content:
-      "All data is stored securely on Supabase cloud infrastructure hosted in the EU (North Europe region), which follows industry-standard encryption at rest and in transit.\n\nPasswords are hashed using bcrypt and are never readable — not even by administrators.\n\nPhotos submitted with reports are stored in Supabase Storage and are accessible via public URLs to enable display within the app.",
+      "CommuTech stores application data using Supabase cloud infrastructure hosted in the EU North region. Data is protected using modern security practices, including encrypted connections during transmission.\n\nPasswords are hashed using bcrypt and cannot be read by administrators or platform operators.\n\nPhotos submitted with reports are stored in Supabase Storage. They may be served through public URLs so they can be displayed inside the mobile app and admin dashboard.",
   },
   {
     icon: "people-outline",
     title: "Who Can See Your Data",
     bullets: [
-      "Assigned workers: can see your report content, photos, and location. Your name may be visible to them for follow-up.",
-      "Administrators: can access all reports and user accounts for moderation and platform operations.",
-      "Municipal authorities: may receive anonymized or attributed report data to facilitate infrastructure repairs.",
+      "Workers may view report details, photos, and location information for issues assigned to them or available within their authorized area.",
+      "Administrators may access user accounts, reports, photos, assignments, and audit information for moderation, verification, and platform operations.",
+      "Municipal authorities may receive report information needed to review, prioritize, or resolve civic infrastructure issues.",
     ],
-    note: "CommuTech does not sell, rent, or trade your personal information to any third party for commercial purposes.",
+    note: "CommuTech does not sell, rent, or trade your personal information for commercial advertising purposes.",
   },
   {
     icon: "location-outline",
     title: "Location Data",
     content:
-      "CommuTech requests GPS access only when you are actively submitting a report. You may also type a location manually without granting GPS access at all. CommuTech never collects background location data.",
+      "CommuTech requests GPS permission only when a location-based feature is used. You may type a location manually instead of granting GPS access. The app does not collect background location data or continuously track your device.",
   },
   {
     icon: "image-outline",
     title: "Photos and Media",
     content:
-      "Photos you attach to reports are stored permanently as part of the civic record. They are visible to workers, administrators, and potentially municipal authorities. Once a report has been acted upon, its photos may not be deleted.",
+      "Photos attached to reports help workers and administrators understand the issue. These photos may become part of the civic record and may remain available after a report is reviewed or resolved. Only upload photos that are relevant to the reported issue and that you are comfortable sharing with authorized platform users.",
   },
   {
     icon: "time-outline",
     title: "Data Retention",
     bullets: [
-      "Active reports and associated data are retained indefinitely as part of the civic record.",
-      "If you request account deletion, your personal identifying information will be removed within 30 days.",
-      "Anonymized report data (location, category, resolution notes) may be retained for statistical purposes after account deletion.",
+      "Active reports and related operational records may be retained as part of the civic reporting history.",
+      "If you request account deletion, CommuTech will remove or anonymize personal identifying information within 30 days, unless retention is required for legal, security, or operational reasons.",
+      "Anonymized report data, such as category, location area, status, and resolution information, may be retained for analytics and service improvement.",
     ],
   },
   {
     icon: "shield-checkmark-outline",
     title: "Your Rights",
     bullets: [
-      "Access the personal data CommuTech holds about you.",
-      "Request correction of inaccurate information.",
-      "Request deletion of your account and personal data.",
-      "Withdraw GPS location consent at any time through your device settings.",
+      "Request access to the personal data associated with your account.",
+      "Request correction of inaccurate or incomplete profile information.",
+      "Request deletion of your account and applicable personal data.",
+      "Withdraw location permission at any time through your device settings.",
     ],
-    note: "To exercise any of these rights, contact: privacy@commutech.lb",
+    note: "To exercise these rights, contact: privacy@commutech.lb",
   },
   {
     icon: "person-remove-outline",
     title: "Children's Privacy",
     content:
-      "CommuTech is not directed at children under the age of 13. CommuTech does not knowingly collect personal data from children. If you believe a child has created an account, contact privacy@commutech.lb and the account will be deleted promptly.",
+      "CommuTech is not intended for children under the age of 13. The platform does not knowingly collect personal data from children. If you believe that a child has created an account, contact privacy@commutech.lb so the account can be reviewed and removed where appropriate.",
   },
   {
     icon: "lock-closed-outline",
     title: "Security",
     content:
-      "CommuTech implements appropriate technical and organizational measures to protect your personal data against unauthorized access, alteration, or disclosure. However, no method of transmission over the internet is 100% secure.",
+      "CommuTech applies reasonable technical and organizational safeguards to protect personal data against unauthorized access, alteration, disclosure, or loss. However, no internet-based service can guarantee absolute security.",
   },
   {
     icon: "refresh-outline",
     title: "Changes to This Policy",
     content:
-      "CommuTech may update this Privacy Policy periodically. You will be notified through the app when significant changes are made. Continued use of CommuTech after updates constitutes acceptance of the revised policy.",
+      "CommuTech may update this Privacy Policy from time to time. When material changes are made, users may be notified through the app or another appropriate channel. Continued use of CommuTech after an update means you accept the revised policy.",
   },
   {
     icon: "globe-outline",
     title: "Governing Law",
     content:
-      "This Privacy Policy is governed by the laws of the Republic of Lebanon. Any disputes shall be subject to the exclusive jurisdiction of Lebanese courts.",
+      "This Privacy Policy is governed by the laws of the Republic of Lebanon. Any dispute relating to this policy shall be subject to the competent courts of Lebanon.",
   },
   {
     icon: "mail-outline",
     title: "Contact",
-    content: "For any questions or data requests:\n\nEmail: privacy@commutech.lb\nLocation: Beirut, Lebanon",
+    content: "For privacy questions or data requests:\n\nEmail: privacy@commutech.lb\nLocation: Beirut, Lebanon",
   },
 ];
 
@@ -182,22 +183,20 @@ export default function PrivacyPolicyScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Banner */}
         <View style={styles.banner}>
           <View style={styles.bannerIconWrap}>
             <Ionicons name="shield-checkmark" size={36} color={C.navy} />
           </View>
           <Text style={styles.bannerTitle}>Your Privacy Matters</Text>
           <Text style={styles.bannerSub}>
-            CommuTech is committed to protecting your personal data. Tap any section below to read more.
+            CommuTech respects your privacy and explains clearly how your information is collected, used, stored, and protected.
           </Text>
           <View style={styles.bannerMeta}>
             <Ionicons name="calendar-outline" size={13} color={C.muted} />
-            <Text style={styles.bannerMetaText}>Last updated: May 2026</Text>
+            <Text style={styles.bannerMetaText}>Last updated: June 2026</Text>
           </View>
         </View>
 
-        {/* Accordion sections */}
         <View style={styles.sections}>
           {SECTIONS.map((section, i) => (
             <AccordionSection key={i} section={section} index={i} />

@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   StatusBar,
@@ -13,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import BottomNav from "../shared/BottomNav";
+import ReportHistoryLoadingAnimation from "../shared/LoadingPage/ReportHistoryLoadingAnimation";
 import api from "../../services/api";
 
 const C = {
@@ -243,10 +243,7 @@ export default function ReportHistoryScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={C.navy} />
-          <Text style={styles.loadingText}>Loading history...</Text>
-        </View>
+        <ReportHistoryLoadingAnimation />
       ) : (
         <FlatList
           data={rows}
@@ -385,8 +382,6 @@ const styles = StyleSheet.create({
   },
   statusText: { fontSize: 10, fontWeight: "900" },
   metaText: { flex: 1, color: C.muted, fontSize: 11, fontWeight: "800" },
-  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
-  loadingText: { color: C.muted, fontWeight: "800" },
   emptyState: { alignItems: "center", paddingTop: 70, gap: 10 },
   emptyIcon: {
     width: 72,
