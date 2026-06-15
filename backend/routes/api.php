@@ -21,10 +21,10 @@ Route::get('/categories', [MetaController::class, 'categories']);
 
 Route::prefix('auth')->controller(AuthController::class)->group(function () {
     Route::post('/register', 'register');
-    Route::post('/login', 'login');
-    Route::post('/forgot-password', 'forgotPassword');
-    Route::post('/verify-otp', 'verifyOtp');
-    Route::post('/reset-password', 'resetPassword');
+    Route::post('/login', 'login')->middleware('throttle:10,1');
+    Route::post('/forgot-password', 'forgotPassword')->middleware('throttle:5,1');
+    Route::post('/verify-otp', 'verifyOtp')->middleware('throttle:5,1');
+    Route::post('/reset-password', 'resetPassword')->middleware('throttle:5,1');
 });
 
 Broadcast::routes(['middleware' => ['auth:sanctum']]);
