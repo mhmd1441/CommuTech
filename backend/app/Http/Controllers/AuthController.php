@@ -6,12 +6,13 @@ use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Mail\OtpMail;
-use App\Models\CommuTechNotification;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -19,37 +20,49 @@ class AuthController extends Controller
     public function register(RegisterRequest $request)
     {
         $data = $request->validated();
-        $name = trim($data['first_name'].' '.$data['last_name']);
+        $email = strtolower($data['email']);
 
-        $user = User::create([
-            'name' => $name,
+        // Store registration data in cache — user is only created after email is verified
+        Cache::put("pending_reg_{$email}", [
             'first_name' => $data['first_name'],
-            'last_name' => $data['last_name'],
-            'email' => strtolower($data['email']),
-            'role' => User::ROLE_CITIZEN,
-            'phone' => $data['phone'] ?? null,
-            'country' => 'Lebanon',
-            'city' => $data['city'],
-            'password' => $data['password'],
+            'last_name'  => $data['last_name'],
+            'phone'      => $data['phone'] ?? null,
+            'city'       => $data['city'],
+            'password'   => $data['password'],
+        ], now()->addMinutes(15));
+
+        $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        if (app()->isLocal()) {
+            \Log::info("Email verification OTP for {$email}: {$otp}");
+        }
+
+        DB::table('password_reset_otps')
+            ->where('email', $email)
+            ->where('type', 'email_verification')
+            ->delete();
+
+        DB::table('password_reset_otps')->insert([
+            'email'               => $email,
+            'type'                => 'email_verification',
+            'otp'                 => Hash::make($otp),
+            'attempts'            => 0,
+            'expires_at'          => now()->addMinutes(10),
+            'resend_available_at' => now()->addSeconds(60),
+            'created_at'          => now(),
+            'updated_at'          => now(),
         ]);
 
-        $user->syncRolesByName([User::ROLE_CITIZEN]);
-
-        $notification = CommuTechNotification::create([
-            'user_id'        => $user->id,
-            'type'           => 'system',
-            'recipient_role' => 'citizen',
-            'title'          => 'Welcome to CommuTech',
-            'body'           => 'Your CommuTech account is ready. You can now submit and track civic reports.',
-        ]);
-        try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
+        try {
+            Mail::to($email)->send(new \App\Mail\EmailVerificationMail($otp, $data['first_name']));
+        } catch (\Throwable $e) {
+            \Log::warning('Verification email failed: '.$e->getMessage());
+        }
 
         return response()->json([
-            'message' => 'Account created successfully.',
-            'user' => $user->fresh()->load('roles'),
-            'access_token' => $user->createToken('mobile')->plainTextToken,
-            'token_type' => 'Bearer',
-        ], 201);
+            'message' => 'Check your email for a 6-digit verification code.',
+            'email'   => $email,
+        ]);
     }
 
     public function login(LoginRequest $request)
@@ -84,7 +97,10 @@ class AuthController extends Controller
         $user  = User::where('email', $email)->first();
 
         if ($user) {
-            $existing = DB::table('password_reset_otps')->where('email', $email)->first();
+            $existing = DB::table('password_reset_otps')
+                ->where('email', $email)
+                ->where('type', 'password_reset')
+                ->first();
 
             if ($existing && $existing->resend_available_at && now()->isBefore($existing->resend_available_at)) {
                 $secondsLeft = (int) now()->diffInSeconds($existing->resend_available_at);
@@ -97,15 +113,20 @@ class AuthController extends Controller
 
             $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-            DB::table('password_reset_otps')->where('email', $email)->delete();
+            DB::table('password_reset_otps')
+                ->where('email', $email)
+                ->where('type', 'password_reset')
+                ->delete();
+
             DB::table('password_reset_otps')->insert([
-                'email'                => $email,
-                'otp'                  => Hash::make($otp),
-                'attempts'             => 0,
-                'expires_at'           => now()->addMinutes(10),
-                'resend_available_at'  => now()->addSeconds(60),
-                'created_at'           => now(),
-                'updated_at'           => now(),
+                'email'               => $email,
+                'type'                => 'password_reset',
+                'otp'                 => Hash::make($otp),
+                'attempts'            => 0,
+                'expires_at'          => now()->addMinutes(10),
+                'resend_available_at' => now()->addSeconds(60),
+                'created_at'          => now(),
+                'updated_at'          => now(),
             ]);
 
             try {
@@ -128,7 +149,10 @@ class AuthController extends Controller
         ]);
 
         $email  = strtolower($data['email']);
-        $record = DB::table('password_reset_otps')->where('email', $email)->first();
+        $record = DB::table('password_reset_otps')
+            ->where('email', $email)
+            ->where('type', 'password_reset')
+            ->first();
 
         if (! $record || now()->isAfter($record->expires_at)) {
             throw ValidationException::withMessages([
@@ -137,7 +161,10 @@ class AuthController extends Controller
         }
 
         if ($record->attempts >= 5) {
-            DB::table('password_reset_otps')->where('email', $email)->delete();
+            DB::table('password_reset_otps')
+                ->where('email', $email)
+                ->where('type', 'password_reset')
+                ->delete();
             throw ValidationException::withMessages([
                 'otp' => ['Too many failed attempts. Please request a new code.'],
             ]);
@@ -145,13 +172,16 @@ class AuthController extends Controller
 
         if (! Hash::check($data['otp'], $record->otp)) {
             $newAttempts = $record->attempts + 1;
-            DB::table('password_reset_otps')->where('email', $email)->update([
-                'attempts'   => $newAttempts,
-                'updated_at' => now(),
-            ]);
+            DB::table('password_reset_otps')
+                ->where('email', $email)
+                ->where('type', 'password_reset')
+                ->update(['attempts' => $newAttempts, 'updated_at' => now()]);
 
             if ($newAttempts >= 5) {
-                DB::table('password_reset_otps')->where('email', $email)->delete();
+                DB::table('password_reset_otps')
+                    ->where('email', $email)
+                    ->where('type', 'password_reset')
+                    ->delete();
                 throw ValidationException::withMessages([
                     'otp' => ['Too many failed attempts. Please request a new code.'],
                 ]);
@@ -171,11 +201,14 @@ class AuthController extends Controller
         $data = $request->validate([
             'email'    => ['required', 'email'],
             'otp'      => ['required', 'string', 'size:6'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 
         $email  = strtolower($data['email']);
-        $record = DB::table('password_reset_otps')->where('email', $email)->first();
+        $record = DB::table('password_reset_otps')
+            ->where('email', $email)
+            ->where('type', 'password_reset')
+            ->first();
 
         if (! $record || now()->isAfter($record->expires_at)) {
             throw ValidationException::withMessages([
@@ -184,7 +217,10 @@ class AuthController extends Controller
         }
 
         if ($record->attempts >= 5 || ! Hash::check($data['otp'], $record->otp)) {
-            DB::table('password_reset_otps')->where('email', $email)->delete();
+            DB::table('password_reset_otps')
+                ->where('email', $email)
+                ->where('type', 'password_reset')
+                ->delete();
             throw ValidationException::withMessages([
                 'otp' => ['Invalid or expired code. Please request a new one.'],
             ]);
@@ -194,7 +230,10 @@ class AuthController extends Controller
             'password' => Hash::make($data['password']),
         ]);
 
-        DB::table('password_reset_otps')->where('email', $email)->delete();
+        DB::table('password_reset_otps')
+            ->where('email', $email)
+            ->where('type', 'password_reset')
+            ->delete();
 
         return response()->json(['message' => 'Password reset successfully.']);
     }

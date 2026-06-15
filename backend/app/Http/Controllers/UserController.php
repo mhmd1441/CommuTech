@@ -43,6 +43,7 @@ class UserController extends Controller
         $data['name'] = $this->displayName($data);
         $data['role'] = $this->primaryRole($roles);
         $data['is_verified'] = $this->isProfileVerified($data);
+        $data['email_verified'] = true;
 
         $user = User::create($data);
         $user->syncRolesByName($roles);

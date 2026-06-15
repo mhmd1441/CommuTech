@@ -45,6 +45,7 @@ class User extends Authenticatable
         'street',
         'building',
         'is_verified',
+        'email_verified',
         'profile_picture_url',
         'password',
     ];
@@ -73,6 +74,7 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
             'is_verified' => 'boolean',
+            'email_verified' => 'boolean',
         ];
     }
 

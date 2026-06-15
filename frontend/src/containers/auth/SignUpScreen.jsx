@@ -87,7 +87,7 @@ export default function SignupScreen({ navigation }) {
     try {
       setLoading(true);
 
-      await authApi.register({
+      const result = await authApi.register({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
@@ -97,7 +97,7 @@ export default function SignupScreen({ navigation }) {
         confirmPassword,
       });
 
-      navigation.replace("CitizenHome");
+      navigation.replace("EmailVerification", { email: result.email });
     } catch (e) {
       setError(e.message || "Could not create account. Please try again.");
     } finally {
