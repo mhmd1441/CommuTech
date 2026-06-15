@@ -23,12 +23,34 @@ class IssueController extends Controller
             'status' => ['nullable', 'string'],
             'mine' => ['nullable', 'boolean'],
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'priority'])],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'lng' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
-        $query = Issue::with(['user:id,name,email,phone', 'assignee:id,name,email,phone']);
+        $userId = $request->user()->id;
+
+        $query = Issue::with(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
+            ->withCount('upvotes')
+            ->withCount(['upvotes as has_upvoted' => fn ($q) => $q->where('user_id', $userId)]);
 
         if ($request->boolean('mine')) {
-            $query->where('user_id', $request->user()->id);
+            $query->where('user_id', $userId);
+        }
+
+        if (isset($data['lat']) && isset($data['lng'])) {
+            try {
+                $row = DB::selectOne(
+                    "SELECT name_en FROM municipalities
+                     WHERE ST_Contains(boundary, ST_SetSRID(ST_MakePoint(?, ?), 4326))
+                     LIMIT 1",
+                    [(float) $data['lng'], (float) $data['lat']]
+                );
+                if ($row) {
+                    $query->where('municipality_en', $row->name_en);
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Municipality filter failed: ' . $e->getMessage());
+            }
         }
 
         if (! empty($data['category']) && $data['category'] !== 'All') {
@@ -136,7 +158,12 @@ class IssueController extends Controller
             abort(404);
         }
 
-        return response()->json($issue->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']));
+        $userId = $request->user()->id;
+        $issue->load(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
+              ->loadCount('upvotes');
+        $issue->setAttribute('has_upvoted', $issue->upvotes()->where('user_id', $userId)->exists());
+
+        return response()->json($issue);
     }
 
     public function update(Request $request, Issue $issue)
@@ -234,6 +261,25 @@ class IssueController extends Controller
                 ? 'Resolution confirmed.'
                 : 'Report moved under investigation for admin review.',
             'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
+        ]);
+    }
+
+    public function upvote(Request $request, Issue $issue)
+    {
+        $userId = $request->user()->id;
+        $existing = $issue->upvotes()->where('user_id', $userId)->first();
+
+        if ($existing) {
+            $existing->delete();
+            $voted = false;
+        } else {
+            $issue->upvotes()->create(['user_id' => $userId]);
+            $voted = true;
+        }
+
+        return response()->json([
+            'has_upvoted'   => $voted,
+            'upvotes_count' => $issue->upvotes()->count(),
         ]);
     }
 

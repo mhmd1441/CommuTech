@@ -16,6 +16,7 @@ class WorkerIssueController extends Controller
     {
         $issues = Issue::query()
             ->with(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
+            ->withCount('upvotes')
             ->where('assigned_to', $request->user()->id)
             ->latest()
             ->paginate(20);
@@ -37,6 +38,7 @@ class WorkerIssueController extends Controller
             // Municipality mode — exact match on municipality_en
             $matched = Issue::query()
                 ->with(['user:id,name,email,phone'])
+                ->withCount('upvotes')
                 ->whereNull('assigned_to')
                 ->where('status', 'pending')
                 ->where('municipality_en', $worker->assigned_municipality)
@@ -46,6 +48,7 @@ class WorkerIssueController extends Controller
             // Issues where PostGIS lookup failed at creation — surface to all workers
             $unlocated = Issue::query()
                 ->with(['user:id,name,email,phone'])
+                ->withCount('upvotes')
                 ->whereNull('assigned_to')
                 ->where('status', 'pending')
                 ->whereNull('municipality_en')
@@ -67,6 +70,7 @@ class WorkerIssueController extends Controller
 
         $issues = Issue::query()
             ->with(['user:id,name,email,phone'])
+            ->withCount('upvotes')
             ->whereNull('assigned_to')
             ->where('status', 'pending')
             ->whereNotNull('latitude')

@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import api from "../../services/api";
+import api, { getAuthUser, issueApi } from "../../services/api";
 
 const C = {
   navy: "#19405F",
@@ -60,8 +60,13 @@ export default function IssueDetailsScreen({ navigation, route }) {
   const [editForm, setEditForm] = useState({ title: "", description: "", location: "", category: "" });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [upvotesCount, setUpvotesCount] = useState(routeIssue.upvotes_count ?? 0);
+  const [hasUpvoted, setHasUpvoted] = useState(!!(routeIssue.has_upvoted));
+  const [upvoting, setUpvoting] = useState(false);
 
-  const canEdit = issue.id && (issue.status === "pending" || issue.status === "Pending");
+  const currentUser = getAuthUser();
+  const isMyIssue = issue.user_id === currentUser?.id;
+  const canEdit = isMyIssue && issue.id && (issue.status === "pending" || issue.status === "Pending");
 
   const openEdit = () => {
     setEditForm({
@@ -122,16 +127,35 @@ export default function IssueDetailsScreen({ navigation, route }) {
   useEffect(() => {
     if (!routeIssue.title && routeIssue.id) {
       api.get(`/issues/${routeIssue.id}`)
-        .then(({ data }) => setIssue(data))
+        .then(({ data }) => {
+          setIssue(data);
+          setUpvotesCount(data.upvotes_count ?? 0);
+          setHasUpvoted(!!(data.has_upvoted));
+        })
         .catch(() => {})
         .finally(() => setLoadingIssue(false));
     }
   }, []);
+
+  const handleUpvote = async () => {
+    if (upvoting) return;
+    try {
+      setUpvoting(true);
+      const result = await issueApi.upvote(issue.id);
+      setHasUpvoted(result.has_upvoted);
+      setUpvotesCount(result.upvotes_count);
+    } catch {
+      // silent — count stays as-is
+    } finally {
+      setUpvoting(false);
+    }
+  };
   const status = formatStatus(issue.status);
   const priority = issue.priority
     ? issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)
     : "Medium";
   const canConfirmResolution =
+    isMyIssue &&
     issue.id &&
     issue.status === "resolved" &&
     (issue.citizen_resolution_confirmed === null || issue.citizen_resolution_confirmed === undefined);
@@ -236,6 +260,64 @@ export default function IssueDetailsScreen({ navigation, route }) {
             </View>
           )}
         </View>
+
+        {!isMyIssue ? (
+          <View style={styles.card}>
+            <View style={styles.impactHeader}>
+              <View style={[styles.impactIconWrap, { backgroundColor: hasUpvoted ? "#ECFDF5" : "#FFF7ED" }]}>
+                <Ionicons
+                  name={hasUpvoted ? "checkmark-circle" : "megaphone-outline"}
+                  size={20}
+                  color={hasUpvoted ? C.green : C.orange}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.impactTitle}>
+                  {hasUpvoted ? "You reported impact" : "Facing this issue too?"}
+                </Text>
+                <Text style={styles.impactSubtitle}>
+                  {hasUpvoted
+                    ? "Thank you. Tap the button to undo."
+                    : "Issues affecting more people get resolved faster."}
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={handleUpvote}
+              disabled={upvoting}
+              style={[styles.impactBtn, hasUpvoted && styles.impactBtnVoted, upvoting && { opacity: 0.6 }]}
+            >
+              {upvoting ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons
+                    name={hasUpvoted ? "checkmark-circle-outline" : "hand-left-outline"}
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.impactBtnText}>
+                    {hasUpvoted ? "I'm Affected — Undo" : "I Have This Problem Too"}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+
+            <Text style={styles.impactCount}>
+              {upvotesCount === 0
+                ? "Be the first to report community impact"
+                : `${upvotesCount} ${upvotesCount === 1 ? "person" : "people"} reported being affected`}
+            </Text>
+          </View>
+        ) : upvotesCount > 0 ? (
+          <View style={[styles.card, styles.impactReadOnly]}>
+            <Ionicons name="people" size={18} color={C.navy} />
+            <Text style={styles.impactReadOnlyText}>
+              {upvotesCount} {upvotesCount === 1 ? "other person" : "other people"} also reported being affected by this issue
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Report Progress</Text>
@@ -604,4 +686,17 @@ const styles = StyleSheet.create({
     height: 50, paddingHorizontal: 14, backgroundColor: "#fff",
     color: C.text, fontSize: 15,
   },
+  impactHeader: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 16 },
+  impactIconWrap: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  impactTitle: { color: C.text, fontWeight: "900", fontSize: 15 },
+  impactSubtitle: { color: C.muted, fontWeight: "600", fontSize: 13, marginTop: 3, lineHeight: 18 },
+  impactBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9,
+    backgroundColor: C.orange, borderRadius: 16, height: 52, marginBottom: 12,
+  },
+  impactBtnVoted: { backgroundColor: C.navy },
+  impactBtnText: { color: "#fff", fontWeight: "900", fontSize: 15 },
+  impactCount: { textAlign: "center", color: C.muted, fontWeight: "700", fontSize: 13 },
+  impactReadOnly: { flexDirection: "row", alignItems: "center", gap: 10 },
+  impactReadOnlyText: { flex: 1, color: C.muted, fontWeight: "700", fontSize: 13, lineHeight: 19 },
 });

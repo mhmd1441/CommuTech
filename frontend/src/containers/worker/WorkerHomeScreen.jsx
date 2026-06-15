@@ -426,6 +426,9 @@ export default function WorkerHomeScreen({ navigation }) {
               </Text>
               <Text style={styles.statusPill}>{formatStatus(issue.status)}</Text>
               {formatDistance(issue) && <Text style={styles.statusPill}>{formatDistance(issue)}</Text>}
+              {(issue.upvotes_count ?? 0) > 0 && (
+                <Text style={styles.statusPill}>👥 {issue.upvotes_count} affected</Text>
+              )}
             </View>
 
             <Text style={styles.detailTitle}>{issue.title}</Text>
