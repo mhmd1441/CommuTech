@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import BottomNav from "../shared/BottomNav";
 import JumpingDots from "../shared/LoadingPage/JumpingDots";
-import api, { getAuthUser, setAuthUser as setStoredAuthUser, profileApi } from "../../services/api";
+import api, { getAuthUser, setAuthUser as setStoredAuthUser, profileApi, authApi } from "../../services/api";
 import { disconnectPusher } from "../../services/echo";
 import { loadAppPreferences, setAppPreference } from "../../services/preferences";
 
@@ -307,7 +307,11 @@ function ProfileScreen({ navigation }) {
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: () => { disconnectPusher(); navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); },
+        onPress: async () => {
+          disconnectPusher();
+          await authApi.logout().catch(() => {});
+          navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        },
       },
     ]);
   };
