@@ -182,6 +182,17 @@ export const emailVerificationApi = {
   },
 };
 
+export const issueApi = {
+  async upvote(id) {
+    try {
+      const { data } = await api.post(`/issues/${id}/upvote`);
+      return data; // { has_upvoted, upvotes_count }
+    } catch (error) {
+      throw apiError(error);
+    }
+  },
+};
+
 export const profileApi = {
   async changePassword(currentPassword, newPassword) {
     try {

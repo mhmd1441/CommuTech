@@ -94,6 +94,11 @@ class Issue extends Model
         return $this->belongsTo(User::class, 'assigned_to');
     }
 
+    public function upvotes()
+    {
+        return $this->hasMany(IssueUpvote::class);
+    }
+
     public function notifications()
     {
         return $this->hasMany(CommuTechNotification::class);

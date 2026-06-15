@@ -106,6 +106,7 @@ function IssueListImage({ imageUrl }) {
 }
 
 export default function CitizenHomeScreen({ navigation }) {
+  const [communityMode, setCommunityMode] = useState(false);
   const [viewMode, setViewMode] = useState("map");
   const [selectedFilter, setSelectedFilter] = useState("All");
   const [issues, setIssues] = useState([]);
@@ -165,8 +166,15 @@ export default function CitizenHomeScreen({ navigation }) {
     useCallback(() => {
       fetchIssues();
       api.get('/notifications', { params: { role: 'citizen' } }).then(({ data }) => setUnreadCount(data.unread_count || 0)).catch(() => {});
-    }, [selectedFilter])
+    }, [selectedFilter, communityMode])
   );
+
+  // Re-fetch when GPS resolves while community tab is already active
+  useEffect(() => {
+    if (communityMode && userRegion) {
+      fetchIssues();
+    }
+  }, [userRegion]);
 
   useEffect(() => {
     const user = getAuthUser();
@@ -185,7 +193,14 @@ export default function CitizenHomeScreen({ navigation }) {
   const fetchIssues = async () => {
     try {
       setLoading(true);
-      const params = { mine: 1 };
+      const params = {};
+      if (communityMode) {
+        if (!userRegion) { setLoading(false); return; }
+        params.lat = userRegion.latitude;
+        params.lng = userRegion.longitude;
+      } else {
+        params.mine = 1;
+      }
       if (selectedFilter !== "All") params.category = selectedFilter;
       const { data } = await api.get("/issues", { params });
       setIssues(data.data || []);
@@ -270,6 +285,23 @@ export default function CitizenHomeScreen({ navigation }) {
           </Pressable>
         </View>
 
+        {/* Community / My Issues tab */}
+        <View style={styles.modeTabs}>
+          <Pressable
+            onPress={() => setCommunityMode(false)}
+            style={[styles.modeTab, !communityMode && styles.modeTabActive]}
+          >
+            <Text style={[styles.modeTabText, !communityMode && styles.modeTabTextActive]}>My Issues</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setCommunityMode(true)}
+            style={[styles.modeTab, communityMode && styles.modeTabActive]}
+          >
+            <Ionicons name="people-outline" size={14} color={communityMode ? "#fff" : COLORS.navy} />
+            <Text style={[styles.modeTabText, communityMode && styles.modeTabTextActive]}>Community</Text>
+          </Pressable>
+        </View>
+
         {/* View switch */}
         <View style={styles.segmentWrap}>
           <Pressable
@@ -305,7 +337,18 @@ export default function CitizenHomeScreen({ navigation }) {
         </ScrollView>
 
         {/* Content */}
-        {viewMode === "map" ? (
+        {communityMode && locationStatus === "loading" ? (
+          <View style={styles.noLocationWrap}>
+            <ActivityIndicator size="large" color={COLORS.navy} />
+            <Text style={styles.noLocationText}>Getting your location…</Text>
+          </View>
+        ) : communityMode && locationStatus !== "granted" ? (
+          <View style={styles.noLocationWrap}>
+            <Ionicons name="location-outline" size={44} color={COLORS.muted} />
+            <Text style={styles.noLocationTitle}>Location Required</Text>
+            <Text style={styles.noLocationText}>Enable location to see community issues in your area.</Text>
+          </View>
+        ) : viewMode === "map" ? (
           <View style={styles.mapCard}>
             <MapView
               ref={mapRef}
@@ -334,6 +377,9 @@ export default function CitizenHomeScreen({ navigation }) {
                         <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
                           {issue.priority?.toUpperCase()}
                         </Text>
+                        {communityMode && (issue.upvotes_count ?? 0) > 0 && (
+                          <Text style={styles.calloutVotes}>👥 {issue.upvotes_count} affected</Text>
+                        )}
                         <Text style={styles.calloutTap}>Tap to view details →</Text>
                       </View>
                     </Callout>
@@ -382,7 +428,14 @@ export default function CitizenHomeScreen({ navigation }) {
                     <Text style={styles.issueDescription} numberOfLines={2}>{issue.description}</Text>
                     <View style={styles.bottomMetaRow}>
                       <Text style={styles.metaText}>{issue.location}</Text>
-                      <Text style={styles.metaText}>{formatDate(issue.created_at)}</Text>
+                      {communityMode && (issue.upvotes_count ?? 0) > 0 ? (
+                        <View style={styles.voteChip}>
+                          <Ionicons name="people-outline" size={11} color={COLORS.navy} />
+                          <Text style={styles.voteChipText}>{issue.upvotes_count} affected</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.metaText}>{formatDate(issue.created_at)}</Text>
+                      )}
                     </View>
                   </View>
                   <IssueListImage imageUrl={issue.image_url} />
@@ -492,4 +545,21 @@ const styles = StyleSheet.create({
   metaText: { flex: 1, fontSize: 11, color: COLORS.muted, fontWeight: "700" },
   emptyWrap: { alignItems: "center", marginTop: 60, gap: 12 },
   emptyText: { color: COLORS.muted, fontWeight: "700", fontSize: 16 },
+  modeTabs: {
+    marginTop: 16, flexDirection: "row", backgroundColor: "#EEF3F8",
+    borderRadius: 14, padding: 4, gap: 4,
+  },
+  modeTab: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 10, borderRadius: 10,
+  },
+  modeTabActive: { backgroundColor: COLORS.navy },
+  modeTabText: { color: COLORS.navy, fontWeight: "800", fontSize: 13 },
+  modeTabTextActive: { color: "#fff" },
+  noLocationWrap: { alignItems: "center", marginTop: 60, gap: 10, paddingHorizontal: 20 },
+  noLocationTitle: { color: COLORS.text, fontWeight: "900", fontSize: 17 },
+  noLocationText: { color: COLORS.muted, fontWeight: "700", fontSize: 14, textAlign: "center", lineHeight: 21 },
+  calloutVotes: { fontSize: 11, color: COLORS.navy, fontWeight: "700", marginTop: 2 },
+  voteChip: { flexDirection: "row", alignItems: "center", gap: 4 },
+  voteChipText: { fontSize: 11, color: COLORS.navy, fontWeight: "800" },
 });
