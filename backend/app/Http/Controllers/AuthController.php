@@ -84,15 +84,28 @@ class AuthController extends Controller
         $user  = User::where('email', $email)->first();
 
         if ($user) {
+            $existing = DB::table('password_reset_otps')->where('email', $email)->first();
+
+            if ($existing && $existing->resend_available_at && now()->isBefore($existing->resend_available_at)) {
+                $secondsLeft = (int) now()->diffInSeconds($existing->resend_available_at);
+
+                return response()->json([
+                    'message'     => 'Please wait before requesting a new code.',
+                    'retry_after' => $secondsLeft,
+                ], 429);
+            }
+
             $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
             DB::table('password_reset_otps')->where('email', $email)->delete();
             DB::table('password_reset_otps')->insert([
-                'email'      => $email,
-                'otp'        => $otp,
-                'expires_at' => now()->addMinutes(10),
-                'created_at' => now(),
-                'updated_at' => now(),
+                'email'                => $email,
+                'otp'                  => Hash::make($otp),
+                'attempts'             => 0,
+                'expires_at'           => now()->addMinutes(10),
+                'resend_available_at'  => now()->addSeconds(60),
+                'created_at'           => now(),
+                'updated_at'           => now(),
             ]);
 
             try {
@@ -115,14 +128,38 @@ class AuthController extends Controller
         ]);
 
         $email  = strtolower($data['email']);
-        $record = DB::table('password_reset_otps')
-            ->where('email', $email)
-            ->where('otp', $data['otp'])
-            ->first();
+        $record = DB::table('password_reset_otps')->where('email', $email)->first();
 
         if (! $record || now()->isAfter($record->expires_at)) {
             throw ValidationException::withMessages([
                 'otp' => ['Invalid or expired code. Please request a new one.'],
+            ]);
+        }
+
+        if ($record->attempts >= 5) {
+            DB::table('password_reset_otps')->where('email', $email)->delete();
+            throw ValidationException::withMessages([
+                'otp' => ['Too many failed attempts. Please request a new code.'],
+            ]);
+        }
+
+        if (! Hash::check($data['otp'], $record->otp)) {
+            $newAttempts = $record->attempts + 1;
+            DB::table('password_reset_otps')->where('email', $email)->update([
+                'attempts'   => $newAttempts,
+                'updated_at' => now(),
+            ]);
+
+            if ($newAttempts >= 5) {
+                DB::table('password_reset_otps')->where('email', $email)->delete();
+                throw ValidationException::withMessages([
+                    'otp' => ['Too many failed attempts. Please request a new code.'],
+                ]);
+            }
+
+            $remaining = 5 - $newAttempts;
+            throw ValidationException::withMessages([
+                'otp' => ["Invalid code. {$remaining} attempt(s) remaining."],
             ]);
         }
 
@@ -138,12 +175,16 @@ class AuthController extends Controller
         ]);
 
         $email  = strtolower($data['email']);
-        $record = DB::table('password_reset_otps')
-            ->where('email', $email)
-            ->where('otp', $data['otp'])
-            ->first();
+        $record = DB::table('password_reset_otps')->where('email', $email)->first();
 
         if (! $record || now()->isAfter($record->expires_at)) {
+            throw ValidationException::withMessages([
+                'otp' => ['Invalid or expired code. Please request a new one.'],
+            ]);
+        }
+
+        if ($record->attempts >= 5 || ! Hash::check($data['otp'], $record->otp)) {
+            DB::table('password_reset_otps')->where('email', $email)->delete();
             throw ValidationException::withMessages([
                 'otp' => ['Invalid or expired code. Please request a new one.'],
             ]);

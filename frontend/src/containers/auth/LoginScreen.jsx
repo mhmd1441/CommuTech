@@ -165,7 +165,7 @@ export default function LoginScreen({ navigation }) {
 
             <Pressable
               onPress={() => {
-                navigation.navigate("ForgotPassword");
+                navigation.navigate("ForgotPassword", { email: email.trim() });
               }}
               style={styles.forgot}
             >
