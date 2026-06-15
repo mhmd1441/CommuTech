@@ -86,7 +86,7 @@ class ProfileController extends Controller
     {
         $data = $request->validate([
             'current_password' => ['required', 'string'],
-            'password' => ['required', 'confirmed', Password::min(8)],
+            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 
         if (! Hash::check($data['current_password'], $request->user()->password)) {

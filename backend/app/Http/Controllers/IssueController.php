@@ -170,10 +170,6 @@ class IssueController extends Controller
             ], 403);
         }
 
-        if (($data['status'] ?? null) === 'resolved') {
-            $data['resolved_at'] = now();
-        }
-
         $issue->update($data);
 
         return response()->json($issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']));
