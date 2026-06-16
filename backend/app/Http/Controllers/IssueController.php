@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ClassifyIssueImage;
 use App\Mail\AdminInvestigationMail;
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
@@ -30,8 +31,10 @@ class IssueController extends Controller
 
         $userId = $request->user()->id;
 
+        $communityMode = isset($data['lat']) && isset($data['lng']) && ! $request->boolean('mine');
+
         $query = Issue::with(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
-            ->withCount('upvotes')
+            ->withCount(['upvotes' => fn ($q) => $q->whereColumn('issue_upvotes.user_id', '!=', 'issues.user_id')])
             ->withCount(['upvotes as has_upvoted' => fn ($q) => $q->where('user_id', $userId)]);
 
         if ($request->boolean('mine')) {
@@ -62,13 +65,20 @@ class IssueController extends Controller
             $query->where('status', $this->normalizeStatus($data['status']));
         }
 
-        match ($data['sort'] ?? 'newest') {
-            'oldest' => $query->oldest(),
-            'priority' => $query->orderByRaw("case priority when 'critical' then 4 when 'high' then 3 when 'medium' then 2 else 1 end desc")->latest(),
-            default => $query->latest(),
-        };
+        if (($data['sort'] ?? null) === 'oldest') {
+            $query->oldest();
+        } elseif (($data['sort'] ?? null) === 'priority') {
+            $query->orderByRaw("case priority when 'critical' then 4 when 'high' then 3 when 'medium' then 2 else 1 end desc")->latest();
+        } elseif ($communityMode) {
+            $query->orderByDesc('upvotes_count')->latest();
+        } else {
+            $query->latest();
+        }
 
-        return response()->json($query->paginate(20));
+        $issues = $query->paginate(20);
+        $issues->getCollection()->transform(fn (Issue $issue) => $this->withImpactAttributes($issue, $userId));
+
+        return response()->json($issues);
     }
 
     public function store(Request $request)
@@ -89,17 +99,6 @@ class IssueController extends Controller
         }
 
         unset($data['image']);
-
-        $aiCategory   = null;
-        $aiConfidence = null;
-
-        if ($request->hasFile('image')) {
-            $prediction = MlController::callFlask($request->file('image'));
-            if ($prediction && isset($prediction['category'])) {
-                $aiCategory   = $prediction['category'];
-                $aiConfidence = $prediction['confidence'] ?? null;
-            }
-        }
 
         $municipalityEn = null;
         $municipalityAr = null;
@@ -129,12 +128,17 @@ class IssueController extends Controller
             'status'          => 'pending',
             'priority'        => $priority,
             'ai_score'        => $this->triageScore($data['description']),
-            'ai_category'     => $aiCategory,
-            'ai_confidence'   => $aiConfidence,
+            'ai_category'     => null,
+            'ai_confidence'   => null,
             'due_at'          => now()->addHours(Issue::slaHours($priority)),
             'municipality_en' => $municipalityEn,
             'municipality_ar' => $municipalityAr,
         ]);
+
+        // Classify image in background — does not block the response
+        if (! empty($data['image_url'])) {
+            ClassifyIssueImage::dispatch($issue->id, $data['image_url']);
+        }
 
         $notification = CommuTechNotification::create([
             'user_id'        => $request->user()->id,
@@ -150,7 +154,10 @@ class IssueController extends Controller
             \Log::warning('Broadcast failed: ' . $e->getMessage());
         }
 
-        return response()->json($issue->load('user:id,name,email,phone'), 201);
+        $issue->load('user:id,name,email,phone');
+        $issue->setAttribute('upvotes_count', 0);
+
+        return response()->json($this->withImpactAttributes($issue, $request->user()->id), 201);
     }
 
     public function show(Request $request, Issue $issue)
@@ -165,8 +172,9 @@ class IssueController extends Controller
         }
 
         $issue->load(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
-              ->loadCount('upvotes');
-        $issue->setAttribute('has_upvoted', $issue->upvotes()->where('user_id', $userId)->exists());
+              ->loadCount(['upvotes' => fn ($q) => $q->where('user_id', '!=', $issue->user_id)]);
+        $issue->setAttribute('has_upvoted', $issue->user_id !== $userId && $issue->upvotes()->where('user_id', $userId)->exists());
+        $this->withImpactAttributes($issue, $userId);
         $issue->setAttribute(
             'user_donation_total',
             (float) $issue->donations()
@@ -211,7 +219,11 @@ class IssueController extends Controller
 
         $issue->update($data);
 
-        return response()->json($issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']));
+        $freshIssue = $issue->fresh()
+            ->load(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
+            ->loadCount(['upvotes' => fn ($q) => $q->where('user_id', '!=', $issue->user_id)]);
+
+        return response()->json($this->withImpactAttributes($freshIssue, $request->user()->id));
     }
 
     public function confirmResolution(Request $request, Issue $issue)
@@ -278,13 +290,25 @@ class IssueController extends Controller
             'message' => $confirmed
                 ? 'Resolution confirmed.'
                 : 'Report moved under investigation for admin review.',
-            'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
+            'issue' => $this->withImpactAttributes(
+                $issue->fresh()
+                    ->load(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
+                    ->loadCount(['upvotes' => fn ($q) => $q->where('user_id', '!=', $issue->user_id)]),
+                $request->user()->id
+            ),
         ]);
     }
 
     public function upvote(Request $request, Issue $issue)
     {
         $userId = $request->user()->id;
+
+        if ($issue->user_id === $userId) {
+            return response()->json([
+                'message' => 'You are already counted because you submitted this report.',
+            ], 422);
+        }
+
         $existing = $issue->upvotes()->where('user_id', $userId)->first();
 
         if ($existing) {
@@ -295,9 +319,12 @@ class IssueController extends Controller
             $voted = true;
         }
 
+        $upvotesCount = $issue->upvotes()->where('user_id', '!=', $issue->user_id)->count();
+
         return response()->json([
             'has_upvoted'   => $voted,
-            'upvotes_count' => $issue->upvotes()->count(),
+            'upvotes_count' => $upvotesCount,
+            'affected_count' => $upvotesCount + 1,
         ]);
     }
 
@@ -315,6 +342,17 @@ class IssueController extends Controller
     private function normalizeStatus(string $status): string
     {
         return str_replace('-', '_', strtolower($status));
+    }
+
+    private function withImpactAttributes(Issue $issue, int $userId): Issue
+    {
+        $upvotesCount = (int) ($issue->upvotes_count ?? $issue->upvotes()->where('user_id', '!=', $issue->user_id)->count());
+
+        $issue->setAttribute('upvotes_count', $upvotesCount);
+        $issue->setAttribute('affected_count', $upvotesCount + 1);
+        $issue->setAttribute('has_upvoted', $issue->user_id !== $userId && (bool) ($issue->has_upvoted ?? false));
+
+        return $issue;
     }
 
     private function uploadToSupabase(\Illuminate\Http\UploadedFile $file): string

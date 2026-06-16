@@ -5,7 +5,6 @@
 @section('page_subtitle', 'Manage citizens, workers, and admin accounts.')
 @section('page_actions')
     <div class="row-actions">
-        <a class="button" href="{{ request()->fullUrl() }}">Refresh</a>
         <a class="button primary" href="{{ route('admin.users.create', ['role' => $role]) }}">Create {{ $role ? ucfirst($role) : 'User' }}</a>
     </div>
 @endsection
@@ -92,3 +91,7 @@
         <div class="pagination">{{ $users->links() }}</div>
     </section>
 @endsection
+
+@push('scripts')
+<script>setTimeout(function(){ window.location.reload(); }, 60000);</script>
+@endpush

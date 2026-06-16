@@ -6,8 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import api from '../../services/api';
-import { getAuthUser } from '../../services/api';
+import api, { getAuthUser } from '../../services/api';
 import { getPusher } from '../../services/echo';
 
 const C = {
@@ -64,14 +63,12 @@ function groupNotifications(notifs) {
   return Object.entries(groups).map(([date, items]) => ({ date, items }));
 }
 
-const NotifItem = ({ item, onPress }) => {
+const NotifItem = ({ item, onOpen, onToggleRead }) => {
   const meta = NOTIF_META[item.type] || NOTIF_META.system;
   const isUnread = !item.read_at;
   return (
-    <TouchableOpacity
+    <View
       style={[styles.notifItem, isUnread && styles.notifItemUnread]}
-      onPress={() => onPress(item)}
-      activeOpacity={0.8}
     >
       {isUnread && <View style={styles.unreadDot} />}
       <View style={[styles.notifIcon, { backgroundColor: meta.bg }]}>
@@ -85,17 +82,25 @@ const NotifItem = ({ item, onPress }) => {
           <Text style={styles.notifTime}>{formatTime(item.created_at)}</Text>
         </View>
         <Text style={styles.notifBody} numberOfLines={2}>{item.body}</Text>
-        {item.issue_id && (
-          <View style={styles.openReportRow}>
-            <View style={styles.openReportPill}>
+        <View style={styles.notifActions}>
+          {item.issue_id && (
+            <TouchableOpacity style={styles.openReportPill} onPress={() => onOpen(item)} activeOpacity={0.85}>
               <Ionicons name="document-text-outline" size={13} color={C.navy} />
               <Text style={styles.openReportText}>Open report</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={C.muted} />
-          </View>
-        )}
+              <Ionicons name="chevron-forward" size={15} color={C.navy} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.readToggleBtn, isUnread && styles.readToggleBtnUnread]}
+            onPress={() => onToggleRead(item)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name={isUnread ? "mail-open-outline" : "mail-unread-outline"} size={13} color={C.navy} />
+            <Text style={styles.readToggleText}>{isUnread ? "Mark read" : "Mark unread"}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 };
 
@@ -177,16 +182,23 @@ export default function NotificationsScreen({ navigation, route }) {
     }
   };
 
-  const handleNotifPress = async (notif) => {
-    if (!notif.read_at) {
-      try {
-        await api.patch(`/notifications/${notif.id}/read`);
-        setNotifications((prev) =>
-          prev.map((n) => n.id === notif.id ? { ...n, read_at: new Date().toISOString() } : n)
-        );
-        setUnreadCount((prev) => Math.max(0, prev - 1));
-      } catch (e) {}
+  const handleToggleRead = async (notif) => {
+    const wasUnread = !notif.read_at;
+    const readAt = wasUnread ? new Date().toISOString() : null;
+    const endpoint = wasUnread ? `/notifications/${notif.id}/read` : `/notifications/${notif.id}/unread`;
+
+    try {
+      await api.patch(endpoint);
+      setNotifications((prev) =>
+        prev.map((n) => n.id === notif.id ? { ...n, read_at: readAt } : n)
+      );
+      setUnreadCount((prev) => wasUnread ? Math.max(0, prev - 1) : prev + 1);
+    } catch (e) {
+      console.error('Failed to update notification read state', e);
     }
+  };
+
+  const handleNotifPress = (notif) => {
     if (notif.issue_id) {
       navigation.navigate('IssueDetails', { issue: { id: notif.issue_id } });
     }
@@ -246,7 +258,7 @@ export default function NotificationsScreen({ navigation, route }) {
               <View style={styles.groupCard}>
                 {group.items.map((notif, idx) => (
                   <View key={notif.id}>
-                    <NotifItem item={notif} onPress={handleNotifPress} />
+                    <NotifItem item={notif} onOpen={handleNotifPress} onToggleRead={handleToggleRead} />
                     {idx < group.items.length - 1 && <View style={styles.itemDivider} />}
                   </View>
                 ))}
@@ -311,12 +323,12 @@ const styles = StyleSheet.create({
   notifTitle: { fontSize: 13, fontWeight: '700', color: C.text, flex: 1 },
   notifTime: { fontSize: 11, color: C.muted, marginLeft: 8 },
   notifBody: { fontSize: 12, color: C.muted, lineHeight: 17 },
-  openReportRow: {
+  notifActions: {
     marginTop: 5,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   openReportPill: {
     flexDirection: 'row',
@@ -328,6 +340,19 @@ const styles = StyleSheet.create({
     backgroundColor: C.navy + '10',
   },
   openReportText: { fontSize: 12, color: C.navy, fontWeight: '900' },
+  readToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.card,
+  },
+  readToggleBtnUnread: { borderColor: C.navy + '30', backgroundColor: C.navy + '08' },
+  readToggleText: { fontSize: 12, color: C.navy, fontWeight: '900' },
   itemDivider: { height: 1, backgroundColor: C.border, marginLeft: 68 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyIcon: {

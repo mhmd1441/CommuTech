@@ -19,8 +19,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Callout, Circle, Marker } from "react-native-maps";
 import * as ImagePicker from "expo-image-picker";
-import api from "../../services/api";
-import { getAuthUser } from "../../services/api";
+import api, { getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
 import { fundingPercent, issueStatusLabel, money } from "../../services/issuePresentation";
 
@@ -95,6 +94,7 @@ export default function WorkerHomeScreen({ navigation }) {
   const noticeTimerRef = useRef(null);
 
   const activeRegion = workerRegion || DEFAULT_REGION;
+  const currentUser = getAuthUser();
 
   const activeAssigned = useMemo(
     () => assignedIssues.filter((i) => i.status !== "resolved"),
@@ -451,13 +451,14 @@ export default function WorkerHomeScreen({ navigation }) {
     const priorityColor = getPriorityColor(issue.priority);
     const reporter = personName(issue.user, "Unknown citizen");
     const assignee = personName(issue.assignee, issue.assigned_to ? "Assigned worker" : "Unassigned");
+    const isOwnCitizenReport = Number(issue.user_id) === Number(currentUser?.id);
     const fundingBlocked = ["requested", "open", "expired"].includes(issue.funding_status);
-    const canRequestFunding = assigned && issue.status === "pending" && issue.funding_status === "none";
-    const canStartRepair = assigned && issue.status === "pending" && ["none", "funded"].includes(issue.funding_status);
-    const canResolve = assigned && issue.status === "in_progress" && !fundingBlocked;
+    const canRequestFunding = assigned && !isOwnCitizenReport && issue.status === "pending" && issue.funding_status === "none";
+    const canStartRepair = assigned && !isOwnCitizenReport && issue.status === "pending" && ["none", "funded"].includes(issue.funding_status);
+    const canResolve = assigned && !isOwnCitizenReport && issue.status === "in_progress" && !fundingBlocked;
     const showFunding = issue.funding_status && issue.funding_status !== "none";
     const progress = fundingPercent(issue);
-    const showPrimaryAction = !assigned || canStartRepair || canResolve;
+    const showPrimaryAction = (!assigned && !isOwnCitizenReport) || canStartRepair || canResolve;
     const primaryActionLabel = !assigned ? "Assign to me" : canStartRepair ? "Mark In Progress" : "Mark Resolved";
     const primaryActionIcon = !assigned ? "briefcase-outline" : canStartRepair ? "play-circle-outline" : "checkmark-circle-outline";
     const primaryAction = () => {
@@ -537,6 +538,18 @@ export default function WorkerHomeScreen({ navigation }) {
               </View>
             </View>
           </View>
+
+          {isOwnCitizenReport && (
+            <View style={[styles.detailCard, styles.conflictCard]}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.danger} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.conflictTitle}>Assignment restricted</Text>
+                <Text style={styles.conflictText}>
+                  You submitted this report as a citizen, so it must be handled by another worker.
+                </Text>
+              </View>
+            </View>
+          )}
 
           <View style={styles.detailCard}>
             <Text style={styles.sectionTitle}>Report Info</Text>
@@ -1215,6 +1228,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
   },
+  conflictCard: {
+    flexDirection: "row",
+    gap: 10,
+    borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2",
+  },
+  conflictTitle: { color: COLORS.danger, fontSize: 14, fontWeight: "900" },
+  conflictText: { marginTop: 3, color: COLORS.muted, fontSize: 13, fontWeight: "700", lineHeight: 18 },
   detailChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   detailPriority: {
     fontSize: 11,

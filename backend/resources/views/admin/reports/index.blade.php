@@ -1,13 +1,16 @@
 @extends('admin.panel')
 
-@section('title', 'Reports | CommuTech Admin')
-@section('page_title', 'Reports')
-@section('page_subtitle', 'Review, inspect, assign, update, and delete community reports.')
+@php $isFundingView = request('funding_status') === 'requested'; @endphp
+
+@section('title', $isFundingView ? 'Funding Requests | CommuTech Admin' : 'Reports | CommuTech Admin')
+@section('page_title', $isFundingView ? 'Funding Requests' : 'Reports')
+@section('page_subtitle', $isFundingView ? 'Review and action community funding requests.' : 'Review, inspect, assign, update, and delete community reports.')
 @section('page_actions')
+@if (!$isFundingView)
 <div class="row-actions">
-    <a class="button" href="{{ request()->fullUrl() }}">Refresh</a>
     <a class="button primary" href="{{ route('admin.reports.create') }}">Create Report</a>
 </div>
+@endif
 @endsection
 
 @section('content')
@@ -24,7 +27,7 @@ default => 'blue',
 @endphp
 
 <section class="panel">
-    @if ($slaBreachedCount > 0)
+    @if (!$isFundingView && $slaBreachedCount > 0)
     <div style="margin-bottom: 10px;">
         <a href="{{ route('admin.reports.index', ['sla' => 'breached']) }}"
             style="display:inline-flex;align-items:center;gap:8px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;">
@@ -33,7 +36,7 @@ default => 'blue',
     </div>
     @endif
 
-    @if ($underInvestigationCount > 0)
+    @if (!$isFundingView && $underInvestigationCount > 0)
     <div style="margin-bottom: 14px;">
         <a href="{{ route('admin.reports.index', ['status' => 'under_investigation']) }}"
             style="display:inline-flex;align-items:center;gap:8px;background:#FEF3C7;border:1px solid #F59E0B;color:#92400E;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;">
@@ -43,6 +46,7 @@ default => 'blue',
     @endif
 
     <form class="filters" method="GET" action="{{ route('admin.reports.index') }}" style="grid-template-columns: 1fr 220px 160px 190px 210px auto;">
+    @if ($isFundingView)<input type="hidden" name="funding_status" value="requested">@endif
         <input name="search" value="{{ $search }}" placeholder="Search by title, location, or description">
         <div style="position:relative;">
             <input list="municipalities-list" name="municipality" value="{{ $municipality }}" placeholder="Search municipality">
@@ -58,12 +62,14 @@ default => 'blue',
             <option value="{{ $item }}" @selected($status===$item)>{{ str_replace('_', ' ', ucfirst($item)) }}</option>
             @endforeach
         </select>
+        @if (!$isFundingView)
         <select name="funding_status">
             <option value="">All funding</option>
             @foreach (\App\Models\Issue::FUNDING_STATUSES as $item)
             <option value="{{ $item }}" @selected($fundingStatus===$item)>{{ str_replace('_', ' ', ucfirst($item)) }}</option>
             @endforeach
         </select>
+        @endif
         <select name="category">
             <option value="">All categories</option>
             @foreach ($categories as $item)
@@ -82,6 +88,7 @@ default => 'blue',
                 <th>Worker</th>
                 <th>Status</th>
                 <th>Priority</th>
+                <th>Affected</th>
                 <th>SLA</th>
                 <th>Actions</th>
             </tr>
@@ -108,6 +115,11 @@ default => 'blue',
                 </td>
                 <td><span class="tag {{ $tagClass($report->status) }}">{{ str_replace('_', ' ', $report->status) }}</span></td>
                 <td><span class="tag">{{ $report->priority }}</span></td>
+                <td>
+                    <span class="tag {{ ($report->affected_count ?? 1) >= 5 ? 'orange' : '' }}">
+                        {{ $report->affected_count ?? 1 }} citizen{{ ($report->affected_count ?? 1) === 1 ? '' : 's' }}
+                    </span>
+                </td>
                 <td>
                     @if (in_array($report->status, ['resolved', 'rejected']))
                     <span class="tag green">Closed</span>
@@ -140,7 +152,7 @@ default => 'blue',
             </tr>
             @empty
             <tr>
-                <td colspan="8" class="muted">No reports found.</td>
+                <td colspan="9" class="muted">No reports found.</td>
             </tr>
             @endforelse
         </tbody>
@@ -149,3 +161,7 @@ default => 'blue',
     <div class="pagination">{{ $reports->links() }}</div>
 </section>
 @endsection
+
+@push('scripts')
+<script>setTimeout(function(){ window.location.reload(); }, 60000);</script>
+@endpush

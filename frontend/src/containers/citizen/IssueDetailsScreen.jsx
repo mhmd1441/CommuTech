@@ -56,7 +56,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
   const [editForm, setEditForm] = useState({ title: "", description: "", location: "", category: "" });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [upvotesCount, setUpvotesCount] = useState(routeIssue.upvotes_count ?? 0);
+  const [affectedCount, setAffectedCount] = useState(routeIssue.affected_count ?? ((routeIssue.upvotes_count ?? 0) + 1));
   const [hasUpvoted, setHasUpvoted] = useState(!!(routeIssue.has_upvoted));
   const [upvoting, setUpvoting] = useState(false);
   const [donationAmount, setDonationAmount] = useState("");
@@ -129,7 +129,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
       api.get(`/issues/${routeIssue.id}`)
         .then(({ data }) => {
           setIssue(data);
-          setUpvotesCount(data.upvotes_count ?? 0);
+          setAffectedCount(data.affected_count ?? ((data.upvotes_count ?? 0) + 1));
           setHasUpvoted(!!(data.has_upvoted));
         })
         .catch(() => {})
@@ -143,9 +143,9 @@ export default function IssueDetailsScreen({ navigation, route }) {
       setUpvoting(true);
       const result = await issueApi.upvote(issue.id);
       setHasUpvoted(result.has_upvoted);
-      setUpvotesCount(result.upvotes_count);
+      setAffectedCount(result.affected_count ?? ((result.upvotes_count ?? 0) + 1));
     } catch {
-      // silent — count stays as-is
+      // Keep the current impact count if the request fails.
     } finally {
       setUpvoting(false);
     }
@@ -230,6 +230,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
   };
 
   const handleDonate = async () => {
+    if (donating) return;
     const amount = Number(donationAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       Alert.alert("Donation Amount", "Enter a valid simulated donation amount.");
@@ -355,12 +356,12 @@ export default function IssueDetailsScreen({ navigation, route }) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.impactTitle}>
-                  {hasUpvoted ? "You reported impact" : "Facing this issue too?"}
+                  {hasUpvoted ? "You are counted" : "Affected by this issue too?"}
                 </Text>
                 <Text style={styles.impactSubtitle}>
                   {hasUpvoted
-                    ? "Thank you. Tap the button to undo."
-                    : "Issues affecting more people get resolved faster."}
+                    ? "This report now includes your impact. You can undo this if needed."
+                    : "Add yourself to the affected count so the community impact is clearer."}
                 </Text>
               </View>
             </View>
@@ -380,26 +381,24 @@ export default function IssueDetailsScreen({ navigation, route }) {
                     color="#fff"
                   />
                   <Text style={styles.impactBtnText}>
-                    {hasUpvoted ? "I'm Affected — Undo" : "I Have This Problem Too"}
+                    {hasUpvoted ? "Remove My Count" : "I Have This Issue Too"}
                   </Text>
                 </>
               )}
             </Pressable>
 
             <Text style={styles.impactCount}>
-              {upvotesCount === 0
-                ? "Be the first to report community impact"
-                : `${upvotesCount} ${upvotesCount === 1 ? "person" : "people"} reported being affected`}
+              {affectedCount} affected citizen{affectedCount === 1 ? "" : "s"}
             </Text>
           </View>
-        ) : upvotesCount > 0 ? (
+        ) : (
           <View style={[styles.card, styles.impactReadOnly]}>
             <Ionicons name="people" size={18} color={C.navy} />
             <Text style={styles.impactReadOnlyText}>
-              {upvotesCount} {upvotesCount === 1 ? "other person" : "other people"} also reported being affected by this issue
+              {affectedCount} affected citizen{affectedCount === 1 ? "" : "s"}, including you as the reporter
             </Text>
           </View>
-        ) : null}
+        )}
 
         {showFunding && (
           <View style={styles.card}>

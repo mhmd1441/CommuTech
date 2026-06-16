@@ -14,8 +14,7 @@ import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import BottomNav from "../shared/BottomNav";
-import api from "../../services/api";
-import { getAuthUser } from "../../services/api";
+import api, { getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
 import { issueStatusKey, issueStatusLabel } from "../../services/issuePresentation";
 
@@ -106,6 +105,15 @@ function IssueListImage({ imageUrl }) {
   );
 }
 
+function affectedCount(issue) {
+  return issue.affected_count ?? ((issue.upvotes_count ?? 0) + 1);
+}
+
+function affectedLabel(issue) {
+  const count = affectedCount(issue);
+  return `${count} affected citizen${count === 1 ? "" : "s"}`;
+}
+
 export default function CitizenHomeScreen({ navigation, route }) {
   const [communityMode, setCommunityMode] = useState(false);
   const [viewMode, setViewMode] = useState("map");
@@ -119,6 +127,8 @@ export default function CitizenHomeScreen({ navigation, route }) {
   const { height } = useWindowDimensions();
   const mapHeight = Math.max(420, height - 315);
   const mapRef = useRef(null);
+  const fetchingRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -170,10 +180,16 @@ export default function CitizenHomeScreen({ navigation, route }) {
     }, [selectedFilter, communityMode])
   );
 
-  // Re-fetch when GPS resolves while community tab is already active
+  // Re-fetch when GPS resolves while community tab is already active.
+  // If a fetch is already running, mark it as pending — fetchIssues will
+  // run one final pass after the in-flight request finishes.
   useEffect(() => {
     if (communityMode && userRegion) {
-      fetchIssues();
+      if (fetchingRef.current) {
+        pendingRefreshRef.current = true;
+      } else {
+        fetchIssues();
+      }
     }
   }, [userRegion]);
 
@@ -192,6 +208,12 @@ export default function CitizenHomeScreen({ navigation, route }) {
   }, []);
 
   const fetchIssues = async ({ silent = false } = {}) => {
+    if (fetchingRef.current) {
+      pendingRefreshRef.current = true;
+      return;
+    }
+    fetchingRef.current = true;
+    pendingRefreshRef.current = false;
     try {
       if (!silent) setLoading(true);
       const params = {};
@@ -212,6 +234,12 @@ export default function CitizenHomeScreen({ navigation, route }) {
       console.error("Failed to fetch issues:", err);
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
+      // A second trigger arrived while we were fetching — run one final refresh
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false;
+        fetchIssues({ silent: true });
+      }
     }
   };
 
@@ -402,8 +430,8 @@ export default function CitizenHomeScreen({ navigation, route }) {
                         <Text style={[styles.calloutPriority, { color: getPriorityColor(issue.priority) }]}>
                           {issue.priority?.toUpperCase()}
                         </Text>
-                        {communityMode && (issue.upvotes_count ?? 0) > 0 && (
-                          <Text style={styles.calloutVotes}>👥 {issue.upvotes_count} affected</Text>
+                        {communityMode && (
+                          <Text style={styles.calloutVotes}>{affectedLabel(issue)}</Text>
                         )}
                         <Text style={styles.calloutTap}>Tap to view details →</Text>
                       </View>
@@ -453,10 +481,10 @@ export default function CitizenHomeScreen({ navigation, route }) {
                     <Text style={styles.issueDescription} numberOfLines={2}>{issue.description}</Text>
                     <View style={styles.bottomMetaRow}>
                       <Text style={styles.metaText}>{issue.location}</Text>
-                      {communityMode && (issue.upvotes_count ?? 0) > 0 ? (
+                      {communityMode ? (
                         <View style={styles.voteChip}>
                           <Ionicons name="people-outline" size={11} color={COLORS.navy} />
-                          <Text style={styles.voteChipText}>{issue.upvotes_count} affected</Text>
+                          <Text style={styles.voteChipText}>{affectedLabel(issue)}</Text>
                         </View>
                       ) : (
                         <Text style={styles.metaText}>{formatDate(issue.created_at)}</Text>

@@ -31,13 +31,14 @@
                     <label>Assigned Worker</label>
                     <select name="assigned_to">
                         <option value="">Unassigned</option>
-                        @foreach ($workers as $worker)
-                            <option value="{{ $worker->id }}" @selected((int) old('assigned_to', $report->assigned_to) === $worker->id)>
-                                {{ $worker->name }} - {{ $worker->email }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+                    @foreach ($workers as $worker)
+                        <option value="{{ $worker->id }}" @selected((int) old('assigned_to', $report->assigned_to) === $worker->id)>
+                            {{ $worker->name }} - {{ $worker->email }}
+                        </option>
+                    @endforeach
+                </select>
+                <div class="muted" style="margin-top:6px;">The report creator cannot be assigned as the worker.</div>
+            </div>
                 <div class="full">
                     <label>Title</label>
                     <input name="title" value="{{ old('title', $report->title) }}" required>

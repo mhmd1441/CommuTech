@@ -8,13 +8,17 @@ use Illuminate\Support\Facades\Auth;
 
 class AuthPageController extends Controller
 {
-    public function showLogin()
+    public function showLogin(Request $request)
     {
         if (Auth::check() && Auth::user()->isAdmin()) {
             return redirect()->route('admin.dashboard');
         }
 
-        return view('admin.login');
+        // If the session has an intended URL it means the middleware redirected
+        // them here — their session expired while they were using the dashboard.
+        $sessionExpired = $request->session()->has('url.intended');
+
+        return view('admin.login', compact('sessionExpired'));
     }
 
     public function login(Request $request)

@@ -186,7 +186,7 @@ export const issueApi = {
   async upvote(id) {
     try {
       const { data } = await api.post(`/issues/${id}/upvote`);
-      return data; // { has_upvoted, upvotes_count }
+      return data; // { has_upvoted, upvotes_count, affected_count }
     } catch (error) {
       throw apiError(error);
     }

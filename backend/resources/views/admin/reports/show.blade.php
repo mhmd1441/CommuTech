@@ -42,13 +42,22 @@
         $fundingGoal = (float) ($report->funding_goal ?? 0);
         $fundingRaised = (float) ($report->funding_raised ?? 0);
         $fundingProgress = $fundingGoal > 0 ? min(100, round(($fundingRaised / $fundingGoal) * 100)) : 0;
+        $citizenReviewLabel = is_null($report->citizen_resolution_confirmed)
+            ? 'Pending'
+            : ($report->citizen_resolution_confirmed ? 'Confirmed resolved' : 'Requested review');
+        $citizenReviewTimeLabel = $report->citizen_resolution_confirmed === false
+            ? 'Review Requested At'
+            : 'Resolution Confirmed At';
+        $citizenTimelineTitle = $report->citizen_resolution_confirmed === false
+            ? 'Citizen requested review'
+            : 'Citizen confirmed resolution';
     @endphp
 
     <style>
         .detail-grid { display: grid; grid-template-columns: 1.45fr .75fr; gap: 14px; }
         .detail-card { border: 1px solid var(--line); background: var(--panel); padding: 18px; }
         .detail-card h2 { margin: 0 0 14px; font-size: 17px; }
-        .metric-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+        .metric-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
         .metric { border: 1px solid var(--line); background: var(--panel-2); padding: 14px; }
         .metric span { display: block; color: var(--muted); font-size: 11px; font-weight: 900; text-transform: uppercase; }
         .metric strong { display: block; margin-top: 8px; font-size: 18px; }
@@ -84,6 +93,7 @@
         <div class="metric"><span>Status</span><strong><span class="tag {{ $tagClass($report->status) }}">{{ str_replace('_', ' ', $report->status) }}</span></strong></div>
         <div class="metric"><span>Priority</span><strong>{{ ucfirst($report->priority) }}</strong></div>
         <div class="metric"><span>Category</span><strong>{{ $report->category }}</strong></div>
+        <div class="metric"><span>Affected Citizens</span><strong>{{ $report->affected_count ?? 1 }}</strong></div>
         <div class="metric"><span>SLA</span><strong>{{ $report->sla_breached ? 'Breached' : ($report->due_at ? 'Active' : 'N/A') }}</strong></div>
     </div>
 
@@ -239,8 +249,8 @@
                 <h2>Resolution And Review</h2>
                 <div class="kv-grid">
                     <div class="kv"><span>Worker Resolved At</span><strong>{{ $report->worker_resolved_at?->format('M j, Y g:i A') ?? 'N/A' }}</strong></div>
-                    <div class="kv"><span>Citizen Confirmed</span><strong>{{ is_null($report->citizen_resolution_confirmed) ? 'Pending' : ($report->citizen_resolution_confirmed ? 'Yes' : 'Requested review') }}</strong></div>
-                    <div class="kv"><span>Citizen Confirmed At</span><strong>{{ $report->citizen_confirmed_at?->format('M j, Y g:i A') ?? 'N/A' }}</strong></div>
+                    <div class="kv"><span>Citizen Response</span><strong>{{ $citizenReviewLabel }}</strong></div>
+                    <div class="kv"><span>{{ $citizenReviewTimeLabel }}</span><strong>{{ $report->citizen_confirmed_at?->format('M j, Y g:i A') ?? 'N/A' }}</strong></div>
                     <div class="kv"><span>Rejected Reason</span><strong>{{ $report->rejection_reason ?? 'N/A' }}</strong></div>
                 </div>
                 <div style="margin-top:14px;">
@@ -290,7 +300,7 @@
                         <div class="timeline-item"><strong>Marked resolved</strong><span>{{ ($report->worker_resolved_at ?? $report->resolved_at)?->format('M j, Y g:i A') }}</span></div>
                     @endif
                     @if ($report->citizen_confirmed_at)
-                        <div class="timeline-item"><strong>Citizen reviewed result</strong><span>{{ $report->citizen_confirmed_at->format('M j, Y g:i A') }}</span></div>
+                        <div class="timeline-item"><strong>{{ $citizenTimelineTitle }}</strong><span>{{ $report->citizen_confirmed_at->format('M j, Y g:i A') }}</span></div>
                     @endif
                     <div class="timeline-item"><strong>Current status</strong><span>{{ str_replace('_', ' ', $report->status) }}</span></div>
                 </div>

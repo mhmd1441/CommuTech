@@ -42,6 +42,7 @@ class WorkerIssueController extends Controller
                 ->with(['user:id,name,email,phone'])
                 ->withCount('upvotes')
                 ->whereNull('assigned_to')
+                ->where('user_id', '!=', $worker->id)
                 ->where('status', 'pending')
                 ->where('municipality_en', $worker->assigned_municipality)
                 ->latest()
@@ -52,6 +53,7 @@ class WorkerIssueController extends Controller
                 ->with(['user:id,name,email,phone'])
                 ->withCount('upvotes')
                 ->whereNull('assigned_to')
+                ->where('user_id', '!=', $worker->id)
                 ->where('status', 'pending')
                 ->whereNull('municipality_en')
                 ->latest()
@@ -70,28 +72,32 @@ class WorkerIssueController extends Controller
         $longitude = (float) ($data['longitude'] ?? 0);
         $radius    = (int) ($data['radius'] ?? 100);
 
+        // PostGIS filters by radius in SQL — no full table load into PHP
         $issues = Issue::query()
             ->with(['user:id,name,email,phone'])
             ->withCount('upvotes')
             ->whereNull('assigned_to')
+            ->where('user_id', '!=', $worker->id)
             ->where('status', 'pending')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->latest()
-            ->get()
-            ->map(function (Issue $issue) use ($latitude, $longitude) {
-                $issue->distance_meters = $this->distanceInMeters(
-                    $latitude,
-                    $longitude,
-                    (float) $issue->latitude,
-                    (float) $issue->longitude
-                );
-
-                return $issue;
-            })
-            ->filter(fn (Issue $issue) => $issue->distance_meters <= $radius)
-            ->sortBy('distance_meters')
-            ->values();
+            ->whereRaw(
+                'ST_DWithin(
+                    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+                    ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
+                    ?
+                )',
+                [$longitude, $latitude, $radius]
+            )
+            ->selectRaw(
+                '*, ST_Distance(
+                    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+                    ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography
+                ) AS distance_meters',
+                [$longitude, $latitude]
+            )
+            ->orderBy('distance_meters')
+            ->get();
 
         return response()->json([
             'mode'   => 'gps_fallback',
@@ -109,6 +115,12 @@ class WorkerIssueController extends Controller
                 return response()->json([
                     'message' => 'This issue is already assigned to another worker.',
                 ], 409);
+            }
+
+            if ((int) $issue->user_id === (int) $request->user()->id) {
+                return response()->json([
+                    'message' => 'You cannot assign your own citizen report to yourself.',
+                ], 422);
             }
 
             if ($issue->status !== 'pending') {
@@ -140,6 +152,12 @@ class WorkerIssueController extends Controller
 
     public function requestFunding(Request $request, Issue $issue)
     {
+        if ((int) $issue->user_id === (int) $request->user()->id) {
+            return response()->json([
+                'message' => 'You cannot process a report you submitted as a citizen.',
+            ], 422);
+        }
+
         if ((int) $issue->assigned_to !== (int) $request->user()->id) {
             abort(403);
         }
@@ -197,6 +215,12 @@ class WorkerIssueController extends Controller
 
     public function updateStatus(Request $request, Issue $issue)
     {
+        if ((int) $issue->user_id === (int) $request->user()->id) {
+            return response()->json([
+                'message' => 'You cannot process a report you submitted as a citizen.',
+            ], 422);
+        }
+
         if ((int) $issue->assigned_to !== (int) $request->user()->id) {
             abort(403);
         }
@@ -322,17 +346,5 @@ class WorkerIssueController extends Controller
         }
 
         return "{$supabaseUrl}/storage/v1/object/public/issues/{$filename}";
-    }
-
-    private function distanceInMeters(float $lat1, float $lon1, float $lat2, float $lon2): float
-    {
-        $earthRadius = 6371000;
-        $latDelta = deg2rad($lat2 - $lat1);
-        $lonDelta = deg2rad($lon2 - $lon1);
-
-        $a = sin($latDelta / 2) ** 2
-            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($lonDelta / 2) ** 2;
-
-        return $earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 }

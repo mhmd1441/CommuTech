@@ -28,6 +28,7 @@ class ReportPageController extends Controller
 
         $reports = Issue::query()
             ->with(['user:id,name,email,phone,role', 'assignee:id,name,email,phone,role'])
+            ->withCount(['upvotes' => fn ($q) => $q->whereColumn('issue_upvotes.user_id', '!=', 'issues.user_id')])
             ->when($data['status'] ?? null, fn($q, $status) => $q->where('status', $status))
             ->when($data['funding_status'] ?? null, fn($q, $fundingStatus) => $q->where('funding_status', $fundingStatus))
             ->when($data['category'] ?? null, fn($q, $category) => $q->where('category', $category))
@@ -43,6 +44,10 @@ class ReportPageController extends Controller
             ->latest()
             ->paginate(10)
             ->withQueryString();
+
+        $reports->getCollection()->each(function (Issue $report) {
+            $report->setAttribute('affected_count', ((int) $report->upvotes_count) + 1);
+        });
 
         return view('admin.reports.index', [
             'reports' => $reports,
@@ -70,7 +75,9 @@ class ReportPageController extends Controller
             'user.roles',
             'assignee.roles',
             'donations' => fn ($query) => $query->with('user:id,name,email,phone')->latest(),
-        ]);
+        ])->loadCount(['upvotes' => fn ($q) => $q->where('user_id', '!=', $report->user_id)]);
+
+        $report->setAttribute('affected_count', ((int) $report->upvotes_count) + 1);
 
         $notifications = CommuTechNotification::query()
             ->where('issue_id', $report->id)
@@ -357,6 +364,12 @@ class ReportPageController extends Controller
         if (! empty($data['assigned_to']) && ! User::find($data['assigned_to'])?->hasRole(User::ROLE_WORKER)) {
             throw ValidationException::withMessages([
                 'assigned_to' => 'Reports can only be assigned to users with the worker role.',
+            ]);
+        }
+
+        if (! empty($data['assigned_to']) && (int) $data['assigned_to'] === (int) $data['user_id']) {
+            throw ValidationException::withMessages([
+                'assigned_to' => 'The report creator cannot be assigned as the worker.',
             ]);
         }
 

@@ -229,6 +229,12 @@
             <h2>Sign in</h2>
             <p class="hint">Use the admin account you created from the API.</p>
 
+            @if ($sessionExpired ?? false)
+                <div class="error" style="border-color:rgba(244,163,64,.5);background:rgba(244,163,64,.1);color:#fde68a;">
+                    Your session expired. Please sign in again.
+                </div>
+            @endif
+
             @if ($errors->any())
                 <div class="error">{{ $errors->first() }}</div>
             @endif

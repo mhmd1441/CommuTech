@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\IssueController;
@@ -57,7 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', 'store');
         Route::get('/{issue}', 'show');
         Route::post('/{issue}/donations', [IssueDonationController::class, 'store']);
-        Route::post('/{issue}/upvote', 'upvote');
+        Route::post('/{issue}/upvote', 'upvote')->middleware('throttle:30,1');
         Route::patch('/{issue}/confirm-resolution', 'confirmResolution');
         Route::put('/{issue}', 'update');
         Route::patch('/{issue}', 'update');
@@ -70,6 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', 'index');
         Route::patch('/read-all', 'markAllRead');
         Route::patch('/{notification}/read', 'markRead');
+        Route::patch('/{notification}/unread', 'markUnread');
     });
 
     Route::prefix('worker')->middleware('role:worker')->group(function () {
@@ -84,16 +84,6 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('admin')->middleware('role:admin')->group(function () {
-        Route::prefix('dashboard')->controller(DashboardController::class)->group(function () {
-            Route::get('/summary', 'summary');
-            Route::get('/issues/status', 'issueStatus');
-            Route::get('/issues/categories', 'issueCategories');
-            Route::get('/issues/priorities', 'issuePriorities');
-            Route::get('/issues/trend', 'issueTrend');
-            Route::get('/recent-issues', 'recentIssues');
-            Route::get('/recent-users', 'recentUsers');
-        });
-
         Route::prefix('users')->name('api.admin.users.')->controller(UserController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');

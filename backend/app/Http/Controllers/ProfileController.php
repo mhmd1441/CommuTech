@@ -4,9 +4,10 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Str;
 
 class ProfileController extends Controller
 {
@@ -66,11 +67,11 @@ class ProfileController extends Controller
             'profile_picture' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
         ]);
 
-        $path = $request->file('profile_picture')->store('profile-pictures', 'public');
+        $url = $this->uploadToSupabase($request->file('profile_picture'));
         $user = $request->user();
 
         $user->forceFill([
-            'profile_picture_url' => $this->publicStorageUrl($request, $path),
+            'profile_picture_url' => $url,
         ])->save();
 
         $user->forceFill(['is_verified' => $this->isProfileVerified($user->fresh())])->save();
@@ -100,9 +101,23 @@ class ProfileController extends Controller
         return response()->json(['message' => 'Password updated.']);
     }
 
-    private function publicStorageUrl(Request $request, string $path): string
+    private function uploadToSupabase(\Illuminate\Http\UploadedFile $file): string
     {
-        return rtrim($request->getSchemeAndHttpHost(), '/').Storage::url($path);
+        $filename    = 'profiles/' . Str::uuid() . '.' . $file->getClientOriginalExtension();
+        $supabaseUrl = config('services.supabase.url');
+        $serviceKey  = config('services.supabase.key');
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $serviceKey,
+            'Content-Type'  => $file->getMimeType(),
+        ])->withBody(file_get_contents($file->getRealPath()), $file->getMimeType())
+            ->post("{$supabaseUrl}/storage/v1/object/issues/{$filename}");
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('Profile picture upload failed: ' . $response->body());
+        }
+
+        return "{$supabaseUrl}/storage/v1/object/public/issues/{$filename}";
     }
 
     private function stats(Request $request): array

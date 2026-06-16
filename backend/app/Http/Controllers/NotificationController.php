@@ -39,6 +39,17 @@ class NotificationController extends Controller
         return response()->json($notification->fresh());
     }
 
+    public function markUnread(Request $request, CommuTechNotification $notification)
+    {
+        if ($notification->user_id !== $request->user()->id) {
+            abort(404);
+        }
+
+        $notification->update(['read_at' => null]);
+
+        return response()->json($notification->fresh());
+    }
+
     public function markAllRead(Request $request)
     {
         $request->user()
