@@ -18,6 +18,7 @@ import MyReportsScreen from "./src/containers/citizen/MyReportsScreen";
 import IssueDetailsScreen from "./src/containers/citizen/IssueDetailsScreen";
 import ProfileScreen from "./src/containers/citizen/ProfileScreen";
 import ReportHistoryScreen from "./src/containers/citizen/ReportHistoryScreen";
+import MyContributionsScreen from "./src/containers/citizen/MyContributionsScreen";
 import NotificationsScreen from "./src/containers/citizen/NotificationsScreen";
 import WorkerHomeScreen from "./src/containers/worker/WorkerHomeScreen";
 import TermsScreen from "./src/containers/shared/TermsScreen";
@@ -57,6 +58,7 @@ export default function App() {
           <Stack.Screen name="IssueDetails" component={IssueDetailsScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="ReportHistory" component={ReportHistoryScreen} />
+          <Stack.Screen name="MyContributions" component={MyContributionsScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
           <Stack.Screen name="WorkerHome" component={WorkerHomeScreen} />
           <Stack.Screen name="Terms" component={TermsScreen} />

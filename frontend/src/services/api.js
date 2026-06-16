@@ -191,6 +191,24 @@ export const issueApi = {
       throw apiError(error);
     }
   },
+
+  async donate(id, amount) {
+    try {
+      const { data } = await api.post(`/issues/${id}/donations`, { amount });
+      return data;
+    } catch (error) {
+      throw apiError(error);
+    }
+  },
+
+  async contributions() {
+    try {
+      const { data } = await api.get("/me/contributions");
+      return data;
+    } catch (error) {
+      throw apiError(error);
+    }
+  },
 };
 
 export const profileApi = {

@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import api, { getAuthUser, issueApi } from "../../services/api";
+import { fundingPercent, issueStatusKey, issueStatusLabel, money } from "../../services/issuePresentation";
 
 const C = {
   navy: "#19405F",
@@ -31,8 +32,8 @@ const C = {
 
 
 function statusColor(status) {
-  if (status === "Done" || status === "Resolved" || status === "resolved") return C.green;
-  if (status === "In Progress" || status === "in_progress" || status === "in-progress") return C.orange;
+  if (status === "Done" || status === "Resolved" || status === "resolved" || status === "funded") return C.green;
+  if (["In Progress", "in_progress", "in-progress", "under_review", "awaiting_funding", "expired"].includes(status)) return C.orange;
   if (status === "Under Investigation" || status === "under_investigation") return C.orange;
   if (status === "Rejected" || status === "rejected") return C.red;
   return C.navy;
@@ -42,12 +43,6 @@ function priorityColor(priority) {
   if (priority === "Critical") return C.red;
   if (priority === "High" || priority === "Medium") return C.orange;
   return C.navy;
-}
-
-function formatStatus(status) {
-  if (status === "in-progress" || status === "in_progress") return "In Progress";
-  if (status === "under_investigation") return "Under Investigation";
-  return status?.replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Pending";
 }
 
 export default function IssueDetailsScreen({ navigation, route }) {
@@ -63,10 +58,12 @@ export default function IssueDetailsScreen({ navigation, route }) {
   const [upvotesCount, setUpvotesCount] = useState(routeIssue.upvotes_count ?? 0);
   const [hasUpvoted, setHasUpvoted] = useState(!!(routeIssue.has_upvoted));
   const [upvoting, setUpvoting] = useState(false);
+  const [donationAmount, setDonationAmount] = useState("");
+  const [donating, setDonating] = useState(false);
 
   const currentUser = getAuthUser();
   const isMyIssue = issue.user_id === currentUser?.id;
-  const canEdit = isMyIssue && issue.id && (issue.status === "pending" || issue.status === "Pending");
+  const canEdit = isMyIssue && issue.id && issue.status === "pending" && issue.funding_status !== "funded";
 
   const openEdit = () => {
     setEditForm({
@@ -150,10 +147,16 @@ export default function IssueDetailsScreen({ navigation, route }) {
       setUpvoting(false);
     }
   };
-  const status = formatStatus(issue.status);
+  const statusKey = issueStatusKey(issue);
+  const status = issueStatusLabel(issue);
   const priority = issue.priority
     ? issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)
     : "Medium";
+  const showFunding =
+    issue.funding_status && issue.funding_status !== "none" && issue.funding_status !== null;
+  const canDonate = issue.status === "awaiting_funding" && issue.funding_status === "open";
+  const progress = fundingPercent(issue);
+  const userDonationTotal = Number(issue.user_donation_total || 0);
   const canConfirmResolution =
     isMyIssue &&
     issue.id &&
@@ -183,6 +186,26 @@ export default function IssueDetailsScreen({ navigation, route }) {
     }
   };
 
+  const handleDonate = async () => {
+    const amount = Number(donationAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert("Donation Amount", "Enter a valid simulated donation amount.");
+      return;
+    }
+
+    try {
+      setDonating(true);
+      const data = await issueApi.donate(issue.id, amount);
+      setIssue(data.issue || issue);
+      setDonationAmount("");
+      Alert.alert("Donation Recorded", data.message || "Your simulated donation was recorded.");
+    } catch (error) {
+      Alert.alert("Donation Failed", error.message || "Please try again.");
+    } finally {
+      setDonating(false);
+    }
+  };
+
   if (loadingIssue) {
     return (
       <SafeAreaView style={[styles.safe, { alignItems: "center", justifyContent: "center" }]} edges={["top"]}>
@@ -208,8 +231,8 @@ export default function IssueDetailsScreen({ navigation, route }) {
 
         <View style={styles.card}>
           <View style={styles.metaRow}>
-            <View style={[styles.pill, { backgroundColor: statusColor(status) + "18" }]}>
-              <Text style={[styles.pillText, { color: statusColor(status) }]}>{status}</Text>
+            <View style={[styles.pill, { backgroundColor: statusColor(statusKey) + "18" }]}>
+              <Text style={[styles.pillText, { color: statusColor(statusKey) }]}>{status}</Text>
             </View>
             <View style={[styles.pill, { backgroundColor: priorityColor(priority) + "18" }]}>
               <Text style={[styles.pillText, { color: priorityColor(priority) }]}>
@@ -319,12 +342,62 @@ export default function IssueDetailsScreen({ navigation, route }) {
           </View>
         ) : null}
 
+        {showFunding && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Community Funding</Text>
+            <View style={styles.fundingHeader}>
+              <View>
+                <Text style={styles.fundingAmount}>{money(issue.funding_raised)} raised</Text>
+                <Text style={styles.fundingGoal}>Goal: {money(issue.funding_goal)}</Text>
+              </View>
+              <View style={[styles.pill, { backgroundColor: statusColor(statusKey) + "18" }]}>
+                <Text style={[styles.pillText, { color: statusColor(statusKey) }]}>{status}</Text>
+              </View>
+            </View>
+
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progress}%` }]} />
+            </View>
+            <Text style={styles.fundingNote}>
+              {progress}% funded
+              {issue.funding_deadline
+                ? ` • Deadline ${new Date(issue.funding_deadline).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
+                : ""}
+            </Text>
+
+            {userDonationTotal > 0 && (
+              <Text style={styles.fundingNote}>You contributed {money(userDonationTotal)} to this issue.</Text>
+            )}
+
+            {canDonate && (
+              <View style={styles.donationBox}>
+                <Text style={styles.fieldLabel}>Simulated donation amount</Text>
+                <TextInput
+                  value={donationAmount}
+                  onChangeText={setDonationAmount}
+                  keyboardType="decimal-pad"
+                  placeholder="Example: 10"
+                  placeholderTextColor="#94A3B8"
+                  style={styles.fieldInput}
+                />
+                <Pressable
+                  onPress={handleDonate}
+                  disabled={donating}
+                  style={[styles.primaryBtn, { marginTop: 12 }, donating && styles.disabledBtn]}
+                >
+                  {donating ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Donate</Text>}
+                </Pressable>
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Report Progress</Text>
           {[
             ["Report received", "Your report has been saved with its photo and location.", true],
-            ["Field review", "Available field workers can review and claim this report.", status !== "Pending"],
-            ["Resolution update", "When the issue is marked resolved, you can confirm the result.", status === "Resolved"],
+            ["Field review", "Available field workers can review and claim this report.", statusKey !== "pending"],
+            ["Resolution update", "When the issue is marked resolved, you can confirm the result.", statusKey === "resolved"],
           ].map(([title, body, done], index) => (
             <View key={title} style={styles.timelineRow}>
               <View style={[styles.timelineDot, done && styles.timelineDotDone]}>
@@ -561,6 +634,40 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   sectionTitle: { color: C.text, fontSize: 16, fontWeight: "900", marginBottom: 12 },
+  fundingHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  fundingAmount: { color: C.text, fontSize: 20, fontWeight: "900" },
+  fundingGoal: { color: C.muted, fontWeight: "700", marginTop: 3 },
+  progressTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: C.navy,
+  },
+  fundingNote: {
+    marginTop: 8,
+    color: C.muted,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  donationBox: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: "#F8FAFC",
+  },
   timelineRow: { flexDirection: "row", gap: 12, paddingVertical: 9 },
   timelineDot: {
     width: 28,

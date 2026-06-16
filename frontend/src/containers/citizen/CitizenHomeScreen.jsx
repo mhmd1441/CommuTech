@@ -17,6 +17,7 @@ import BottomNav from "../shared/BottomNav";
 import api from "../../services/api";
 import { getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
+import { issueStatusKey, issueStatusLabel } from "../../services/issuePresentation";
 
 const COLORS = {
   navy: "#19405F",
@@ -232,10 +233,15 @@ export default function CitizenHomeScreen({ navigation }) {
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
+  const getStatusColor = (issue) => {
+    switch (issueStatusKey(issue)) {
       case "resolved": return COLORS.green;
+      case "funded": return COLORS.green;
+      case "rejected": return COLORS.danger;
       case "in_progress": return COLORS.orange;
+      case "under_review": return COLORS.orange;
+      case "awaiting_funding": return COLORS.navy;
+      case "expired": return COLORS.danger;
       default: return COLORS.navy;
     }
   };
@@ -247,10 +253,6 @@ export default function CitizenHomeScreen({ navigation }) {
       case "medium": return "#2563EB";
       default: return COLORS.navy;
     }
-  };
-
-  const formatStatus = (status) => {
-    return status?.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase()) || "Pending";
   };
 
   const formatDate = (dateStr) => {
@@ -417,8 +419,8 @@ export default function CitizenHomeScreen({ navigation }) {
                 >
                   <View style={styles.issueRight}>
                     <View style={styles.cardHeaderRow}>
-                      <Text style={[styles.statusText, { color: getStatusColor(issue.status) }]}>
-                        {formatStatus(issue.status)}
+                      <Text style={[styles.statusText, { color: getStatusColor(issue) }]}>
+                        {issueStatusLabel(issue)}
                       </Text>
                       <Text style={[styles.priorityChip, { color: getPriorityColor(issue.priority), borderColor: getPriorityColor(issue.priority) + "35" }]}>
                         {issue.priority}

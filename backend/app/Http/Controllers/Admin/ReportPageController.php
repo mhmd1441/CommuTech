@@ -6,6 +6,7 @@ use App\Events\NotificationSent;
 use App\Http\Controllers\Controller;
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
+use App\Models\IssueDonation;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -58,7 +59,15 @@ class ReportPageController extends Controller
 
     public function show(Issue $report)
     {
-        $report->load(['user.roles', 'assignee.roles']);
+        if ($report->expireFundingIfNeeded()) {
+            $this->notifyFundingExpired($report);
+        }
+
+        $report->load([
+            'user.roles',
+            'assignee.roles',
+            'donations' => fn ($query) => $query->with('user:id,name,email,phone')->latest(),
+        ]);
 
         $notifications = CommuTechNotification::query()
             ->where('issue_id', $report->id)
@@ -70,6 +79,149 @@ class ReportPageController extends Controller
             'report' => $report,
             'notifications' => $notifications,
         ]);
+    }
+
+    public function approveFunding(Request $request, Issue $report)
+    {
+        if ($report->funding_status !== 'requested') {
+            return back()->withErrors([
+                'funding' => 'Only requested funding reports can be approved.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'funding_type' => ['required', Rule::in(Issue::FUNDING_TYPES)],
+            'municipality_contribution' => ['nullable', 'numeric', 'min:0'],
+            'funding_deadline' => ['required_if:funding_type,community,mixed', 'nullable', 'date', 'after_or_equal:today'],
+        ]);
+
+        $estimatedCost = (float) $report->estimated_cost;
+
+        if ($estimatedCost <= 0) {
+            return back()->withErrors([
+                'funding' => 'Estimated cost is required before approving funding.',
+            ]);
+        }
+
+        $fundingType = $data['funding_type'];
+        $municipalityContribution = round((float) ($data['municipality_contribution'] ?? 0), 2);
+
+        if ($fundingType === 'mixed' && ($municipalityContribution <= 0 || $municipalityContribution >= $estimatedCost)) {
+            return back()->withErrors([
+                'municipality_contribution' => 'Mixed funding needs a municipal contribution greater than 0 and less than the estimated cost.',
+            ]);
+        }
+
+        if ($fundingType === 'community') {
+            $municipalityContribution = 0;
+        }
+
+        if ($fundingType === 'municipal') {
+            $report->update([
+                'status' => 'in_progress',
+                'funding_status' => 'none',
+                'funding_type' => 'municipal',
+                'funding_goal' => null,
+                'funding_raised' => 0,
+                'funding_deadline' => null,
+                'municipality_contribution' => $estimatedCost,
+                'funding_approved_at' => now(),
+                'funding_funded_at' => null,
+            ]);
+
+            $this->notify(
+                $report->user_id,
+                $report->id,
+                'citizen',
+                'Repair Approved',
+                'Your report "'.$report->title.'" was approved for repair.'
+            );
+
+            if ($report->assigned_to) {
+                $this->notify(
+                    $report->assigned_to,
+                    $report->id,
+                    'worker',
+                    'Repair Approved',
+                    'Municipal funding was approved for "'.$report->title.'".'
+                );
+            }
+
+            return redirect()
+                ->route('admin.reports.show', $report)
+                ->with('status', 'Funding approved as municipal repair.');
+        }
+
+        $fundingGoal = round($estimatedCost - $municipalityContribution, 2);
+
+        $report->update([
+            'status' => 'awaiting_funding',
+            'funding_status' => 'open',
+            'funding_type' => $fundingType,
+            'funding_goal' => $fundingGoal,
+            'funding_raised' => 0,
+            'funding_deadline' => $data['funding_deadline'],
+            'municipality_contribution' => $municipalityContribution,
+            'funding_approved_at' => now(),
+            'funding_funded_at' => null,
+        ]);
+
+        $this->notify(
+            $report->user_id,
+            $report->id,
+            'citizen',
+            'Community Funding Open',
+            'Your report "'.$report->title.'" is now open for community funding.'
+        );
+
+        return redirect()
+            ->route('admin.reports.show', $report)
+            ->with('status', 'Community funding opened successfully.');
+    }
+
+    public function rejectFunding(Request $request, Issue $report)
+    {
+        if ($report->funding_status !== 'requested') {
+            return back()->withErrors([
+                'funding' => 'Only requested funding reports can be rejected.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'rejection_reason' => ['required', 'string', 'min:5', 'max:1200'],
+        ]);
+
+        $report->update([
+            'status' => 'rejected',
+            'funding_status' => 'none',
+            'funding_type' => null,
+            'funding_goal' => null,
+            'funding_deadline' => null,
+            'municipality_contribution' => null,
+            'rejection_reason' => $data['rejection_reason'],
+        ]);
+
+        $this->notify(
+            $report->user_id,
+            $report->id,
+            'citizen',
+            'Report Rejected',
+            'Your report "'.$report->title.'" was reviewed and could not be processed.'
+        );
+
+        if ($report->assigned_to) {
+            $this->notify(
+                $report->assigned_to,
+                $report->id,
+                'worker',
+                'Funding Request Rejected',
+                'Admin rejected the funding request for "'.$report->title.'".'
+            );
+        }
+
+        return redirect()
+            ->route('admin.reports.show', $report)
+            ->with('status', 'Funding request rejected.');
     }
 
     public function create()
@@ -216,5 +368,48 @@ class ReportPageController extends Controller
     private function workers()
     {
         return User::withRole(User::ROLE_WORKER)->orderBy('name')->get(['id', 'name', 'email', 'role']);
+    }
+
+    private function notifyFundingExpired(Issue $issue): void
+    {
+        $this->notify(
+            $issue->user_id,
+            $issue->id,
+            'citizen',
+            'Funding Period Ended',
+            'The funding period ended for "'.$issue->title.'". Contributions were marked as refunded.'
+        );
+
+        $issue->donations()
+            ->where('user_id', '!=', $issue->user_id)
+            ->where('status', IssueDonation::STATUS_REFUNDED)
+            ->get()
+            ->each(function (IssueDonation $donation) use ($issue) {
+                $this->notify(
+                    $donation->user_id,
+                    $issue->id,
+                    'citizen',
+                    'Contribution Refunded',
+                    'The funding period ended for "'.$issue->title.'". Your simulated contribution was refunded.'
+                );
+            });
+    }
+
+    private function notify(int $userId, int $issueId, string $recipientRole, string $title, string $body): void
+    {
+        $notification = CommuTechNotification::create([
+            'user_id' => $userId,
+            'issue_id' => $issueId,
+            'type' => 'funding_update',
+            'recipient_role' => $recipientRole,
+            'title' => $title,
+            'body' => $body,
+        ]);
+
+        try {
+            NotificationSent::dispatch($notification);
+        } catch (\Throwable $e) {
+            \Log::warning('Broadcast failed: '.$e->getMessage());
+        }
     }
 }

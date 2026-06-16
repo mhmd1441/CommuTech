@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Mail\AdminInvestigationMail;
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
+use App\Models\IssueDonation;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -159,9 +160,20 @@ class IssueController extends Controller
         }
 
         $userId = $request->user()->id;
+        if ($issue->expireFundingIfNeeded()) {
+            $this->notifyFundingExpired($issue);
+        }
+
         $issue->load(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
               ->loadCount('upvotes');
         $issue->setAttribute('has_upvoted', $issue->upvotes()->where('user_id', $userId)->exists());
+        $issue->setAttribute(
+            'user_donation_total',
+            (float) $issue->donations()
+                ->where('user_id', $userId)
+                ->where('status', IssueDonation::STATUS_CONFIRMED)
+                ->sum('amount')
+        );
 
         return response()->json($issue);
     }
@@ -344,5 +356,48 @@ class IssueController extends Controller
     private function triageScore(string $description): float
     {
         return min(99, max(35, strlen($description) / 8));
+    }
+
+    private function notifyFundingExpired(Issue $issue): void
+    {
+        $this->notify(
+            $issue->user_id,
+            $issue->id,
+            'citizen',
+            'Funding Period Ended',
+            'The funding period ended for "'.$issue->title.'". Contributions were marked as refunded.'
+        );
+
+        $issue->donations()
+            ->where('user_id', '!=', $issue->user_id)
+            ->where('status', IssueDonation::STATUS_REFUNDED)
+            ->get()
+            ->each(function (IssueDonation $donation) use ($issue) {
+                $this->notify(
+                    $donation->user_id,
+                    $issue->id,
+                    'citizen',
+                    'Contribution Refunded',
+                    'The funding period ended for "'.$issue->title.'". Your simulated contribution was refunded.'
+                );
+            });
+    }
+
+    private function notify(int $userId, int $issueId, string $recipientRole, string $title, string $body): void
+    {
+        $notification = CommuTechNotification::create([
+            'user_id' => $userId,
+            'issue_id' => $issueId,
+            'type' => 'funding_update',
+            'recipient_role' => $recipientRole,
+            'title' => $title,
+            'body' => $body,
+        ]);
+
+        try {
+            \App\Events\NotificationSent::dispatch($notification);
+        } catch (\Throwable $e) {
+            \Log::warning('Broadcast failed: '.$e->getMessage());
+        }
     }
 }

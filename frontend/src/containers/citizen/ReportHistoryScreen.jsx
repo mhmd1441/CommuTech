@@ -14,6 +14,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import BottomNav from "../shared/BottomNav";
 import ReportHistoryLoadingAnimation from "../shared/LoadingPage/ReportHistoryLoadingAnimation";
 import api from "../../services/api";
+import { issueStatusKey, issueStatusLabel } from "../../services/issuePresentation";
 
 const C = {
   navy: "#19405F",
@@ -35,7 +36,11 @@ const FILTERS = [
 ];
 
 const STATUS_META = {
-  pending: { label: "Pending", color: C.orange, bg: "#FEF3E2", icon: "time-outline" },
+  pending: { label: "Submitted", color: C.orange, bg: "#FEF3E2", icon: "time-outline" },
+  under_review: { label: "Being Assessed", color: C.orange, bg: "#FFF7ED", icon: "search-outline" },
+  awaiting_funding: { label: "Funding Open", color: C.navy, bg: "#EFF6FF", icon: "heart-outline" },
+  funded: { label: "Fully Funded", color: C.green, bg: "#ECFDF5", icon: "checkmark-circle-outline" },
+  expired: { label: "Funding Ended", color: C.red, bg: "#FEF2F2", icon: "time-outline" },
   in_progress: { label: "In Progress", color: C.navy, bg: "#EFF6FF", icon: "sync-outline" },
   "in-progress": { label: "In Progress", color: C.navy, bg: "#EFF6FF", icon: "sync-outline" },
   resolved: { label: "Resolved", color: C.green, bg: "#ECFDF5", icon: "checkmark-circle-outline" },
@@ -43,8 +48,8 @@ const STATUS_META = {
   rejected: { label: "Rejected", color: C.red, bg: "#FEF2F2", icon: "close-circle-outline" },
 };
 
-function getStatusMeta(status) {
-  return STATUS_META[status] || STATUS_META.pending;
+function getStatusMeta(issue) {
+  return STATUS_META[issueStatusKey(issue)] || STATUS_META.pending;
 }
 
 function dateFromIssue(issue) {
@@ -113,7 +118,7 @@ function buildHistoryRows(issues) {
 }
 
 const HistoryRow = ({ issue, issueDate, onPress }) => {
-  const statusMeta = getStatusMeta(issue.status);
+  const statusMeta = getStatusMeta(issue);
 
   return (
     <TouchableOpacity style={styles.historyRow} onPress={() => onPress(issue)} activeOpacity={0.82}>
@@ -133,7 +138,7 @@ const HistoryRow = ({ issue, issueDate, onPress }) => {
         <View style={styles.rowMeta}>
           <View style={[styles.statusChip, { backgroundColor: statusMeta.bg }]}>
             <Ionicons name={statusMeta.icon} size={11} color={statusMeta.color} />
-            <Text style={[styles.statusText, { color: statusMeta.color }]}>{statusMeta.label}</Text>
+            <Text style={[styles.statusText, { color: statusMeta.color }]}>{issueStatusLabel(issue)}</Text>
           </View>
           {!!issue.category && (
             <Text style={styles.metaText} numberOfLines={1}>{issue.category}</Text>
@@ -185,7 +190,7 @@ export default function ReportHistoryScreen({ navigation }) {
   const counts = useMemo(() => ({
     total: filteredIssues.length,
     resolved: filteredIssues.filter((issue) => issue.status === "resolved").length,
-    active: filteredIssues.filter((issue) => ["pending", "in_progress", "in-progress"].includes(issue.status)).length,
+    active: filteredIssues.filter((issue) => ["pending", "under_review", "awaiting_funding", "funded", "in_progress", "in-progress"].includes(issueStatusKey(issue))).length,
   }), [filteredIssues]);
 
   const onRefresh = useCallback(() => {

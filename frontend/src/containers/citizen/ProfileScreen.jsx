@@ -583,6 +583,13 @@ function ProfileScreen({ navigation }) {
           />
           <MenuDivider />
           <MenuItem
+            icon="heart-outline"
+            iconColor={C.green}
+            label="My Contributions"
+            onPress={() => navigation.navigate('MyContributions')}
+          />
+          <MenuDivider />
+          <MenuItem
             icon="notifications-outline"
             label="Notifications"
             onPress={() => navigation.navigate('Notifications')}

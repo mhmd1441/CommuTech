@@ -22,10 +22,26 @@ class Issue extends Model
 
     public const STATUSES = [
         'pending',
+        'under_review',
+        'awaiting_funding',
         'in_progress',
         'resolved',
         'under_investigation',
         'rejected',
+    ];
+
+    public const FUNDING_STATUSES = [
+        'none',
+        'requested',
+        'open',
+        'funded',
+        'expired',
+    ];
+
+    public const FUNDING_TYPES = [
+        'municipal',
+        'community',
+        'mixed',
     ];
 
     protected $fillable = [
@@ -56,6 +72,16 @@ class Issue extends Model
         'sla_breached',
         'municipality_en',
         'municipality_ar',
+        'funding_status',
+        'funding_type',
+        'funding_goal',
+        'estimated_cost',
+        'funding_raised',
+        'funding_deadline',
+        'municipality_contribution',
+        'funding_request_note',
+        'funding_approved_at',
+        'funding_funded_at',
     ];
 
     protected function casts(): array
@@ -71,6 +97,13 @@ class Issue extends Model
             'citizen_confirmed_at' => 'datetime',
             'due_at' => 'datetime',
             'sla_breached' => 'boolean',
+            'funding_goal' => 'decimal:2',
+            'estimated_cost' => 'decimal:2',
+            'funding_raised' => 'decimal:2',
+            'funding_deadline' => 'datetime',
+            'municipality_contribution' => 'decimal:2',
+            'funding_approved_at' => 'datetime',
+            'funding_funded_at' => 'datetime',
         ];
     }
 
@@ -99,8 +132,69 @@ class Issue extends Model
         return $this->hasMany(IssueUpvote::class);
     }
 
+    public function donations()
+    {
+        return $this->hasMany(IssueDonation::class);
+    }
+
+    public function confirmedDonations()
+    {
+        return $this->donations()->where('status', IssueDonation::STATUS_CONFIRMED);
+    }
+
     public function notifications()
     {
         return $this->hasMany(CommuTechNotification::class);
+    }
+
+    public function expireFundingIfNeeded(): bool
+    {
+        if (
+            $this->funding_status !== 'open' ||
+            ! $this->funding_deadline ||
+            $this->funding_deadline->isFuture()
+        ) {
+            return false;
+        }
+
+        $now = now();
+
+        $this->forceFill([
+            'funding_status' => 'expired',
+        ])->save();
+
+        $this->donations()
+            ->where('status', IssueDonation::STATUS_CONFIRMED)
+            ->update([
+                'status' => IssueDonation::STATUS_REFUNDED,
+                'refunded_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        return true;
+    }
+
+    public function markFundingAsFundedIfGoalReached(): bool
+    {
+        if (
+            $this->funding_status !== 'open' ||
+            (float) $this->funding_goal <= 0 ||
+            (float) $this->funding_raised < (float) $this->funding_goal
+        ) {
+            return false;
+        }
+
+        $this->forceFill([
+            'funding_status' => 'funded',
+            'status' => 'pending',
+            'funding_funded_at' => now(),
+        ])->save();
+
+        return true;
+    }
+
+    public function remainingFundingAmount(): float
+    {
+        return max(0, (float) $this->funding_goal - (float) $this->funding_raised);
     }
 }

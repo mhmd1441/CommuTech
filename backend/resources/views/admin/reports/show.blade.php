@@ -15,7 +15,7 @@
         $tagClass = function ($value) {
             return match ($value) {
                 'resolved', 'citizen' => 'green',
-                'in_progress', 'worker' => 'orange',
+                'in_progress', 'under_review', 'awaiting_funding', 'worker' => 'orange',
                 'under_investigation' => 'orange',
                 'rejected', 'admin' => 'red',
                 default => 'blue',
@@ -37,6 +37,10 @@
         $submittedImage = $imageUrl($report->image_url);
         $workerImage = $imageUrl($report->worker_resolution_image_url);
         $citizenImage = $imageUrl($report->citizen_resolution_image_url);
+        $money = fn ($value) => filled($value) ? '$'.number_format((float) $value, 2) : 'N/A';
+        $fundingGoal = (float) ($report->funding_goal ?? 0);
+        $fundingRaised = (float) ($report->funding_raised ?? 0);
+        $fundingProgress = $fundingGoal > 0 ? min(100, round(($fundingRaised / $fundingGoal) * 100)) : 0;
     @endphp
 
     <style>
@@ -60,8 +64,20 @@
         .timeline-item strong { display: block; font-size: 13px; }
         .timeline-item span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; font-weight: 700; }
         .stack { display: grid; gap: 14px; }
+        .funding-progress { height: 10px; border-radius: 999px; background: #252a31; overflow: hidden; border: 1px solid var(--line); }
+        .funding-progress span { display: block; height: 100%; background: var(--blue); }
+        .funding-actions { display: grid; grid-template-columns: 1.2fr .8fr; gap: 12px; margin-top: 14px; }
+        .mini-table { width: 100%; margin-top: 10px; }
+        .mini-table th, .mini-table td { font-size: 12px; padding: 9px; }
         @media (max-width: 1100px) { .detail-grid, .metric-row, .media-grid, .kv-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) { .funding-actions { grid-template-columns: 1fr; } }
     </style>
+
+    @if ($errors->any())
+        <div class="detail-card" style="border-color:#7f1d1d;background:#2a1013;margin-bottom:14px;">
+            <strong style="color:#fecaca;">{{ $errors->first() }}</strong>
+        </div>
+    @endif
 
     <div class="metric-row">
         <div class="metric"><span>Status</span><strong><span class="tag {{ $tagClass($report->status) }}">{{ str_replace('_', ' ', $report->status) }}</span></strong></div>
@@ -89,6 +105,97 @@
             <section class="detail-card">
                 <h2>Description</h2>
                 <div class="body-copy">{{ $report->description }}</div>
+            </section>
+
+            <section class="detail-card">
+                <h2>Funding</h2>
+                <div class="kv-grid">
+                    <div class="kv"><span>Funding Status</span><strong><span class="tag {{ $tagClass($report->funding_status) }}">{{ str_replace('_', ' ', $report->funding_status ?? 'none') }}</span></strong></div>
+                    <div class="kv"><span>Funding Type</span><strong>{{ $report->funding_type ? ucfirst($report->funding_type) : 'N/A' }}</strong></div>
+                    <div class="kv"><span>Estimated Cost</span><strong>{{ $money($report->estimated_cost) }}</strong></div>
+                    <div class="kv"><span>Community Goal</span><strong>{{ $money($report->funding_goal) }}</strong></div>
+                    <div class="kv"><span>Raised</span><strong>{{ $money($report->funding_raised) }}</strong></div>
+                    <div class="kv"><span>Municipality Contribution</span><strong>{{ $money($report->municipality_contribution) }}</strong></div>
+                    <div class="kv"><span>Deadline</span><strong>{{ $report->funding_deadline?->format('M j, Y') ?? 'N/A' }}</strong></div>
+                    <div class="kv"><span>Approved At</span><strong>{{ $report->funding_approved_at?->format('M j, Y g:i A') ?? 'N/A' }}</strong></div>
+                </div>
+
+                @if ($fundingGoal > 0)
+                    <div style="margin-top:14px;">
+                        <label>Funding Progress</label>
+                        <div class="funding-progress"><span style="width: {{ $fundingProgress }}%;"></span></div>
+                        <div class="muted" style="margin-top:6px;">{{ $fundingProgress }}% funded</div>
+                    </div>
+                @endif
+
+                <div style="margin-top:14px;">
+                    <label>Worker Funding Justification</label>
+                    <div class="body-copy">{{ $report->funding_request_note ?? 'No funding request was submitted.' }}</div>
+                </div>
+
+                @if ($report->funding_status === 'requested')
+                    <div class="funding-actions">
+                        <form method="POST" action="{{ route('admin.reports.funding.approve', $report) }}">
+                            @csrf
+                            <h2 style="font-size:15px;">Approve Funding</h2>
+                            <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+                                <div>
+                                    <label>Approval Type</label>
+                                    <select name="funding_type" required>
+                                        <option value="municipal">Municipal</option>
+                                        <option value="community">Community</option>
+                                        <option value="mixed">Mixed</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>Funding Deadline</label>
+                                    <input type="date" name="funding_deadline" value="{{ old('funding_deadline', now()->addDays(30)->format('Y-m-d')) }}">
+                                </div>
+                                <div class="full">
+                                    <label>Municipality Contribution</label>
+                                    <input name="municipality_contribution" value="{{ old('municipality_contribution') }}" placeholder="Only needed for mixed funding">
+                                </div>
+                            </div>
+                            <button class="button primary" type="submit" style="margin-top:12px;">Approve Request</button>
+                        </form>
+
+                        <form method="POST" action="{{ route('admin.reports.funding.reject', $report) }}">
+                            @csrf
+                            <h2 style="font-size:15px;">Reject Funding</h2>
+                            <label>Reason</label>
+                            <textarea name="rejection_reason" required placeholder="Explain why this request cannot be processed.">{{ old('rejection_reason') }}</textarea>
+                            <button class="button danger" type="submit" style="margin-top:12px;">Reject Request</button>
+                        </form>
+                    </div>
+                @endif
+
+                <div style="margin-top:16px;">
+                    <label>Donations</label>
+                    @if ($report->donations->isNotEmpty())
+                        <table class="mini-table">
+                            <thead>
+                                <tr>
+                                    <th>Citizen</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($report->donations as $donation)
+                                    <tr>
+                                        <td>{{ $donation->user?->name ?? 'Unknown' }}</td>
+                                        <td>{{ $money($donation->amount) }}</td>
+                                        <td><span class="tag {{ $donation->status === 'refunded' ? 'orange' : 'green' }}">{{ $donation->status }}</span></td>
+                                        <td>{{ $donation->created_at?->format('M j, Y g:i A') }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    @else
+                        <p class="muted">No donations recorded for this report.</p>
+                    @endif
+                </div>
             </section>
 
             <section class="detail-card">

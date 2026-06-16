@@ -22,6 +22,7 @@ import * as ImagePicker from "expo-image-picker";
 import api from "../../services/api";
 import { getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
+import { fundingPercent, issueStatusLabel, money } from "../../services/issuePresentation";
 
 const COLORS = {
   navy: "#19405F",
@@ -60,10 +61,6 @@ function getPriorityColor(priority) {
   }
 }
 
-function formatStatus(status) {
-  return status?.replace("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Pending";
-}
-
 function formatDistance(issue) {
   const distance = issue.distance_meters ?? issue.distance;
   const meters = Math.round(Number(distance));
@@ -91,6 +88,8 @@ export default function WorkerHomeScreen({ navigation }) {
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [resolutionNote, setResolutionNote] = useState("");
   const [resolutionPhoto, setResolutionPhoto] = useState(null);
+  const [fundingCost, setFundingCost] = useState("");
+  const [fundingRequestNote, setFundingRequestNote] = useState("");
   const mapRef = useRef(null);
 
   const activeRegion = workerRegion || DEFAULT_REGION;
@@ -237,6 +236,8 @@ export default function WorkerHomeScreen({ navigation }) {
     setSelectedIssue({ issue, assigned });
     setResolutionNote(issue.worker_resolution_note || "");
     setResolutionPhoto(null);
+    setFundingCost(issue.estimated_cost ? String(issue.estimated_cost) : "");
+    setFundingRequestNote(issue.funding_request_note || "");
   };
 
   const captureResolutionPhoto = () => {
@@ -284,6 +285,52 @@ export default function WorkerHomeScreen({ navigation }) {
       await loadWorkerIssues();
     } catch (error) {
       Alert.alert("Assign Issue", error.message || "Could not assign this issue.");
+    } finally {
+      setBusyIssueId(null);
+    }
+  };
+
+  const requestFunding = async (issue) => {
+    const estimatedCost = Number(fundingCost);
+    const note = fundingRequestNote.trim();
+
+    if (!Number.isFinite(estimatedCost) || estimatedCost <= 0) {
+      Alert.alert("Estimated Cost", "Enter a valid estimated repair cost.");
+      return;
+    }
+
+    if (note.length < 10) {
+      Alert.alert("Funding Justification", "Please explain why this issue needs funding.");
+      return;
+    }
+
+    try {
+      setBusyIssueId(issue.id);
+      const { data } = await api.post(`/worker/issues/${issue.id}/funding-request`, {
+        estimated_cost: estimatedCost,
+        funding_request_note: note,
+      });
+
+      setSelectedIssue({ issue: data.issue, assigned: true });
+      await loadWorkerIssues();
+      Alert.alert("Funding Request Sent", data.message || "Admin will review this request.");
+    } catch (error) {
+      Alert.alert("Funding Request", error.message || "Could not submit funding request.");
+    } finally {
+      setBusyIssueId(null);
+    }
+  };
+
+  const startRepair = async (issue) => {
+    try {
+      setBusyIssueId(issue.id);
+      const { data } = await api.post(`/worker/issues/${issue.id}/status`, {
+        status: "in_progress",
+      });
+      setSelectedIssue({ issue: data.issue, assigned: true });
+      await loadWorkerIssues();
+    } catch (error) {
+      Alert.alert("Start Repair", error.message || "Could not start this repair.");
     } finally {
       setBusyIssueId(null);
     }
@@ -348,7 +395,7 @@ export default function WorkerHomeScreen({ navigation }) {
           <Text style={[styles.priorityPill, { color: priorityColor, borderColor: priorityColor }]}>
             {issue.priority}
           </Text>
-          <Text style={styles.statusPill}>{formatStatus(issue.status)}</Text>
+          <Text style={styles.statusPill}>{issueStatusLabel(issue)}</Text>
         </View>
       </Pressable>
     );
@@ -386,7 +433,20 @@ export default function WorkerHomeScreen({ navigation }) {
     const priorityColor = getPriorityColor(issue.priority);
     const reporter = personName(issue.user, "Unknown citizen");
     const assignee = personName(issue.assignee, issue.assigned_to ? "Assigned worker" : "Unassigned");
-    const canResolve = assigned && !["resolved", "under_investigation", "rejected"].includes(issue.status);
+    const fundingBlocked = ["requested", "open", "expired"].includes(issue.funding_status);
+    const canRequestFunding = assigned && issue.status === "in_progress" && issue.funding_status === "none";
+    const canStartRepair = assigned && issue.status === "pending" && issue.funding_status === "funded";
+    const canResolve = assigned && issue.status === "in_progress" && !fundingBlocked;
+    const showFunding = issue.funding_status && issue.funding_status !== "none";
+    const progress = fundingPercent(issue);
+    const showPrimaryAction = !assigned || canStartRepair || canResolve;
+    const primaryActionLabel = !assigned ? "Assign to me" : canStartRepair ? "Start Repair" : "Mark Resolved";
+    const primaryActionIcon = !assigned ? "briefcase-outline" : canStartRepair ? "play-circle-outline" : "checkmark-circle-outline";
+    const primaryAction = () => {
+      if (!assigned) return assignToMe(issue);
+      if (canStartRepair) return startRepair(issue);
+      return markResolved(issue);
+    };
 
     return (
       <SafeAreaView style={styles.root}>
@@ -424,7 +484,7 @@ export default function WorkerHomeScreen({ navigation }) {
               <Text style={[styles.detailPriority, { color: priorityColor, borderColor: priorityColor }]}>
                 {issue.priority}
               </Text>
-              <Text style={styles.statusPill}>{formatStatus(issue.status)}</Text>
+              <Text style={styles.statusPill}>{issueStatusLabel(issue)}</Text>
               {formatDistance(issue) && <Text style={styles.statusPill}>{formatDistance(issue)}</Text>}
               {(issue.upvotes_count ?? 0) > 0 && (
                 <Text style={styles.statusPill}>👥 {issue.upvotes_count} affected</Text>
@@ -489,6 +549,71 @@ export default function WorkerHomeScreen({ navigation }) {
             </View>
           )}
 
+          {showFunding && (
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>Funding</Text>
+              <View style={styles.fundingSummaryRow}>
+                <View>
+                  <Text style={styles.fundingAmount}>{money(issue.funding_raised)} raised</Text>
+                  <Text style={styles.inputHint}>Goal: {money(issue.funding_goal)}</Text>
+                </View>
+                <Text style={styles.statusPill}>{issueStatusLabel(issue)}</Text>
+              </View>
+              {Number(issue.funding_goal || 0) > 0 && (
+                <>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${progress}%` }]} />
+                  </View>
+                  <Text style={styles.inputHint}>{progress}% funded</Text>
+                </>
+              )}
+              {!!issue.estimated_cost && (
+                <Text style={styles.detailDescription}>Estimated repair cost: {money(issue.estimated_cost)}</Text>
+              )}
+              {!!issue.funding_request_note && (
+                <Text style={styles.detailDescription}>{issue.funding_request_note}</Text>
+              )}
+            </View>
+          )}
+
+          {canRequestFunding && (
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>Request Funding</Text>
+              <Text style={styles.inputHint}>Use this only when the issue is valid but cannot be repaired directly without budget approval.</Text>
+              <TextInput
+                value={fundingCost}
+                onChangeText={setFundingCost}
+                keyboardType="decimal-pad"
+                placeholder="Estimated cost"
+                placeholderTextColor="#94A3B8"
+                style={styles.fundingInput}
+              />
+              <TextInput
+                value={fundingRequestNote}
+                onChangeText={setFundingRequestNote}
+                placeholder="Explain why funding is needed"
+                placeholderTextColor="#94A3B8"
+                style={[styles.resolutionInput, { marginTop: 10 }]}
+                multiline
+                textAlignVertical="top"
+              />
+              <Pressable
+                onPress={() => requestFunding(issue)}
+                disabled={busyIssueId === issue.id}
+                style={[styles.fundingRequestBtn, busyIssueId === issue.id && { opacity: 0.55 }]}
+              >
+                {busyIssueId === issue.id ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="wallet-outline" size={18} color="#fff" />
+                    <Text style={styles.primaryActionText}>Send Funding Request</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          )}
+
           {canResolve && (
             <View style={styles.detailCard}>
               <Text style={styles.sectionTitle}>Fix Description</Text>
@@ -531,13 +656,13 @@ export default function WorkerHomeScreen({ navigation }) {
               <Text style={styles.navigateActionText}>Navigate</Text>
             </Pressable>
           )}
-          {(canResolve || !assigned) && (
+          {showPrimaryAction && (
             <Pressable
-              onPress={() => (assigned ? markResolved(issue) : assignToMe(issue))}
+              onPress={primaryAction}
               disabled={busyIssueId === issue.id}
               style={[
                 styles.primaryAction,
-                assigned && styles.resolveAction,
+                canResolve && styles.resolveAction,
                 busyIssueId === issue.id && { opacity: 0.55 },
               ]}
             >
@@ -546,12 +671,12 @@ export default function WorkerHomeScreen({ navigation }) {
               ) : (
                 <>
                   <Ionicons
-                    name={assigned ? "checkmark-circle-outline" : "briefcase-outline"}
+                    name={primaryActionIcon}
                     size={18}
                     color="#fff"
                   />
                   <Text style={styles.primaryActionText}>
-                    {assigned ? "Mark Resolved" : "Assign to me"}
+                    {primaryActionLabel}
                   </Text>
                 </>
               )}
@@ -1070,6 +1195,46 @@ const styles = StyleSheet.create({
   infoLabel: { color: COLORS.muted, fontSize: 11, fontWeight: "900" },
   infoValue: { color: COLORS.text, marginTop: 3, fontWeight: "900", lineHeight: 18 },
   inputHint: { color: COLORS.muted, fontWeight: "700", lineHeight: 18, marginBottom: 10 },
+  fundingSummaryRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  fundingAmount: { color: COLORS.text, fontSize: 19, fontWeight: "900" },
+  progressTrack: {
+    height: 10,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: COLORS.border,
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: COLORS.navy,
+  },
+  fundingInput: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    color: COLORS.text,
+    fontSize: 14,
+  },
+  fundingRequestBtn: {
+    marginTop: 12,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: COLORS.navy,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
   resolutionInput: {
     minHeight: 116,
     borderRadius: 14,

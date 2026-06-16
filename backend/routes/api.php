@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\IssueController;
+use App\Http\Controllers\IssueDonationController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MlController;
 use App\Http\Controllers\NotificationController;
@@ -55,12 +56,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{issue}', 'show');
+        Route::post('/{issue}/donations', [IssueDonationController::class, 'store']);
         Route::post('/{issue}/upvote', 'upvote');
         Route::patch('/{issue}/confirm-resolution', 'confirmResolution');
         Route::put('/{issue}', 'update');
         Route::patch('/{issue}', 'update');
         Route::delete('/{issue}', 'destroy');
     });
+
+    Route::get('/me/contributions', [IssueDonationController::class, 'index']);
 
     Route::prefix('notifications')->controller(NotificationController::class)->group(function () {
         Route::get('/', 'index');
@@ -73,6 +77,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/assigned', 'assigned');
             Route::get('/nearby', 'nearby');
             Route::patch('/{issue}/assign-to-me', 'assignToMe');
+            Route::post('/{issue}/funding-request', 'requestFunding');
             Route::patch('/{issue}/status', 'updateStatus');
             Route::post('/{issue}/status', 'updateStatus');
         });

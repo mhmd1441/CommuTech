@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\CommuTechNotification;
 use App\Models\Issue;
+use App\Models\IssueDonation;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -137,6 +139,63 @@ class WorkerIssueController extends Controller
         });
     }
 
+    public function requestFunding(Request $request, Issue $issue)
+    {
+        if ((int) $issue->assigned_to !== (int) $request->user()->id) {
+            abort(403);
+        }
+
+        if (! in_array($issue->status, ['in_progress', 'pending'], true) || $issue->funding_status !== 'none') {
+            return response()->json([
+                'message' => 'Funding can only be requested for active reports without an existing funding request.',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'estimated_cost' => ['required', 'numeric', 'min:1', 'max:9999999'],
+            'funding_request_note' => ['required', 'string', 'min:10', 'max:1200'],
+        ]);
+
+        $issue->update([
+            'status' => 'under_review',
+            'funding_status' => 'requested',
+            'funding_type' => null,
+            'estimated_cost' => round((float) $data['estimated_cost'], 2),
+            'funding_goal' => null,
+            'funding_raised' => 0,
+            'funding_deadline' => null,
+            'municipality_contribution' => null,
+            'funding_request_note' => $data['funding_request_note'],
+            'funding_approved_at' => null,
+            'funding_funded_at' => null,
+        ]);
+
+        User::withRole(User::ROLE_ADMIN)
+            ->get(['id'])
+            ->each(function (User $admin) use ($issue) {
+                $this->notify(
+                    $admin->id,
+                    $issue->id,
+                    'admin',
+                    'Funding Request Submitted',
+                    'A worker requested funding review for "'.$issue->title.'".'
+                );
+            });
+
+        $this->notify(
+            $issue->user_id,
+            $issue->id,
+            'citizen',
+            'Report Being Assessed',
+            'Your report "'.$issue->title.'" is being assessed by the team.'
+        );
+
+        return response()->json([
+            'message' => 'Funding request sent for admin review.',
+            'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
+        ]);
+    }
+
     public function updateStatus(Request $request, Issue $issue)
     {
         if ((int) $issue->assigned_to !== (int) $request->user()->id) {
@@ -155,6 +214,24 @@ class WorkerIssueController extends Controller
             'worker_resolution_image_url'=> ['nullable', 'url', 'max:2048'],
             'resolution_image'           => ['required_if:status,resolved', 'file', 'mimetypes:image/jpeg,image/png,image/webp,image/heic,image/heif', 'max:20480'],
         ]);
+
+        if (in_array($issue->funding_status, ['requested', 'open', 'expired'], true)) {
+            return response()->json([
+                'message' => 'This report cannot be updated until funding is approved or completed.',
+            ], 422);
+        }
+
+        if ($data['status'] === 'resolved' && $issue->status !== 'in_progress') {
+            return response()->json([
+                'message' => 'Only reports in progress can be marked as resolved.',
+            ], 422);
+        }
+
+        if ($data['status'] === 'in_progress' && ! in_array($issue->status, ['pending', 'in_progress'], true)) {
+            return response()->json([
+                'message' => 'This report is not ready to start repair work.',
+            ], 422);
+        }
 
         $updates = [
             'status'      => $data['status'],
@@ -188,10 +265,45 @@ class WorkerIssueController extends Controller
         ]);
         try { \App\Events\NotificationSent::dispatch($notification); } catch (\Throwable $e) { \Log::warning('Broadcast failed: '.$e->getMessage()); }
 
+        if ($data['status'] === 'resolved') {
+            $issue->donations()
+                ->where('status', IssueDonation::STATUS_CONFIRMED)
+                ->where('user_id', '!=', $issue->user_id)
+                ->distinct()
+                ->pluck('user_id')
+                ->each(function ($donorId) use ($issue) {
+                    $this->notify(
+                        (int) $donorId,
+                        $issue->id,
+                        'citizen',
+                        'Funded Report Resolved',
+                        'A report you helped fund, "'.$issue->title.'", has been resolved.'
+                    );
+                });
+        }
+
         return response()->json([
             'message' => 'Issue status updated.',
             'issue' => $issue->fresh()->load(['user:id,name,email,phone', 'assignee:id,name,email,phone']),
         ]);
+    }
+
+    private function notify(int $userId, int $issueId, string $recipientRole, string $title, string $body): void
+    {
+        $notification = CommuTechNotification::create([
+            'user_id' => $userId,
+            'issue_id' => $issueId,
+            'type' => 'funding_update',
+            'recipient_role' => $recipientRole,
+            'title' => $title,
+            'body' => $body,
+        ]);
+
+        try {
+            \App\Events\NotificationSent::dispatch($notification);
+        } catch (\Throwable $e) {
+            \Log::warning('Broadcast failed: '.$e->getMessage());
+        }
     }
 
     private function uploadToSupabase(\Illuminate\Http\UploadedFile $file): string

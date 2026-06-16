@@ -16,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import BottomNav from "../shared/BottomNav";
 import ReportsLoadingAnimation from "../shared/LoadingPage/ReportsLoadingAnimation";
 import api from "../../services/api";
+import { issueStatusKey, issueStatusLabel } from "../../services/issuePresentation";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -32,8 +33,12 @@ const C = {
 
 // ─── Status Config ────────────────────────────────────────────────────────────
 const STATUS_META = {
-  open: { label: 'Open', color: C.orange, bg: '#FEF3E2', icon: 'radio-button-on-outline' },
-  pending: { label: 'Pending', color: C.orange, bg: '#FEF3E2', icon: 'radio-button-on-outline' },
+  open: { label: 'Submitted', color: C.orange, bg: '#FEF3E2', icon: 'radio-button-on-outline' },
+  pending: { label: 'Submitted', color: C.orange, bg: '#FEF3E2', icon: 'radio-button-on-outline' },
+  under_review: { label: 'Being Assessed', color: C.orange, bg: '#FFF7ED', icon: 'search-outline' },
+  awaiting_funding: { label: 'Funding Open', color: C.navy, bg: '#EFF6FF', icon: 'heart-outline' },
+  funded: { label: 'Fully Funded', color: C.green, bg: '#ECFDF5', icon: 'checkmark-circle-outline' },
+  expired: { label: 'Funding Ended', color: C.red, bg: '#FEF2F2', icon: 'time-outline' },
   'in-progress': { label: 'In Progress', color: C.navy, bg: '#EFF6FF', icon: 'sync-outline' },
   in_progress: { label: 'In Progress', color: C.navy, bg: '#EFF6FF', icon: 'sync-outline' },
   resolved: { label: 'Resolved', color: C.green, bg: '#ECFDF5', icon: 'checkmark-circle-outline' },
@@ -50,10 +55,12 @@ const PRIORITY_META = {
 
 const TABS = [
   { id: 'all', label: 'All' },
-  { id: 'open', label: 'Open' },
+  { id: 'pending', label: 'Submitted' },
+  { id: 'under_review', label: 'Assessed' },
+  { id: 'awaiting_funding', label: 'Funding' },
+  { id: 'funded', label: 'Funded' },
   { id: 'in-progress', label: 'In Progress' },
   { id: 'resolved', label: 'Resolved' },
-  { id: 'under_investigation', label: 'Review' },
   { id: 'rejected', label: 'Rejected' },
 ];
 
@@ -65,7 +72,8 @@ const SORT_OPTIONS = [
 
 // ─── Issue Card ───────────────────────────────────────────────────────────────
 const IssueCard = ({ item, onPress, onImagePress }) => {
-  const statusMeta = STATUS_META[item.status] || STATUS_META.open;
+  const statusKey = issueStatusKey(item);
+  const statusMeta = STATUS_META[statusKey] || STATUS_META.open;
   const priorityMeta = PRIORITY_META[item.priority] || PRIORITY_META.low;
 
   return (
@@ -89,7 +97,7 @@ const IssueCard = ({ item, onPress, onImagePress }) => {
           <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
           <View style={[styles.statusChip, { backgroundColor: statusMeta.bg }]}>
             <Ionicons name={statusMeta.icon} size={10} color={statusMeta.color} />
-            <Text style={[styles.statusText, { color: statusMeta.color }]}>{statusMeta.label}</Text>
+            <Text style={[styles.statusText, { color: statusMeta.color }]}>{issueStatusLabel(item)}</Text>
           </View>
         </View>
 
@@ -139,18 +147,18 @@ const IssueCard = ({ item, onPress, onImagePress }) => {
 // ─── Stats Bar ────────────────────────────────────────────────────────────────
 const StatsBar = ({ issues }) => {
   const counts = {
-    open: issues.filter((i) => i.status === 'open' || i.status === 'pending').length,
+    open: issues.filter((i) => issueStatusKey(i) === 'pending').length,
+    funding: issues.filter((i) => ['awaiting_funding', 'funded'].includes(issueStatusKey(i))).length,
     'in-progress': issues.filter((i) => i.status === 'in-progress' || i.status === 'in_progress').length,
     resolved: issues.filter((i) => i.status === 'resolved').length,
-    review: issues.filter((i) => i.status === 'under_investigation').length,
   };
   return (
     <View style={styles.statsBar}>
       {[
-        { label: 'Open', count: counts.open, color: C.orange },
+        { label: 'Submitted', count: counts.open, color: C.orange },
+        { label: 'Funding', count: counts.funding, color: C.navy },
         { label: 'In Progress', count: counts['in-progress'], color: C.navy },
         { label: 'Resolved', count: counts.resolved, color: C.green },
-        { label: 'Review', count: counts.review, color: C.orange },
       ].map((s) => (
         <View key={s.label} style={styles.statItem}>
           <Text style={[styles.statCount, { color: s.color }]}>{s.count}</Text>
@@ -192,19 +200,17 @@ export default function MyReportsScreen({ navigation }) {
 
   const filtered = useMemo(() => {
     const priorityWeight = { high: 3, medium: 2, low: 1 };
-    const statusWeight = { open: 1, pending: 1, 'in-progress': 2, in_progress: 2, resolved: 3, under_investigation: 4, rejected: 5 };
+    const statusWeight = { pending: 1, under_review: 2, awaiting_funding: 3, funded: 4, 'in-progress': 5, in_progress: 5, resolved: 6, under_investigation: 7, expired: 8, rejected: 9 };
     const base = activeTab === 'all'
       ? issues
-      : activeTab === 'open'
-        ? issues.filter((i) => i.status === 'open' || i.status === 'pending')
-        : issues.filter((i) => i.status === activeTab || i.status === activeTab.replace('-', '_'));
+      : issues.filter((i) => issueStatusKey(i) === activeTab || issueStatusKey(i) === activeTab.replace('-', '_'));
 
     return [...base].sort((a, b) => {
       if (sortMode === 'priority') {
         return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
       }
       if (sortMode === 'status') {
-        return (statusWeight[a.status] || 99) - (statusWeight[b.status] || 99);
+        return (statusWeight[issueStatusKey(a)] || 99) - (statusWeight[issueStatusKey(b)] || 99);
       }
       return Number(b.id) - Number(a.id);
     });

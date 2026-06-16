@@ -27,6 +27,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/', 'store')->name('store');
             Route::get('/{report}', 'show')->name('show');
             Route::get('/{report}/edit', 'edit')->name('edit');
+            Route::post('/{report}/funding/approve', 'approveFunding')->name('funding.approve');
+            Route::post('/{report}/funding/reject', 'rejectFunding')->name('funding.reject');
             Route::put('/{report}', 'update')->name('update');
             Route::delete('/{report}', 'destroy')->name('destroy');
         });
