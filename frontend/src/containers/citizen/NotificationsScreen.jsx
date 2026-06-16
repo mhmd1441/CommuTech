@@ -86,9 +86,12 @@ const NotifItem = ({ item, onPress }) => {
         </View>
         <Text style={styles.notifBody} numberOfLines={2}>{item.body}</Text>
         {item.issue_id && (
-          <View style={styles.viewIssuePill}>
-            <Ionicons name="arrow-forward-circle-outline" size={12} color={C.navy} />
-            <Text style={styles.viewIssueText}>View Issue</Text>
+          <View style={styles.openReportRow}>
+            <View style={styles.openReportPill}>
+              <Ionicons name="document-text-outline" size={13} color={C.navy} />
+              <Text style={styles.openReportText}>Open report</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={C.muted} />
           </View>
         )}
       </View>
@@ -299,17 +302,32 @@ const styles = StyleSheet.create({
     overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
-  notifItem: { flexDirection: 'row', padding: 14, gap: 12, alignItems: 'flex-start', position: 'relative' },
+  notifItem: { flexDirection: 'row', padding: 15, gap: 12, alignItems: 'flex-start', position: 'relative' },
   notifItemUnread: { backgroundColor: C.navy + '05' },
   unreadDot: { position: 'absolute', top: 18, left: 4, width: 6, height: 6, borderRadius: 3, backgroundColor: C.navy },
   notifIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  notifContent: { flex: 1, gap: 4 },
+  notifContent: { flex: 1, gap: 5 },
   notifTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   notifTitle: { fontSize: 13, fontWeight: '700', color: C.text, flex: 1 },
   notifTime: { fontSize: 11, color: C.muted, marginLeft: 8 },
   notifBody: { fontSize: 12, color: C.muted, lineHeight: 17 },
-  viewIssuePill: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3, alignSelf: 'flex-start' },
-  viewIssueText: { fontSize: 11, color: C.navy, fontWeight: '700' },
+  openReportRow: {
+    marginTop: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  openReportPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: C.navy + '10',
+  },
+  openReportText: { fontSize: 12, color: C.navy, fontWeight: '900' },
   itemDivider: { height: 1, backgroundColor: C.border, marginLeft: 68 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyIcon: {

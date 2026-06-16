@@ -313,6 +313,8 @@
 </head>
 <body>
 @php
+    $fundingRequestCount = \App\Models\Issue::where('funding_status', 'requested')->count();
+
     $tagClass = function ($value) {
         return match ($value) {
             'resolved', 'citizen' => 'green',
@@ -335,7 +337,13 @@
 
         <nav class="nav">
             <a href="{{ route('admin.dashboard') }}" class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">Dashboard</a>
-            <a href="{{ route('admin.reports.index') }}" class="{{ request()->routeIs('admin.reports.*') ? 'active' : '' }}">Reports</a>
+            <a href="{{ route('admin.reports.index') }}" class="{{ request()->routeIs('admin.reports.*') && request('funding_status') !== 'requested' ? 'active' : '' }}">Reports</a>
+            <a href="{{ route('admin.reports.index', ['funding_status' => 'requested']) }}" class="{{ request()->routeIs('admin.reports.index') && request('funding_status') === 'requested' ? 'active' : '' }}">
+                Funding Requests
+                @if ($fundingRequestCount > 0)
+                    <span class="tag orange" style="margin-left:auto;">{{ $fundingRequestCount }}</span>
+                @endif
+            </a>
             <a href="{{ route('admin.workers.index') }}" class="{{ request()->routeIs('admin.workers.*') || request('role') === 'worker' ? 'active' : '' }}">Workers</a>
             <a href="{{ route('admin.citizens.index') }}" class="{{ request('role') === 'citizen' ? 'active' : '' }}">Citizens</a>
             <a href="{{ route('admin.admins.index') }}" class="{{ request('role') === 'admin' ? 'active' : '' }}">Admins</a>

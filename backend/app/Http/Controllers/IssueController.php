@@ -230,15 +230,21 @@ class IssueController extends Controller
             'resolved' => ['required', 'boolean'],
             'note' => ['nullable', 'string', 'max:1200'],
             'image_url' => ['nullable', 'url', 'max:2048'],
+            'audit_image' => ['nullable', 'file', 'mimetypes:image/jpeg,image/png,image/webp,image/heic,image/heif', 'max:20480'],
         ]);
 
         $confirmed = (bool) $data['resolved'];
+        $citizenImageUrl = $data['image_url'] ?? null;
+
+        if (! $confirmed && $request->hasFile('audit_image')) {
+            $citizenImageUrl = $this->uploadToSupabase($request->file('audit_image'));
+        }
 
         $issue->update([
             'status' => $confirmed ? 'resolved' : 'under_investigation',
             'citizen_resolution_confirmed' => $confirmed,
             'citizen_resolution_note' => $data['note'] ?? null,
-            'citizen_resolution_image_url' => $data['image_url'] ?? null,
+            'citizen_resolution_image_url' => $citizenImageUrl,
             'citizen_confirmed_at' => now(),
         ]);
 

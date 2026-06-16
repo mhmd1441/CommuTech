@@ -119,7 +119,6 @@ class WorkerIssueController extends Controller
 
             $issue->update([
                 'assigned_to' => $request->user()->id,
-                'status' => 'in_progress',
             ]);
 
             $notification = CommuTechNotification::create([
@@ -145,9 +144,9 @@ class WorkerIssueController extends Controller
             abort(403);
         }
 
-        if (! in_array($issue->status, ['in_progress', 'pending'], true) || $issue->funding_status !== 'none') {
+        if ($issue->status !== 'pending' || $issue->funding_status !== 'none') {
             return response()->json([
-                'message' => 'Funding can only be requested for active reports without an existing funding request.',
+                'message' => 'Funding can only be requested before work starts.',
             ], 422);
         }
 

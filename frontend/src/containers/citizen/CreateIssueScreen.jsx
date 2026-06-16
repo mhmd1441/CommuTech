@@ -397,7 +397,24 @@ export default function CreateIssueScreen({ navigation }) {
 
       const { data } = response;
       setSubmitted(true);
-      setTimeout(() => navigation.replace("IssueDetails", { issue: data }), 300);
+      setTimeout(() => {
+        navigation.reset({
+          index: 1,
+          routes: [
+            {
+              name: "CitizenHome",
+              params: {
+                createdIssue: data,
+                refreshAt: Date.now(),
+              },
+            },
+            {
+              name: "IssueDetails",
+              params: { issue: data },
+            },
+          ],
+        });
+      }, 300);
     } catch (err) {
       setSubmitError(readableSubmitError(err));
     } finally {

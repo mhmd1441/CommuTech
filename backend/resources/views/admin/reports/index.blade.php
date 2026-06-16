@@ -4,7 +4,10 @@
 @section('page_title', 'Reports')
 @section('page_subtitle', 'Review, inspect, assign, update, and delete community reports.')
 @section('page_actions')
-<a class="button primary" href="{{ route('admin.reports.create') }}">Create Report</a>
+<div class="row-actions">
+    <a class="button" href="{{ request()->fullUrl() }}">Refresh</a>
+    <a class="button primary" href="{{ route('admin.reports.create') }}">Create Report</a>
+</div>
 @endsection
 
 @section('content')
@@ -39,7 +42,7 @@ default => 'blue',
     </div>
     @endif
 
-    <form class="filters" method="GET" action="{{ route('admin.reports.index') }}" style="grid-template-columns: 1fr 240px 180px 220px auto;">
+    <form class="filters" method="GET" action="{{ route('admin.reports.index') }}" style="grid-template-columns: 1fr 220px 160px 190px 210px auto;">
         <input name="search" value="{{ $search }}" placeholder="Search by title, location, or description">
         <div style="position:relative;">
             <input list="municipalities-list" name="municipality" value="{{ $municipality }}" placeholder="Search municipality">
@@ -53,6 +56,12 @@ default => 'blue',
             <option value="">All statuses</option>
             @foreach (\App\Models\Issue::STATUSES as $item)
             <option value="{{ $item }}" @selected($status===$item)>{{ str_replace('_', ' ', ucfirst($item)) }}</option>
+            @endforeach
+        </select>
+        <select name="funding_status">
+            <option value="">All funding</option>
+            @foreach (\App\Models\Issue::FUNDING_STATUSES as $item)
+            <option value="{{ $item }}" @selected($fundingStatus===$item)>{{ str_replace('_', ' ', ucfirst($item)) }}</option>
             @endforeach
         </select>
         <select name="category">

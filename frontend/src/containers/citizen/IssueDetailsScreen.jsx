@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import api, { getAuthUser, issueApi } from "../../services/api";
 import { fundingPercent, issueStatusKey, issueStatusLabel, money } from "../../services/issuePresentation";
 
@@ -60,6 +61,8 @@ export default function IssueDetailsScreen({ navigation, route }) {
   const [upvoting, setUpvoting] = useState(false);
   const [donationAmount, setDonationAmount] = useState("");
   const [donating, setDonating] = useState(false);
+  const [auditPhoto, setAuditPhoto] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const currentUser = getAuthUser();
   const isMyIssue = issue.user_id === currentUser?.id;
@@ -163,21 +166,61 @@ export default function IssueDetailsScreen({ navigation, route }) {
     issue.status === "resolved" &&
     (issue.citizen_resolution_confirmed === null || issue.citizen_resolution_confirmed === undefined);
 
+  const imageFormFile = (asset, fallbackName) => {
+    const type = asset.mimeType || "image/jpeg";
+    const extension = type.split("/")[1] || "jpg";
+
+    return {
+      uri: asset.uri,
+      name: asset.fileName || `${fallbackName}.${extension}`,
+      type,
+    };
+  };
+
+  const pickAuditPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Camera Permission", "Allow camera access to attach a review photo.");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.75,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        setAuditPhoto(result.assets[0]);
+      }
+    } catch {
+      Alert.alert("Camera Error", "Could not open the camera. Please try again.");
+    }
+  };
+
   const confirmResolution = async (resolved) => {
     try {
       setConfirming(true);
-      const { data } = await api.patch(`/issues/${issue.id}/confirm-resolution`, {
-        resolved,
-        note: auditNote.trim() || null,
+      const formData = new FormData();
+      formData.append("resolved", resolved ? "1" : "0");
+      if (auditNote.trim()) formData.append("note", auditNote.trim());
+      if (!resolved && auditPhoto) {
+        formData.append("audit_image", imageFormFile(auditPhoto, "citizen-review"));
+      }
+
+      const { data } = await api.patch(`/issues/${issue.id}/confirm-resolution`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
       setIssue(data.issue || issue);
       setAuditNote("");
+      setAuditPhoto(null);
       if (resolved) {
         Alert.alert("Resolution Confirmed", "Thank you. This report remains resolved.", [
           { text: "OK", onPress: () => navigation.navigate("MyReports") },
         ]);
       } else {
-        Alert.alert("Review Requested", "Thanks. This report will be reviewed again.");
+        setNotice("Review request sent. The admin team will check this report.");
       }
     } catch (error) {
       Alert.alert("Confirmation Failed", error.response?.data?.message || error.message || "Please try again.");
@@ -216,7 +259,16 @@ export default function IssueDetailsScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.keyboardRoot}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+      >
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn}>
             <Ionicons name="chevron-back" size={22} color={C.navy} />
@@ -228,6 +280,13 @@ export default function IssueDetailsScreen({ navigation, route }) {
         </View>
 
         <Image source={{ uri: issue.image_url }} style={styles.heroImage} />
+
+        {notice && (
+          <View style={styles.noticeBox}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={C.green} />
+            <Text style={styles.noticeText}>{notice}</Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <View style={styles.metaRow}>
@@ -464,6 +523,21 @@ export default function IssueDetailsScreen({ navigation, route }) {
               multiline
               textAlignVertical="top"
             />
+            <Text style={styles.auditPhotoHint}>Attach a photo if the issue is still not fixed.</Text>
+            {auditPhoto ? (
+              <View style={styles.auditPhotoWrap}>
+                <Image source={{ uri: auditPhoto.uri }} style={styles.auditPhotoPreview} />
+                <Pressable style={styles.auditPhotoAction} onPress={pickAuditPhoto}>
+                  <Ionicons name="camera" size={15} color={C.navy} />
+                  <Text style={styles.auditPhotoActionText}>Retake photo</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable style={styles.auditPhotoBtn} onPress={pickAuditPhoto}>
+                <Ionicons name="camera-outline" size={18} color={C.navy} />
+                <Text style={styles.auditPhotoBtnText}>Add Review Photo</Text>
+              </Pressable>
+            )}
             <View style={styles.auditActions}>
               <Pressable
                 onPress={() => confirmResolution(false)}
@@ -518,6 +592,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
           </Pressable>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal visible={editModal} animationType="slide" transparent onRequestClose={() => setEditModal(false)}>
         <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -578,7 +653,8 @@ export default function IssueDetailsScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
-  scroll: { padding: 18, paddingBottom: 30 },
+  keyboardRoot: { flex: 1 },
+  scroll: { padding: 18, paddingBottom: 110 },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -597,6 +673,18 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, color: C.navy, fontWeight: "900" },
   heroImage: { width: "100%", height: 220, borderRadius: 20, backgroundColor: C.border },
+  noticeBox: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    backgroundColor: "#ECFDF5",
+    padding: 12,
+  },
+  noticeText: { flex: 1, color: C.text, fontSize: 13, fontWeight: "800", lineHeight: 18 },
   card: {
     marginTop: 14,
     backgroundColor: C.card,
@@ -717,6 +805,37 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 12,
   },
+  auditPhotoHint: { marginTop: 12, color: C.muted, fontWeight: "700", fontSize: 12, lineHeight: 18 },
+  auditPhotoBtn: {
+    marginTop: 8,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  auditPhotoBtnText: { color: C.navy, fontWeight: "900", fontSize: 14 },
+  auditPhotoWrap: {
+    marginTop: 8,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  auditPhotoPreview: { width: "100%", height: 160, backgroundColor: C.border },
+  auditPhotoAction: {
+    minHeight: 42,
+    backgroundColor: C.bg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  auditPhotoActionText: { color: C.navy, fontWeight: "900", fontSize: 13 },
   auditActions: { flexDirection: "row", gap: 10, marginTop: 12 },
   auditNoBtn: {
     flex: 1,

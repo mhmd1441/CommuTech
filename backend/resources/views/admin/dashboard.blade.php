@@ -478,6 +478,7 @@
                     <button class="pill" type="submit">Apply</button>
                 </form>
                 <span class="pill">{{ now()->format('M d, Y') }}</span>
+                <a class="pill" href="{{ request()->fullUrl() }}" style="text-decoration:none;">Refresh Page</a>
             </div>
         </header>
 

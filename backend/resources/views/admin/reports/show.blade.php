@@ -6,6 +6,7 @@
 @section('page_actions')
     <div class="row-actions">
         <a class="button" href="{{ route('admin.reports.index') }}">Back to Reports</a>
+        <a class="button" href="{{ request()->fullUrl() }}">Refresh</a>
         <a class="button primary" href="{{ route('admin.reports.edit', $report) }}">Edit Report</a>
     </div>
 @endsection

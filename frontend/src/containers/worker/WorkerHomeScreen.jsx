@@ -90,7 +90,9 @@ export default function WorkerHomeScreen({ navigation }) {
   const [resolutionPhoto, setResolutionPhoto] = useState(null);
   const [fundingCost, setFundingCost] = useState("");
   const [fundingRequestNote, setFundingRequestNote] = useState("");
+  const [notice, setNotice] = useState(null);
   const mapRef = useRef(null);
+  const noticeTimerRef = useRef(null);
 
   const activeRegion = workerRegion || DEFAULT_REGION;
 
@@ -190,6 +192,22 @@ export default function WorkerHomeScreen({ navigation }) {
       channel.unbind('notification.sent', handler);
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
+
+  const showNotice = (message, type = "success") => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+
+    setNotice({ message, type });
+    noticeTimerRef.current = setTimeout(() => {
+      setNotice(null);
+      noticeTimerRef.current = null;
+    }, 3200);
+  };
 
   const mapNearbyIssues = useMemo(() => {
     return nearbyIssues
@@ -313,7 +331,7 @@ export default function WorkerHomeScreen({ navigation }) {
 
       setSelectedIssue({ issue: data.issue, assigned: true });
       await loadWorkerIssues();
-      Alert.alert("Funding Request Sent", data.message || "Admin will review this request.");
+      showNotice(data.message || "Funding request sent for admin review.");
     } catch (error) {
       Alert.alert("Funding Request", error.message || "Could not submit funding request.");
     } finally {
@@ -434,13 +452,13 @@ export default function WorkerHomeScreen({ navigation }) {
     const reporter = personName(issue.user, "Unknown citizen");
     const assignee = personName(issue.assignee, issue.assigned_to ? "Assigned worker" : "Unassigned");
     const fundingBlocked = ["requested", "open", "expired"].includes(issue.funding_status);
-    const canRequestFunding = assigned && issue.status === "in_progress" && issue.funding_status === "none";
-    const canStartRepair = assigned && issue.status === "pending" && issue.funding_status === "funded";
+    const canRequestFunding = assigned && issue.status === "pending" && issue.funding_status === "none";
+    const canStartRepair = assigned && issue.status === "pending" && ["none", "funded"].includes(issue.funding_status);
     const canResolve = assigned && issue.status === "in_progress" && !fundingBlocked;
     const showFunding = issue.funding_status && issue.funding_status !== "none";
     const progress = fundingPercent(issue);
     const showPrimaryAction = !assigned || canStartRepair || canResolve;
-    const primaryActionLabel = !assigned ? "Assign to me" : canStartRepair ? "Start Repair" : "Mark Resolved";
+    const primaryActionLabel = !assigned ? "Assign to me" : canStartRepair ? "Mark In Progress" : "Mark Resolved";
     const primaryActionIcon = !assigned ? "briefcase-outline" : canStartRepair ? "play-circle-outline" : "checkmark-circle-outline";
     const primaryAction = () => {
       if (!assigned) return assignToMe(issue);
@@ -464,6 +482,13 @@ export default function WorkerHomeScreen({ navigation }) {
               <Ionicons name="refresh-outline" size={20} color={COLORS.navy} />
             </Pressable>
           </View>
+
+          {notice && (
+            <View style={[styles.noticeBox, notice.type === "success" && styles.noticeSuccess]}>
+              <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.green} />
+              <Text style={styles.noticeText}>{notice.message}</Text>
+            </View>
+          )}
 
           <ScrollView
             contentContainerStyle={styles.detailScroll}
@@ -1140,6 +1165,29 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   detailHeaderTitle: { color: COLORS.navy, fontSize: 18, fontWeight: "900" },
+  noticeBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  noticeSuccess: {
+    borderColor: "#BBF7D0",
+    backgroundColor: "#ECFDF5",
+  },
+  noticeText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18,
+  },
   detailShell: { flex: 1 },
   detailScroll: { paddingTop: 14, paddingBottom: 24 },
   detailImage: {

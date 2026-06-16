@@ -19,6 +19,7 @@ class ReportPageController extends Controller
     {
         $data = $request->validate([
             'status' => ['nullable', Rule::in(Issue::STATUSES)],
+            'funding_status' => ['nullable', Rule::in(Issue::FUNDING_STATUSES)],
             'category' => ['nullable', Rule::in(Issue::CATEGORIES)],
             'municipality' => ['nullable', 'string', 'max:120'],
             'search' => ['nullable', 'string', 'max:100'],
@@ -28,6 +29,7 @@ class ReportPageController extends Controller
         $reports = Issue::query()
             ->with(['user:id,name,email,phone,role', 'assignee:id,name,email,phone,role'])
             ->when($data['status'] ?? null, fn($q, $status) => $q->where('status', $status))
+            ->when($data['funding_status'] ?? null, fn($q, $fundingStatus) => $q->where('funding_status', $fundingStatus))
             ->when($data['category'] ?? null, fn($q, $category) => $q->where('category', $category))
             ->when($data['municipality'] ?? null, fn($q, $municipality) => $q->where('municipality_en', $municipality))
             ->when(($data['sla'] ?? null) === 'breached', fn($q) => $q->where('sla_breached', true))
@@ -46,6 +48,7 @@ class ReportPageController extends Controller
             'reports' => $reports,
             'categories' => Issue::CATEGORIES,
             'status' => $data['status'] ?? null,
+            'fundingStatus' => $data['funding_status'] ?? null,
             'category' => $data['category'] ?? null,
             'municipality' => $data['municipality'] ?? '',
             'municipalities' => DB::table('municipalities')->orderBy('name_en')->pluck('name_en'),

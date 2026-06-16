@@ -106,7 +106,7 @@ function IssueListImage({ imageUrl }) {
   );
 }
 
-export default function CitizenHomeScreen({ navigation }) {
+export default function CitizenHomeScreen({ navigation, route }) {
   const [communityMode, setCommunityMode] = useState(false);
   const [viewMode, setViewMode] = useState("map");
   const [selectedFilter, setSelectedFilter] = useState("All");
@@ -191,12 +191,15 @@ export default function CitizenHomeScreen({ navigation }) {
     };
   }, []);
 
-  const fetchIssues = async () => {
+  const fetchIssues = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const params = {};
       if (communityMode) {
-        if (!userRegion) { setLoading(false); return; }
+        if (!userRegion) {
+          if (!silent) setLoading(false);
+          return;
+        }
         params.lat = userRegion.latitude;
         params.lng = userRegion.longitude;
       } else {
@@ -211,6 +214,26 @@ export default function CitizenHomeScreen({ navigation }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const createdIssue = route?.params?.createdIssue;
+    const refreshAt = route?.params?.refreshAt;
+
+    if (!refreshAt) return;
+
+    if (createdIssue?.id) {
+      setIssues((current) => {
+        if (current.some((issue) => issue.id === createdIssue.id)) {
+          return current;
+        }
+
+        return [createdIssue, ...current];
+      });
+    }
+
+    fetchIssues({ silent: true });
+    navigation.setParams({ createdIssue: undefined, refreshAt: undefined });
+  }, [route?.params?.refreshAt]);
 
   const issuesWithCoords = useMemo(() => {
     return issues
