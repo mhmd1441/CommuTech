@@ -209,7 +209,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
         formData.append("audit_image", imageFormFile(auditPhoto, "citizen-review"));
       }
 
-      const { data } = await api.patch(`/issues/${issue.id}/confirm-resolution`, formData, {
+      const { data } = await api.post(`/issues/${issue.id}/confirm-resolution`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setIssue(data.issue || issue);

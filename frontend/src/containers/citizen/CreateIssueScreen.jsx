@@ -46,16 +46,16 @@ const CATEGORIES = [
 ];
 
 const ML_TO_CATEGORY = {
-  pothole:          "Roads & Sidewalks",
+  pothole: "Roads & Sidewalks",
   broken_road_sign: "Traffic & Signals",
-  illegal_parking:  "Traffic & Signals",
-  garbage:          "Waste & Sanitation",
-  fallen_trees:     "Environment & Public Spaces",
-  fire:             "Public Safety",
+  illegal_parking: "Traffic & Signals",
+  garbage: "Waste & Sanitation",
+  fallen_trees: "Environment & Public Spaces",
+  fire: "Public Safety",
   roadway_flooding: "Water & Drainage",
-  water_pollution:  "Water & Drainage",
-  pipe_burst:       "Water & Drainage",
-  street_lighting:  "Street Lighting & Electricity",
+  water_pollution: "Water & Drainage",
+  pipe_burst: "Water & Drainage",
+  street_lighting: "Street Lighting & Electricity",
 };
 
 const DEFAULT_COORDINATE = {

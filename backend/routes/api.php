@@ -57,7 +57,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{issue}', 'show');
         Route::post('/{issue}/donations', [IssueDonationController::class, 'store']);
         Route::post('/{issue}/upvote', 'upvote')->middleware('throttle:30,1');
-        Route::patch('/{issue}/confirm-resolution', 'confirmResolution');
+        Route::post('/{issue}/confirm-resolution', 'confirmResolution');
         Route::put('/{issue}', 'update');
         Route::patch('/{issue}', 'update');
         Route::delete('/{issue}', 'destroy');
