@@ -199,9 +199,17 @@ export default function NotificationsScreen({ navigation, route }) {
   };
 
   const handleNotifPress = (notif) => {
-    if (notif.issue_id) {
-      navigation.navigate('IssueDetails', { issue: { id: notif.issue_id } });
+    if (!notif.issue_id) return;
+
+    if (role === 'worker') {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'WorkerHome', params: { openIssueId: notif.issue_id } }],
+      });
+      return;
     }
+
+    navigation.navigate('IssueDetails', { issue: { id: notif.issue_id } });
   };
 
   const grouped = groupNotifications(notifications);

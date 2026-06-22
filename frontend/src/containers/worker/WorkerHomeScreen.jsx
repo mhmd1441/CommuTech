@@ -77,7 +77,7 @@ function personName(person, fallback) {
   return person?.name || [person?.first_name, person?.father_name, person?.last_name].filter(Boolean).join(" ") || fallback;
 }
 
-export default function WorkerHomeScreen({ navigation }) {
+export default function WorkerHomeScreen({ navigation, route }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeView, setActiveView] = useState("map");
   const [workerTab, setWorkerTab] = useState("active");
@@ -205,6 +205,21 @@ export default function WorkerHomeScreen({ navigation }) {
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    const issueId = route?.params?.openIssueId;
+    if (!issueId) return;
+
+    (async () => {
+      try {
+        const { data } = await api.get(`/issues/${issueId}`);
+        const assigned = Number(data.assigned_to) === Number(currentUser?.id);
+        openIssue(data, assigned);
+      } catch (error) {
+        Alert.alert("Couldn't open report", "This report may no longer be available.");
+      }
+    })();
+  }, [route?.params?.openIssueId]);
 
   const showNotice = (message, type = "success") => {
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);

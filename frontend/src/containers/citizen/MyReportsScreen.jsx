@@ -133,10 +133,10 @@ const IssueCard = ({ item, onPress, onImagePress }) => {
         )}
 
         {/* Reject reason */}
-        {item.status === 'rejected' && item.rejectReason && (
+        {item.status === 'rejected' && item.rejection_reason && (
           <View style={styles.rejectTag}>
             <Ionicons name="information-circle-outline" size={10} color={C.red} />
-            <Text style={styles.rejectText}>Reason: {item.rejectReason}</Text>
+            <Text style={styles.rejectText}>Reason: {item.rejection_reason}</Text>
           </View>
         )}
       </View>
