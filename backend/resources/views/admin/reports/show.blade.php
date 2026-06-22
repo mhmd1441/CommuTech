@@ -8,6 +8,13 @@
         <a class="button" href="{{ route('admin.reports.index') }}">Back to Reports</a>
         <a class="button" href="{{ request()->fullUrl() }}">Refresh</a>
         <a class="button primary" href="{{ route('admin.reports.edit', $report) }}">Edit Report</a>
+        @if($report->isPubliclyVisible())
+            @php
+                $publicStatusUrl = rtrim(config('services.public_status.base_url'), '/').'/issue/'.$report->id.'/status';
+            @endphp
+            <a class="button" href="{{ $publicStatusUrl }}" target="_blank">View Public Page</a>
+            <button type="button" class="button" onclick="window.open('https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent('{{ $publicStatusUrl }}'), '_blank')">Generate QR Code</button>
+        @endif
     </div>
 @endsection
 

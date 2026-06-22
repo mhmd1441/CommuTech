@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AuthPageController;
 use App\Http\Controllers\Admin\DashboardPageController;
 use App\Http\Controllers\Admin\ReportPageController;
 use App\Http\Controllers\Admin\UserPageController;
+use App\Http\Controllers\PublicIssueStatusController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -12,6 +13,10 @@ Route::get('/', function () {
 });
 
 Route::redirect('/admin', '/admin/dashboard');
+
+Route::get('/issue/{id}/status', [PublicIssueStatusController::class, 'show'])
+    ->name('issue.public.status')
+    ->middleware('throttle:60,1');
 
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/login', [AuthPageController::class, 'showLogin'])->name('login');
