@@ -10,10 +10,12 @@
         <a class="button primary" href="{{ route('admin.reports.edit', $report) }}">Edit Report</a>
         @if($report->isPubliclyVisible())
             @php
-                $publicStatusUrl = rtrim(config('services.public_status.base_url'), '/').'/issue/'.$report->id.'/status';
+                $publicBase = rtrim(config('services.public_status.base_url'), '/');
+                $publicStatusUrl = $publicBase.'/issue/'.$report->id.'/status';
+                $publicStickerUrl = $publicBase.'/issue/'.$report->id.'/sticker';
             @endphp
             <a class="button" href="{{ $publicStatusUrl }}" target="_blank">View Public Page</a>
-            <button type="button" class="button" onclick="window.open('https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent('{{ $publicStatusUrl }}'), '_blank')">Generate QR Code</button>
+            <a class="button" href="{{ $publicStickerUrl }}" target="_blank">Print Sticker</a>
         @endif
     </div>
 @endsection

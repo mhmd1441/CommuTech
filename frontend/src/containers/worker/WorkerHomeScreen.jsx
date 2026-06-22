@@ -474,9 +474,7 @@ export default function WorkerHomeScreen({ navigation }) {
       return markResolved(issue);
     };
     const isPubliclyVisible = ["in_progress", "resolved", "under_investigation"].includes(issue.status);
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-      `${WEB_BASE_URL}/issue/${issue.id}/status`
-    )}`;
+    const qrUrl = `${WEB_BASE_URL}/issue/${issue.id}/sticker-image`;
     const handleDownloadQr = async () => {
       setDownloadingQr(true);
       try {
@@ -1479,15 +1477,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   qrImageWrap: {
-    width: 200,
-    height: 200,
+    width: 220,
+    height: 258,
     marginVertical: 4,
     alignItems: "center",
     justifyContent: "center",
   },
   qrImage: {
-    width: 200,
-    height: 200,
+    width: 220,
+    height: 258,
+    resizeMode: "contain",
   },
   qrImageOverlay: {
     position: "absolute",
@@ -1501,8 +1500,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   qrImageError: {
-    width: 200,
-    height: 200,
+    width: 220,
+    height: 258,
     alignItems: "center",
     justifyContent: "center",
     gap: 8,

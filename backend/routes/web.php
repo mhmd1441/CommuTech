@@ -18,6 +18,14 @@ Route::get('/issue/{id}/status', [PublicIssueStatusController::class, 'show'])
     ->name('issue.public.status')
     ->middleware('throttle:60,1');
 
+Route::get('/issue/{id}/sticker', [PublicIssueStatusController::class, 'sticker'])
+    ->name('issue.public.sticker')
+    ->middleware('throttle:60,1');
+
+Route::get('/issue/{id}/sticker-image', [PublicIssueStatusController::class, 'stickerImage'])
+    ->name('issue.public.sticker.image')
+    ->middleware('throttle:60,1');
+
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/login', [AuthPageController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthPageController::class, 'login'])->name('login.store');
