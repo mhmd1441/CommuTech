@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
   Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
@@ -72,6 +72,7 @@ const TITLE_EXAMPLES = [
 ];
 
 export default function CreateIssueScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -640,8 +641,8 @@ export default function CreateIssueScreen({ navigation }) {
           animationType="slide"
           onRequestClose={() => setMapPickerVisible(false)}
         >
-          <SafeAreaView style={styles.mapModalSafe} edges={["top", "bottom"]}>
-            <View style={styles.mapModalHeader}>
+          <SafeAreaView style={styles.mapModalSafe} edges={["bottom"]}>
+            <View style={[styles.mapModalHeader, { paddingTop: insets.top + 14 }]}>
               <View>
                 <Text style={styles.mapModalTitle}>Choose Location</Text>
                 <Text style={styles.mapModalHint}>Drag the marker or tap the map.</Text>
