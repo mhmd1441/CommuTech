@@ -5,6 +5,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,9 +20,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Callout, Circle, Marker } from "react-native-maps";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import api, { getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
 import { fundingPercent, issueStatusLabel, money } from "../../services/issuePresentation";
+import { WEB_BASE_URL } from "../../config";
 
 const COLORS = {
   navy: "#19405F",
@@ -85,6 +89,9 @@ export default function WorkerHomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [busyIssueId, setBusyIssueId] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState(null);
+  const [qrVisible, setQrVisible] = useState(false);
+  const [downloadingQr, setDownloadingQr] = useState(false);
+  const [qrImageStatus, setQrImageStatus] = useState("loading");
   const [resolutionNote, setResolutionNote] = useState("");
   const [resolutionPhoto, setResolutionPhoto] = useState(null);
   const [fundingCost, setFundingCost] = useState("");
@@ -466,6 +473,27 @@ export default function WorkerHomeScreen({ navigation }) {
       if (canStartRepair) return startRepair(issue);
       return markResolved(issue);
     };
+    const isPubliclyVisible = ["in_progress", "resolved", "under_investigation"].includes(issue.status);
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+      `${WEB_BASE_URL}/issue/${issue.id}/status`
+    )}`;
+    const handleDownloadQr = async () => {
+      setDownloadingQr(true);
+      try {
+        const fileUri = `${FileSystem.cacheDirectory}issue-${issue.id}-qr.png`;
+        const { uri } = await FileSystem.downloadAsync(qrUrl, fileUri);
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri);
+        } else {
+          Alert.alert("Saved", "QR code saved to app storage.");
+        }
+      } catch (e) {
+        console.error("QR download failed:", e);
+        Alert.alert("Download failed", "Could not download the QR code. Check your connection and try again.");
+      } finally {
+        setDownloadingQr(false);
+      }
+    };
 
     return (
       <SafeAreaView style={styles.root}>
@@ -694,6 +722,14 @@ export default function WorkerHomeScreen({ navigation }) {
               <Text style={styles.navigateActionText}>Navigate</Text>
             </Pressable>
           )}
+          {isPubliclyVisible && (
+            <Pressable
+              onPress={() => { setQrImageStatus("loading"); setQrVisible(true); }}
+              style={styles.qrAction}
+            >
+              <Ionicons name="qr-code-outline" size={20} color={COLORS.navy} />
+            </Pressable>
+          )}
           {showPrimaryAction && (
             <Pressable
               onPress={primaryAction}
@@ -722,6 +758,61 @@ export default function WorkerHomeScreen({ navigation }) {
           )}
           </View>
         </KeyboardAvoidingView>
+
+        <Modal visible={qrVisible} transparent animationType="fade" onRequestClose={() => setQrVisible(false)}>
+          <View style={styles.qrOverlay}>
+            <View style={styles.qrCard}>
+              <ScrollView
+                contentContainerStyle={styles.qrCardScroll}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.sectionTitle}>Public Status QR Code</Text>
+                <Text style={styles.inputHint}>Anyone can scan this to view the report's public status — no login required.</Text>
+                <View style={styles.qrImageWrap}>
+                  {qrImageStatus !== "error" && (
+                    <Image
+                      source={{ uri: qrUrl }}
+                      style={styles.qrImage}
+                      onLoad={() => setQrImageStatus("loaded")}
+                      onError={() => setQrImageStatus("error")}
+                    />
+                  )}
+                  {qrImageStatus === "loading" && (
+                    <View style={styles.qrImageOverlay}>
+                      <ActivityIndicator color={COLORS.navy} />
+                    </View>
+                  )}
+                  {qrImageStatus === "error" && (
+                    <View style={styles.qrImageError}>
+                      <Ionicons name="cloud-offline-outline" size={26} color={COLORS.muted} />
+                      <Text style={styles.qrErrorText}>Couldn't load the QR code.</Text>
+                      <Pressable onPress={() => setQrImageStatus("loading")} style={styles.qrRetryBtn}>
+                        <Text style={styles.qrRetryText}>Retry</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+                <Pressable
+                  onPress={handleDownloadQr}
+                  disabled={downloadingQr}
+                  style={[styles.qrDownloadBtn, downloadingQr && { opacity: 0.55 }]}
+                >
+                  {downloadingQr ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="download-outline" size={18} color="#fff" />
+                      <Text style={styles.primaryActionText}>Download / Share</Text>
+                    </>
+                  )}
+                </Pressable>
+                <Pressable onPress={() => setQrVisible(false)} style={styles.qrCloseBtn}>
+                  <Text style={styles.navigateActionText}>Close</Text>
+                </Pressable>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -1359,4 +1450,98 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   navigateActionText: { color: COLORS.navy, fontSize: 15, fontWeight: "900" },
+  qrAction: {
+    height: 52,
+    width: 52,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.navy,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  qrCard: {
+    width: "100%",
+    maxWidth: 340,
+    maxHeight: "100%",
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+  },
+  qrCardScroll: {
+    padding: 20,
+    alignItems: "center",
+    gap: 12,
+  },
+  qrImageWrap: {
+    width: 200,
+    height: 200,
+    marginVertical: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrImage: {
+    width: 200,
+    height: 200,
+  },
+  qrImageOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.bg,
+    borderRadius: 12,
+  },
+  qrImageError: {
+    width: 200,
+    height: 200,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: COLORS.bg,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+  },
+  qrErrorText: {
+    fontSize: 13,
+    color: COLORS.muted,
+    textAlign: "center",
+  },
+  qrRetryBtn: {
+    marginTop: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.navy,
+  },
+  qrRetryText: {
+    color: COLORS.navy,
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  qrDownloadBtn: {
+    width: "100%",
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: COLORS.navy,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  qrCloseBtn: {
+    height: 44,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

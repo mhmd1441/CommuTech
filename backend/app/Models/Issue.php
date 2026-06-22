@@ -197,4 +197,9 @@ class Issue extends Model
     {
         return max(0, (float) $this->funding_goal - (float) $this->funding_raised);
     }
+
+    public function isPubliclyVisible(): bool
+    {
+        return in_array($this->status, ['in_progress', 'resolved', 'under_investigation'], true);
+    }
 }
