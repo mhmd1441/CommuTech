@@ -22,7 +22,7 @@ import MapView, { Callout, Circle, Marker } from "react-native-maps";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import api, { getAuthUser } from "../../services/api";
+import api, { apiError, getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
 import { fundingPercent, issueStatusLabel, money } from "../../services/issuePresentation";
 import { WEB_BASE_URL } from "../../config";
@@ -319,12 +319,16 @@ export default function WorkerHomeScreen({ navigation, route }) {
   const assignToMe = async (issue) => {
     try {
       setBusyIssueId(issue.id);
-      await api.patch(`/worker/issues/${issue.id}/assign-to-me`);
-      setSelectedIssue(null);
-      setActiveView("assigned");
+      const { data } = await api.patch(`/worker/issues/${issue.id}/assign-to-me`);
+      setSelectedIssue({ issue: data.issue, assigned: true });
       await loadWorkerIssues();
     } catch (error) {
-      Alert.alert("Assign Issue", error.message || "Could not assign this issue.");
+      const err = apiError(error);
+      Alert.alert("Assign Issue", err.message);
+      if (err.status === 404) {
+        setSelectedIssue(null);
+        loadWorkerIssues();
+      }
     } finally {
       setBusyIssueId(null);
     }
@@ -355,7 +359,12 @@ export default function WorkerHomeScreen({ navigation, route }) {
       await loadWorkerIssues();
       showNotice(data.message || "Funding request sent for admin review.");
     } catch (error) {
-      Alert.alert("Funding Request", error.message || "Could not submit funding request.");
+      const err = apiError(error);
+      Alert.alert("Funding Request", err.message);
+      if (err.status === 404) {
+        setSelectedIssue(null);
+        loadWorkerIssues();
+      }
     } finally {
       setBusyIssueId(null);
     }
@@ -370,7 +379,12 @@ export default function WorkerHomeScreen({ navigation, route }) {
       setSelectedIssue({ issue: data.issue, assigned: true });
       await loadWorkerIssues();
     } catch (error) {
-      Alert.alert("Start Repair", error.message || "Could not start this repair.");
+      const err = apiError(error);
+      Alert.alert("Start Repair", err.message);
+      if (err.status === 404) {
+        setSelectedIssue(null);
+        loadWorkerIssues();
+      }
     } finally {
       setBusyIssueId(null);
     }
@@ -406,7 +420,12 @@ export default function WorkerHomeScreen({ navigation, route }) {
       setSelectedIssue(null);
       await loadWorkerIssues();
     } catch (error) {
-      Alert.alert("Update Issue", error.message || "Could not update this issue.");
+      const err = apiError(error);
+      Alert.alert("Update Issue", err.message);
+      if (err.status === 404) {
+        setSelectedIssue(null);
+        loadWorkerIssues();
+      }
     } finally {
       setBusyIssueId(null);
     }

@@ -23,13 +23,15 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-function apiError(error) {
+export function apiError(error) {
   const message =
     error.response?.data?.message ||
     Object.values(error.response?.data?.errors || {})?.[0]?.[0] ||
     "Request failed. Please try again.";
 
-  return new Error(message);
+  const err = new Error(message);
+  err.status = error.response?.status;
+  return err;
 }
 
 export const authApi = {
