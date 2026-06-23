@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import api, { getAuthUser, issueApi } from "../../services/api";
+import { getPusher } from "../../services/echo";
 import { fundingPercent, issueStatusKey, issueStatusLabel, money } from "../../services/issuePresentation";
 
 const C = {
@@ -136,6 +137,41 @@ export default function IssueDetailsScreen({ navigation, route }) {
         .finally(() => setLoadingIssue(false));
     }
   }, []);
+
+  // Keep this screen's data in sync if the issue changes elsewhere (e.g. a
+  // worker resolves it) while the citizen still has it open. Piggybacks on
+  // the same private-user.{id} channel other screens already subscribe to —
+  // only unbinds this screen's own handler on cleanup, never the whole
+  // channel, so it can't disrupt those other screens' listeners.
+  useEffect(() => {
+    const issueId = routeIssue.id;
+    if (!issueId) return;
+
+    const user = getAuthUser();
+    if (!user) return;
+
+    const pusher = getPusher();
+    if (!pusher) return;
+
+    const handler = (data) => {
+      if (data?.issue_id !== issueId) return;
+
+      api.get(`/issues/${issueId}`)
+        .then(({ data: fresh }) => {
+          setIssue(fresh);
+          setAffectedCount(fresh.affected_count ?? ((fresh.upvotes_count ?? 0) + 1));
+          setHasUpvoted(!!(fresh.has_upvoted));
+        })
+        .catch((e) => console.error("Failed to sync issue update:", e));
+    };
+
+    const channel = pusher.subscribe(`private-user.${user.id}`);
+    channel.bind("notification.sent", handler);
+
+    return () => {
+      channel.unbind("notification.sent", handler);
+    };
+  }, [routeIssue.id]);
 
   const handleUpvote = async () => {
     if (upvoting) return;

@@ -111,6 +111,12 @@ class WorkerIssueController extends Controller
         return DB::transaction(function () use ($request, $issue) {
             $issue = Issue::where('id', $issue->id)->lockForUpdate()->first();
 
+            if (! $issue) {
+                return response()->json([
+                    'message' => 'This issue no longer exists.',
+                ], 404);
+            }
+
             if ($issue->assigned_to) {
                 return response()->json([
                     'message' => 'This issue is already assigned to another worker.',

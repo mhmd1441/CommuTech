@@ -503,7 +503,7 @@ function ProfileScreen({ navigation }) {
               </View>
               <View style={[styles.verificationPill, { borderColor: verificationColor + '35' }]}>
                 <Ionicons
-                  name={personalInfo.is_verified ? 'checkmark-circle' : 'alert-circle-outline'}
+                  name={profileLoading ? 'time-outline' : personalInfo.is_verified ? 'checkmark-circle' : 'alert-circle-outline'}
                   size={10}
                   color={verificationColor}
                 />
@@ -943,7 +943,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     padding: 16,
     marginBottom: 92,
-    maxHeight: '86%',
+    maxHeight: '70%',
   },
   modalHeader: {
     flexDirection: 'row',
