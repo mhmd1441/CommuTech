@@ -1,0 +1,105 @@
+<svg width="1400" height="600" viewBox="0 0 1400 600" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1400" height="600" fill="#ffffff"/>
+
+  <!-- Shield shape -->
+  <path d="M280 90 L440 90 Q460 90 460 110 L460 330 Q460 420 360 480 Q260 420 260 330 L260 110 Q260 90 280 90 Z"
+        fill="#1b3a6b" stroke="none"/>
+
+  <!-- Shield inner white area -->
+  <path d="M293 115 L427 115 Q443 115 443 131 L443 328 Q443 406 360 458 Q277 406 277 328 L277 131 Q277 115 293 115 Z"
+        fill="#1e4080" stroke="none"/>
+
+  <!-- Outer ring -->
+  <circle cx="360" cy="290" r="88" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.15"/>
+  <circle cx="360" cy="290" r="62" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.1"/>
+
+  <!-- Horizontal circuit line -->
+  <line x1="277" y1="290" x2="443" y2="290" stroke="#f5a623" stroke-width="2" opacity="0.5"/>
+  <!-- Vertical circuit line -->
+  <line x1="360" y1="115" x2="360" y2="458" stroke="#f5a623" stroke-width="2" opacity="0.5"/>
+
+  <!-- Diagonal lines -->
+  <line x1="277" y1="190" x2="443" y2="390" stroke="#2ecc71" stroke-width="1.5" opacity="0.3"/>
+  <line x1="277" y1="390" x2="443" y2="190" stroke="#2ecc71" stroke-width="1.5" opacity="0.3"/>
+
+  <!-- Green circuit spokes from center -->
+  <line x1="360" y1="290" x2="310" y2="220" stroke="#27ae60" stroke-width="2.5"/>
+  <line x1="360" y1="290" x2="416" y2="220" stroke="#27ae60" stroke-width="2.5"/>
+  <line x1="360" y1="290" x2="300" y2="290" stroke="#27ae60" stroke-width="2.5"/>
+  <line x1="360" y1="290" x2="420" y2="290" stroke="#27ae60" stroke-width="2.5"/>
+  <line x1="360" y1="290" x2="310" y2="360" stroke="#27ae60" stroke-width="2.5"/>
+  <line x1="360" y1="290" x2="416" y2="360" stroke="#27ae60" stroke-width="2.5"/>
+  <line x1="360" y1="290" x2="360" y2="220" stroke="#27ae60" stroke-width="2.5"/>
+  <line x1="360" y1="290" x2="360" y2="380" stroke="#27ae60" stroke-width="2.5"/>
+
+  <!-- Circuit branch bends -->
+  <polyline points="310,220 295,220 295,200" fill="none" stroke="#27ae60" stroke-width="2"/>
+  <polyline points="416,220 430,220 430,200" fill="none" stroke="#27ae60" stroke-width="2"/>
+  <polyline points="310,360 295,360 295,380" fill="none" stroke="#27ae60" stroke-width="2"/>
+  <polyline points="416,360 430,360 430,380" fill="none" stroke="#27ae60" stroke-width="2"/>
+  <polyline points="300,290 285,290" fill="none" stroke="#27ae60" stroke-width="2"/>
+  <polyline points="420,290 435,290" fill="none" stroke="#27ae60" stroke-width="2"/>
+
+  <!-- Orange arc rings (partial) -->
+  <path d="M 320 230 A 50 50 0 0 1 400 230" fill="none" stroke="#f5a623" stroke-width="2" stroke-dasharray="4,4"/>
+  <path d="M 315 340 A 58 58 0 0 0 405 340" fill="none" stroke="#f5a623" stroke-width="2" stroke-dasharray="4,4"/>
+  <path d="M 290 270 A 72 72 0 0 0 290 310" fill="none" stroke="#f5a623" stroke-width="1.5" stroke-dasharray="3,5" opacity="0.7"/>
+  <path d="M 430 270 A 72 72 0 0 1 430 310" fill="none" stroke="#f5a623" stroke-width="1.5" stroke-dasharray="3,5" opacity="0.7"/>
+
+  <!-- Node dots on spokes -->
+  <circle cx="310" cy="220" r="5" fill="#27ae60"/>
+  <circle cx="416" cy="220" r="5" fill="#27ae60"/>
+  <circle cx="300" cy="290" r="4" fill="#27ae60"/>
+  <circle cx="420" cy="290" r="4" fill="#27ae60"/>
+  <circle cx="310" cy="360" r="5" fill="#27ae60"/>
+  <circle cx="416" cy="360" r="5" fill="#27ae60"/>
+  <circle cx="360" cy="220" r="4" fill="#27ae60"/>
+  <circle cx="360" cy="380" r="5" fill="#27ae60"/>
+
+  <!-- End dots on branches -->
+  <circle cx="295" cy="200" r="3.5" fill="#27ae60" stroke="#ffffff" stroke-width="1"/>
+  <circle cx="430" cy="200" r="3.5" fill="#27ae60" stroke="#ffffff" stroke-width="1"/>
+  <circle cx="295" cy="380" r="3.5" fill="#27ae60" stroke="#ffffff" stroke-width="1"/>
+  <circle cx="430" cy="380" r="3.5" fill="#27ae60" stroke="#ffffff" stroke-width="1"/>
+  <circle cx="284" cy="290" r="3.5" fill="#27ae60" stroke="#ffffff" stroke-width="1"/>
+  <circle cx="436" cy="290" r="3.5" fill="#27ae60" stroke="#ffffff" stroke-width="1"/>
+
+  <!-- Lock body on top -->
+  <rect x="336" y="155" width="48" height="36" rx="5" fill="#ffffff" opacity="0.9"/>
+  <path d="M344 155 Q344 130 360 130 Q376 130 376 155" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+  <circle cx="360" cy="173" r="5" fill="#1b3a6b" opacity="0.9"/>
+
+  <!-- Center node -->
+  <circle cx="360" cy="290" r="16" fill="#1b3a6b" stroke="#27ae60" stroke-width="3"/>
+  <circle cx="360" cy="290" r="8" fill="#27ae60"/>
+
+  <!-- Shield bottom shadow -->
+  <ellipse cx="360" cy="495" rx="70" ry="10" fill="#cccccc" opacity="0.4"/>
+
+  <!-- Text: Commu -->
+  <text x="510" y="330"
+        font-family="Arial Black, Arial, sans-serif"
+        font-size="130"
+        font-weight="900"
+        fill="#1b3a6b"
+        letter-spacing="-3">Commu</text>
+
+  <!-- Text: Tech -->
+  <text x="1002" y="330"
+        font-family="Arial Black, Arial, sans-serif"
+        font-size="130"
+        font-weight="900"
+        fill="#27ae60"
+        letter-spacing="-3">Tech</text>
+
+  <!-- Orange accent underline -->
+  <path d="M 1002 352 Q 1140 380 1310 345" fill="none" stroke="#f5a623" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Subtle tagline -->
+  <text x="510" y="390"
+        font-family="Arial, sans-serif"
+        font-size="22"
+        font-weight="400"
+        fill="#7a8fa6"
+        letter-spacing="6">SECURE · CONNECTED · INTELLIGENT</text>
+</svg>

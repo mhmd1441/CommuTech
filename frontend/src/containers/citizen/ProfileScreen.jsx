@@ -538,7 +538,7 @@ function ProfileScreen({ navigation }) {
           />
           <MenuItem
             icon="location-outline"
-            label="Default District"
+            label="Default Municipality"
             value={district}
             onPress={() => setActiveModal('district')}
           />

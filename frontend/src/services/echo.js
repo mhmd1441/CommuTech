@@ -43,6 +43,16 @@ class PusherClient {
   async _subscribe(channelName) {
     if (this.subscribed.has(channelName)) return;
     this.subscribed.add(channelName);
+
+    // Public channels don't need auth
+    if (!channelName.startsWith("private-") && !channelName.startsWith("presence-")) {
+      this.ws.send(JSON.stringify({
+        event: "pusher:subscribe",
+        data: { channel: channelName },
+      }));
+      return;
+    }
+
     try {
       const res = await fetch(`${API_BASE_URL}/broadcasting/auth`, {
         method: "POST",

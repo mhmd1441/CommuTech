@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { initAuth } from "./src/services/api";
 
@@ -21,6 +22,7 @@ import ReportHistoryScreen from "./src/containers/citizen/ReportHistoryScreen";
 import MyContributionsScreen from "./src/containers/citizen/MyContributionsScreen";
 import NotificationsScreen from "./src/containers/citizen/NotificationsScreen";
 import WorkerHomeScreen from "./src/containers/worker/WorkerHomeScreen";
+import ChatScreen from "./src/containers/worker/ChatScreen";
 import TermsScreen from "./src/containers/shared/TermsScreen";
 import PrivacyPolicyScreen from "./src/containers/shared/PrivacyPolicyScreen";
 
@@ -37,13 +39,14 @@ export default function App() {
 
   if (!initialRoute) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F7FAFC" }}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF" }}>
         <ActivityIndicator size="large" color="#19405F" />
       </View>
     );
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <NavigationContainer>
@@ -61,10 +64,12 @@ export default function App() {
           <Stack.Screen name="MyContributions" component={MyContributionsScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
           <Stack.Screen name="WorkerHome" component={WorkerHomeScreen} />
+          <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="Terms" component={TermsScreen} />
           <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -207,6 +207,21 @@ export default function CitizenHomeScreen({ navigation, route }) {
     };
   }, []);
 
+  // Real-time: new issue created — show on community map immediately
+  useEffect(() => {
+    const pusher = getPusher();
+    if (!pusher) return;
+    const issueChannel = pusher.subscribe("issues");
+    issueChannel.bind("issue.created", (issue) => {
+      if (!communityMode) return;
+      setIssues((prev) => {
+        if (prev.some((i) => i.id === issue.id)) return prev;
+        return [issue, ...prev];
+      });
+    });
+    return () => { issueChannel.unbind("issue.created"); };
+  }, [communityMode]);
+
   const fetchIssues = async ({ silent = false } = {}) => {
     if (fetchingRef.current) {
       pendingRefreshRef.current = true;
@@ -341,13 +356,13 @@ export default function CitizenHomeScreen({ navigation, route }) {
         {/* Community / My Issues tab */}
         <View style={styles.modeTabs}>
           <Pressable
-            onPress={() => setCommunityMode(false)}
+            onPress={() => { setCommunityMode(false); setLoading(true); }}
             style={[styles.modeTab, !communityMode && styles.modeTabActive]}
           >
             <Text style={[styles.modeTabText, !communityMode && styles.modeTabTextActive]}>My Issues</Text>
           </Pressable>
           <Pressable
-            onPress={() => setCommunityMode(true)}
+            onPress={() => { setCommunityMode(true); setLoading(true); }}
             style={[styles.modeTab, communityMode && styles.modeTabActive]}
           >
             <Ionicons name="people-outline" size={14} color={communityMode ? "#fff" : COLORS.navy} />

@@ -101,7 +101,7 @@ class IssueDonationController extends Controller
                 $issue->id,
                 'worker',
                 'Funding Goal Reached',
-                'Community funding is complete for "'.$issue->title.'". You can schedule the repair.'
+                'Community funding is complete for "' . $issue->title . '". You can schedule the repair.'
             );
         }
 
@@ -110,7 +110,7 @@ class IssueDonationController extends Controller
             $issue->id,
             'citizen',
             'Funding Goal Reached',
-            'Community funding is complete for your report "'.$issue->title.'".'
+            'Community funding is complete for your report "' . $issue->title . '".'
         );
     }
 
@@ -121,7 +121,7 @@ class IssueDonationController extends Controller
             $issue->id,
             'citizen',
             'Funding Period Ended',
-            'The funding period ended for "'.$issue->title.'". Contributions were marked as refunded.'
+            'The funding period ended for "' . $issue->title . '". Contributions were marked as refunded.'
         );
 
         $issue->donations()
@@ -135,7 +135,7 @@ class IssueDonationController extends Controller
                     $issue->id,
                     'citizen',
                     'Contribution Refunded',
-                    'The funding period ended for "'.$issue->title.'". Your simulated contribution was refunded.'
+                    'The funding period ended for "' . $issue->title . '". Your simulated contribution was refunded.'
                 );
             });
     }
@@ -154,7 +154,7 @@ class IssueDonationController extends Controller
         try {
             NotificationSent::dispatch($notification);
         } catch (\Throwable $e) {
-            \Log::warning('Broadcast failed: '.$e->getMessage());
+            \Log::warning('Broadcast failed: ' . $e->getMessage());
         }
     }
 }

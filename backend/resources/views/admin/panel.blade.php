@@ -348,6 +348,13 @@
                     <span class="tag orange" style="margin-left:auto;">{{ $fundingRequestCount }}</span>
                 @endif
             </a>
+            <a href="{{ route('admin.chat.index') }}" class="{{ request()->routeIs('admin.chat.*') ? 'active' : '' }}">
+                Messages
+                @php $unreadMsgs = \App\Models\Conversation::where('unread_count_admin', '>', 0)->count(); @endphp
+                @if ($unreadMsgs > 0)
+                    <span class="tag orange" style="margin-left:auto;">{{ $unreadMsgs }}</span>
+                @endif
+            </a>
             <a href="{{ route('admin.workers.index') }}" class="{{ request()->routeIs('admin.workers.*') || request('role') === 'worker' ? 'active' : '' }}">Workers</a>
             <a href="{{ route('admin.citizens.index') }}" class="{{ request('role') === 'citizen' ? 'active' : '' }}">Citizens</a>
             <a href="{{ route('admin.admins.index') }}" class="{{ request('role') === 'admin' ? 'active' : '' }}">Admins</a>

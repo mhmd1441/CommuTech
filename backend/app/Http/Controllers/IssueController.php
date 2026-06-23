@@ -157,6 +157,12 @@ class IssueController extends Controller
         $issue->load('user:id,name,email,phone');
         $issue->setAttribute('upvotes_count', 0);
 
+        try {
+            \App\Events\NewIssueCreated::dispatch($issue);
+        } catch (\Throwable $e) {
+            \Log::warning('NewIssueCreated broadcast failed: ' . $e->getMessage());
+        }
+
         return response()->json($this->withImpactAttributes($issue, $request->user()->id), 201);
     }
 
@@ -337,6 +343,16 @@ class IssueController extends Controller
         $issue->delete();
 
         return response()->noContent();
+    }
+
+    public function issueChatMessages(Request $request, Issue $issue)
+    {
+        $messages = \App\Models\ChatMessage::with('sender:id,name')
+            ->where('issue_id', $issue->id)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        return response()->json(['messages' => $messages]);
     }
 
     private function normalizeStatus(string $status): string

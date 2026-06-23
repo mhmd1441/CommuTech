@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminChatController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\EmailVerificationController;
 use App\Http\Controllers\IssueController;
 use App\Http\Controllers\IssueDonationController;
@@ -58,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{issue}/donations', [IssueDonationController::class, 'store']);
         Route::post('/{issue}/upvote', 'upvote')->middleware('throttle:30,1');
         Route::post('/{issue}/confirm-resolution', 'confirmResolution');
+        Route::get('/{issue}/chat-messages', 'issueChatMessages');
         Route::put('/{issue}', 'update');
         Route::patch('/{issue}', 'update');
         Route::delete('/{issue}', 'destroy');
@@ -72,6 +75,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/{notification}/unread', 'markUnread');
     });
 
+    // worker chat
+    Route::prefix('chat')->middleware('role:worker')->controller(ChatController::class)->group(function () {
+        Route::get('/conversation', 'getConversation');
+        Route::get('/conversation/messages', 'getMessages');
+        Route::post('/conversation/messages', 'sendMessage')->middleware('throttle:5,10');
+        Route::post('/conversation/read', 'markRead');
+    });
+
     Route::prefix('worker')->middleware('role:worker')->group(function () {
         Route::prefix('issues')->controller(WorkerIssueController::class)->group(function () {
             Route::get('/assigned', 'assigned');
@@ -84,6 +95,17 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('admin')->middleware('role:admin')->group(function () {
+        // admin chat
+        Route::prefix('chat/conversations')->controller(AdminChatController::class)->group(function () {
+            Route::get('/', 'index');
+            Route::get('/{conversation}', 'show');
+            Route::get('/{conversation}/messages', 'getMessages');
+            Route::post('/{conversation}/messages', 'sendMessage');
+            Route::post('/{conversation}/assign', 'takeOver');
+            Route::patch('/{conversation}/archive', 'archive');
+            Route::patch('/{conversation}/unarchive', 'unarchive');
+        });
+
         Route::prefix('users')->name('api.admin.users.')->controller(UserController::class)->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');

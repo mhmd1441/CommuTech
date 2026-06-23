@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminChatController;
 use App\Http\Controllers\Admin\AiSummaryController;
 use App\Http\Controllers\Admin\AuthPageController;
+use App\Http\Controllers\Admin\ChatPageController;
 use App\Http\Controllers\Admin\DashboardPageController;
 use App\Http\Controllers\Admin\ReportPageController;
 use App\Http\Controllers\Admin\UserPageController;
@@ -53,6 +55,28 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/{user}/edit', 'edit')->name('edit');
             Route::put('/{user}', 'update')->name('update');
             Route::delete('/{user}', 'destroy')->name('destroy');
+        });
+
+        // issue search for chat tagging
+        Route::get('/issues/search', function (\Illuminate\Http\Request $request) {
+            $q = $request->get('q', '');
+            $issues = \App\Models\Issue::query()
+                ->when($q, fn($query) => $query->where('title', 'ilike', "%{$q}%")
+                    ->orWhere('id', 'like', "%{$q}%"))
+                ->orderBy('created_at', 'desc')
+                ->limit($q ? 8 : 5)
+                ->get(['id', 'title', 'status', 'municipality_en']);
+            return response()->json($issues);
+        })->name('issues.search');
+
+        Route::prefix('chat')->name('chat.')->group(function () {
+            Route::get('/', [ChatPageController::class, 'index'])->name('index');
+            Route::get('/{conversation}', [ChatPageController::class, 'show'])->name('show');
+            // write actions — session auth, no token needed
+            Route::post('/{conversation}/messages', [AdminChatController::class, 'sendMessage'])->name('messages.store');
+            Route::post('/{conversation}/assign', [AdminChatController::class, 'takeOver'])->name('assign');
+            Route::patch('/{conversation}/archive', [AdminChatController::class, 'archive'])->name('archive');
+            Route::patch('/{conversation}/unarchive', [AdminChatController::class, 'unarchive'])->name('unarchive');
         });
 
         Route::get('/workers/{worker}', [UserPageController::class, 'workerShow'])->name('workers.show');

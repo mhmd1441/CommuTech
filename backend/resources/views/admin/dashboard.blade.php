@@ -444,8 +444,24 @@
         </div>
 
         <nav class="nav">
+            @php
+                $fundingRequestCount = \App\Models\Issue::where('funding_status', 'requested')->count();
+                $unreadMsgs = \App\Models\Conversation::where('unread_count_admin', '>', 0)->count();
+            @endphp
             <a href="{{ route('admin.dashboard') }}" class="active">Dashboard</a>
             <a href="{{ route('admin.reports.index') }}">Reports</a>
+            <a href="{{ route('admin.reports.index', ['funding_status' => 'requested']) }}" style="display:flex;align-items:center;">
+                Funding Requests
+                @if ($fundingRequestCount > 0)
+                    <span class="tag orange" style="margin-left:auto;">{{ $fundingRequestCount }}</span>
+                @endif
+            </a>
+            <a href="{{ route('admin.chat.index') }}" style="display:flex;align-items:center;">
+                Messages
+                @if ($unreadMsgs > 0)
+                    <span class="tag orange" style="margin-left:auto;">{{ $unreadMsgs }}</span>
+                @endif
+            </a>
             <a href="{{ route('admin.workers.index') }}">Workers</a>
             <a href="{{ route('admin.citizens.index') }}">Citizens</a>
             <a href="{{ route('admin.admins.index') }}">Admins</a>

@@ -51,6 +51,15 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.015,
 };
 
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function getPriorityColor(priority) {
   switch (priority?.toLowerCase()) {
     case "critical":
@@ -116,27 +125,32 @@ export default function WorkerHomeScreen({ navigation, route }) {
     ? (workerTab === "active" ? activeAssigned : completedAssigned)
     : nearbyIssues;
 
+  const workerRegionRef = useRef(null);
+
   const loadWorkerIssues = useCallback(async () => {
     try {
       setLoading(true);
 
+      // Fire assigned fetch immediately — no GPS needed
+      const assignedPromise = api.get("/worker/issues/assigned");
+
+      // Request GPS in parallel
       const permission = await Location.requestForegroundPermissionsAsync();
+
       if (permission.status !== "granted") {
         Alert.alert("Location Needed", "Worker mode needs location permission to show nearby unassigned issues.");
         setWorkerRegion(DEFAULT_REGION);
+        workerRegionRef.current = DEFAULT_REGION;
 
-        // Still call nearby — municipality workers don't need GPS
         const [assignedResponse, nearbyResponse] = await Promise.all([
-          api.get("/worker/issues/assigned"),
+          assignedPromise,
           api.get("/worker/issues/nearby"),
         ]);
         setAssignedIssues(assignedResponse.data.data || []);
         const mode = nearbyResponse.data.mode || "gps_fallback";
-        const main = nearbyResponse.data.data || [];
-        const unlocated = nearbyResponse.data.unlocated || [];
         setNearbyMode(mode);
         setNearbyMunicipality(nearbyResponse.data.municipality || null);
-        setNearbyIssues([...main, ...unlocated]);
+        setNearbyIssues([...(nearbyResponse.data.data || []), ...(nearbyResponse.data.unlocated || [])]);
         return;
       }
 
@@ -152,10 +166,12 @@ export default function WorkerHomeScreen({ navigation, route }) {
       };
 
       setWorkerRegion(nextRegion);
+      workerRegionRef.current = nextRegion;
       mapRef.current?.animateToRegion(nextRegion, 700);
 
+      // Both in parallel — assigned was already in-flight
       const [assignedResponse, nearbyResponse] = await Promise.all([
-        api.get("/worker/issues/assigned"),
+        assignedPromise,
         api.get("/worker/issues/nearby", {
           params: {
             latitude: nextRegion.latitude,
@@ -166,12 +182,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
       ]);
 
       const mode = nearbyResponse.data.mode || "gps_fallback";
-      const main = nearbyResponse.data.data || [];
-      const unlocated = nearbyResponse.data.unlocated || [];
       setNearbyMode(mode);
       setNearbyMunicipality(nearbyResponse.data.municipality || null);
       setAssignedIssues(assignedResponse.data.data || []);
-      setNearbyIssues([...main, ...unlocated]);
+      setNearbyIssues([...(nearbyResponse.data.data || []), ...(nearbyResponse.data.unlocated || [])]);
     } catch (error) {
       console.error("Failed to load worker issues:", error);
       Alert.alert("Worker Mode", error.message || "Could not load worker issues.");
@@ -198,6 +212,29 @@ export default function WorkerHomeScreen({ navigation, route }) {
     return () => {
       channel.unbind('notification.sent', handler);
     };
+  }, []);
+
+  // Real-time: new issue created by a citizen
+  useEffect(() => {
+    const pusher = getPusher();
+    if (!pusher) return;
+    const channel = pusher.subscribe("issues");
+    channel.bind("issue.created", (issue) => {
+      // Only add to nearby if it has coordinates and is within radius
+      const region = workerRegionRef.current;
+      if (!region || !issue.latitude || !issue.longitude) return;
+      const dist = haversineMeters(
+        region.latitude, region.longitude,
+        parseFloat(issue.latitude), parseFloat(issue.longitude)
+      );
+      if (dist <= RADIUS_METERS) {
+        setNearbyIssues((prev) => {
+          if (prev.some((i) => i.id === issue.id)) return prev;
+          return [issue, ...prev];
+        });
+      }
+    });
+    return () => { channel.unbind("issue.created"); };
   }, []);
 
   useEffect(() => {
@@ -862,6 +899,12 @@ export default function WorkerHomeScreen({ navigation, route }) {
         </View>
 
         <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => navigation.navigate("Chat")}
+            style={styles.workerBellBtn}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={20} color={COLORS.navy} />
+          </Pressable>
           <Pressable
             onPress={() => { navigation.navigate("Notifications", { role: "worker" }); setUnreadCount(0); }}
             style={styles.workerBellBtn}
