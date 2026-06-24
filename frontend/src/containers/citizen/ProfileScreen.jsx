@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Switch,
   Image,
   Alert,
+  Animated,
   StatusBar,
   Modal,
   TextInput,
@@ -241,6 +242,20 @@ function ProfileScreen({ navigation }) {
     confirm: '',
   });
 
+  // ── Toast ────────────────────────────────────────────────────────────────────
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef(null);
+  const [toastMsg, setToastMsg] = useState({ text: '', type: 'success' });
+
+  const showToast = (text, type = 'success') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToastMsg({ text, type });
+    Animated.timing(toastAnim, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 0, duration: 220, useNativeDriver: true }).start();
+    }, 2500);
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -307,10 +322,10 @@ function ProfileScreen({ navigation }) {
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: async () => {
+        onPress: () => {
           disconnectPusher();
-          await authApi.logout().catch(() => {});
           navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+          authApi.logout().catch(() => {});
         },
       },
     ]);
@@ -387,7 +402,7 @@ function ProfileScreen({ navigation }) {
       setProfileForm(profile);
       setDistrict(formatDistrict(profile));
 
-      Alert.alert('Profile picture updated', profile.is_verified ? 'Your profile is verified.' : 'Complete the remaining fields to get verified.');
+      showToast(profile.is_verified ? 'Profile picture updated — profile verified!' : 'Profile picture updated.');
     } catch (error) {
       Alert.alert('Upload failed', requestErrorMessage(error));
     } finally {
@@ -409,7 +424,7 @@ function ProfileScreen({ navigation }) {
       await profileApi.changePassword(passwordForm.current, passwordForm.next);
       setPasswordForm({ current: '', next: '', confirm: '' });
       setActiveModal(null);
-      Alert.alert('Password updated', 'Your password has been changed successfully.');
+      showToast('Password updated successfully.');
     } catch (error) {
       Alert.alert('Password not updated', error.message);
     } finally {
@@ -444,10 +459,7 @@ function ProfileScreen({ navigation }) {
       setDistrict(formatDistrict(profile));
       setActiveModal(null);
 
-      Alert.alert(
-        'Profile saved',
-        profile.is_verified ? 'Your profile is now verified.' : 'Complete the remaining fields to get verified.'
-      );
+      showToast(profile.is_verified ? 'Profile saved — now verified!' : 'Profile saved.');
     } catch (error) {
       Alert.alert('Profile not saved', requestErrorMessage(error));
     } finally {
@@ -583,16 +595,26 @@ function ProfileScreen({ navigation }) {
           />
           <MenuDivider />
           <MenuItem
+            icon="notifications-outline"
+            label="Notifications"
+            onPress={() => navigation.navigate('Notifications')}
+          />
+        </MenuGroup>
+
+        {/* ── Payments ── */}
+        <MenuGroup title="Payments">
+          <MenuItem
+            icon="card-outline"
+            iconColor={C.navy}
+            label="Saved Payment Methods"
+            onPress={() => navigation.navigate('SavedPaymentMethods')}
+          />
+          <MenuDivider />
+          <MenuItem
             icon="heart-outline"
             iconColor={C.green}
             label="My Contributions"
             onPress={() => navigation.navigate('MyContributions')}
-          />
-          <MenuDivider />
-          <MenuItem
-            icon="notifications-outline"
-            label="Notifications"
-            onPress={() => navigation.navigate('Notifications')}
           />
         </MenuGroup>
 
@@ -791,6 +813,28 @@ function ProfileScreen({ navigation }) {
         </KeyboardAvoidingView>
       </Modal>
       <BottomNav navigation={navigation} activeTab="Profile" />
+
+      {/* Toast */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.toast,
+          toastMsg.type === 'error' ? styles.toastError : styles.toastSuccess,
+          {
+            opacity: toastAnim,
+            transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
+          },
+        ]}
+      >
+        <Ionicons
+          name={toastMsg.type === 'error' ? 'close-circle' : 'checkmark-circle'}
+          size={18}
+          color={toastMsg.type === 'error' ? '#B91C1C' : C.green}
+        />
+        <Text style={[styles.toastText, toastMsg.type === 'error' && { color: '#B91C1C' }]}>
+          {toastMsg.text}
+        </Text>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -1005,5 +1049,22 @@ const styles = StyleSheet.create({
   },
   modalPrimaryBtnDisabled: { opacity: 0.7 },
   modalPrimaryText: { color: '#fff', fontWeight: '900', fontSize: 15 },
+  toast: {
+    position: 'absolute',
+    top: 16,
+    left: 18,
+    right: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    zIndex: 999,
+  },
+  toastSuccess: { backgroundColor: '#ECFDF5', borderColor: '#BBF7D0' },
+  toastError:   { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  toastText: { flex: 1, fontSize: 13, fontWeight: '700', color: C.text },
 });
 export default ProfileScreen;

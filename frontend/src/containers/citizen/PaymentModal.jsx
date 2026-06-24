@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -90,6 +89,9 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
   // Save toggle
   const [saveMethod, setSaveMethod] = useState(false);
 
+  // Inline form errors
+  const [formError, setFormError] = useState("");
+
   // Result
   const [reference, setReference]   = useState("");
   const [errorMsg, setErrorMsg]     = useState("");
@@ -108,6 +110,7 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
     setCardNumber(""); setExpiry(""); setCvv(""); setCardName("");
     setWalletPhone(""); setPaypalEmail("");
     setSaveMethod(false);
+    setFormError("");
     setReference(""); setErrorMsg("");
   };
 
@@ -139,9 +142,10 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
   // ── Step: new card form → confirm ─────────────────────────────────────────
   const handleCardContinue = () => {
     const digits = cardNumber.replace(/\s/g, "");
-    if (digits.length < 16) { Alert.alert("Card Number", "Enter a 16-digit card number."); return; }
-    if (!expiry.match(/^\d{2}\/\d{2}$/)) { Alert.alert("Expiry", "Use MM/YY format."); return; }
-    if (cvv.length < 3) { Alert.alert("CVV", "Enter a valid CVV."); return; }
+    if (digits.length < 16) { setFormError("Enter a 16-digit card number."); return; }
+    if (!expiry.match(/^\d{2}\/\d{2}$/)) { setFormError("Use MM/YY format for expiry."); return; }
+    if (cvv.length < 3) { setFormError("Enter a valid CVV."); return; }
+    setFormError("");
 
     const brand    = detectBrand(cardNumber);
     const lastFour = digits.slice(-4);
@@ -159,7 +163,7 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
   // ── Step: new wallet/paypal form → confirm ────────────────────────────────
   const handleWalletContinue = () => {
     if (selectedType.type === "paypal") {
-      if (!paypalEmail.includes("@")) { Alert.alert("Email", "Enter a valid email address."); return; }
+      if (!paypalEmail.includes("@")) { setFormError("Enter a valid email address."); return; }
       const lastFour = maskEmail(paypalEmail);
       setSelectedMethod({
         saved:     false,
@@ -170,7 +174,7 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
       });
     } else {
       const digits = walletPhone.replace(/\D/g, "");
-      if (digits.length < 8) { Alert.alert("Phone", "Enter a valid phone number."); return; }
+      if (digits.length < 8) { setFormError("Enter a valid phone number."); return; }
       const lastFour = maskPhone(walletPhone);
       setSelectedMethod({
         saved:     false,
@@ -180,6 +184,7 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
         label:     `${selectedType.label} •••• ${lastFour}`,
       });
     }
+    setFormError("");
     setStep("confirm");
   };
 
@@ -326,6 +331,13 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
         />
       </View>
 
+      {!!formError && (
+        <View style={s.formErrorBox}>
+          <Ionicons name="alert-circle-outline" size={14} color={C.red} />
+          <Text style={s.formErrorText}>{formError}</Text>
+        </View>
+      )}
+
       <Pressable style={s.primaryBtn} onPress={handleCardContinue}>
         <Text style={s.primaryText}>Continue</Text>
       </Pressable>
@@ -357,6 +369,13 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
             thumbColor={saveMethod ? C.navy : "#fff"}
           />
         </View>
+
+        {!!formError && (
+          <View style={s.formErrorBox}>
+            <Ionicons name="alert-circle-outline" size={14} color={C.red} />
+            <Text style={s.formErrorText}>{formError}</Text>
+          </View>
+        )}
 
         <Pressable style={s.primaryBtn} onPress={handleWalletContinue}>
           <Text style={s.primaryText}>Continue</Text>
@@ -594,4 +613,17 @@ const s = StyleSheet.create({
   resultTitle: { fontSize: 20, fontWeight: "900", color: C.green, marginBottom: 6 },
   resultSub:   { fontSize: 13, color: C.muted, textAlign: "center", marginHorizontal: 20 },
   referenceText: { fontSize: 11, color: C.muted, fontWeight: "600", marginBottom: 4, fontFamily: Platform.OS === "ios" ? "Courier" : "monospace" },
+  formErrorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 10,
+  },
+  formErrorText: { flex: 1, fontSize: 13, color: C.red, fontWeight: "600" },
 });

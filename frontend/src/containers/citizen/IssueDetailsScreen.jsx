@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -94,6 +95,23 @@ export default function IssueDetailsScreen({ navigation, route }) {
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [auditPhoto, setAuditPhoto] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [editErrors, setEditErrors] = useState({});
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef(null);
+  const [toastMsg, setToastMsg] = useState({ text: "", type: "success" });
+
+  const showToast = (text, type = "success", onDone) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToastMsg({ text, type });
+    Animated.timing(toastAnim, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 0, duration: 220, useNativeDriver: true }).start(() => {
+        onDone?.();
+      });
+    }, 2500);
+  };
 
   const currentUser = getAuthUser();
   const isMyIssue = issue.user_id === currentUser?.id;
@@ -114,21 +132,12 @@ export default function IssueDetailsScreen({ navigation, route }) {
   };
 
   const handleSaveEdit = async () => {
-    if (editForm.title.trim().length < 4) {
-      Alert.alert(
-        "Validation",
-        "Use a clearer title, like Broken streetlight.",
-      );
-      return;
-    }
-    if (editForm.description.trim().length < 10) {
-      Alert.alert("Validation", "Add a little more detail in the description.");
-      return;
-    }
-    if (!editForm.location.trim()) {
-      Alert.alert("Validation", "Location is required.");
-      return;
-    }
+    const errs = {};
+    if (editForm.title.trim().length < 4) errs.title = "Use a clearer title, like Broken streetlight.";
+    if (editForm.description.trim().length < 10) errs.description = "Add a little more detail.";
+    if (!editForm.location.trim()) errs.location = "Location is required.";
+    if (Object.keys(errs).length) { setEditErrors(errs); return; }
+    setEditErrors({});
     try {
       setSaving(true);
       const { data } = await api.patch(`/issues/${issue.id}`, {
@@ -140,7 +149,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
       setIssue(data);
       setEditModal(false);
     } catch (e) {
-      Alert.alert("Update Failed", e.message || "Please try again.");
+      setEditErrors({ general: e.message || "Could not save. Please try again." });
     } finally {
       setSaving(false);
     }
@@ -323,21 +332,12 @@ export default function IssueDetailsScreen({ navigation, route }) {
       setAuditNote("");
       setAuditPhoto(null);
       if (resolved) {
-        Alert.alert(
-          "Resolution Confirmed",
-          "Thank you. This report remains resolved.",
-          [{ text: "OK", onPress: () => navigation.navigate("MyReports") }],
-        );
+        showToast("Resolution confirmed — thank you!", "success", () => navigation.navigate("MyReports"));
       } else {
-        setNotice(
-          "Review request sent. The admin team will check this report.",
-        );
+        setNotice("Review request sent. The admin team will check this report.");
       }
     } catch (error) {
-      Alert.alert(
-        "Confirmation Failed",
-        error.response?.data?.message || error.message || "Please try again.",
-      );
+      showToast(error.response?.data?.message || error.message || "Confirmation failed. Please try again.", "error");
     } finally {
       setConfirming(false);
     }
@@ -851,37 +851,34 @@ export default function IssueDetailsScreen({ navigation, route }) {
               <Text style={styles.fieldLabel}>Title</Text>
               <TextInput
                 value={editForm.title}
-                onChangeText={(v) => setEditForm((f) => ({ ...f, title: v }))}
-                style={styles.fieldInput}
+                onChangeText={(v) => { setEditForm((f) => ({ ...f, title: v })); setEditErrors((e) => ({ ...e, title: null })); }}
+                style={[styles.fieldInput, editErrors.title && styles.fieldInputError]}
                 placeholder="Broken streetlight"
                 placeholderTextColor="#94A3B8"
               />
+              {!!editErrors.title && <Text style={styles.fieldError}>{editErrors.title}</Text>}
 
               <Text style={styles.fieldLabel}>Description</Text>
               <TextInput
                 value={editForm.description}
-                onChangeText={(v) =>
-                  setEditForm((f) => ({ ...f, description: v }))
-                }
-                style={[
-                  styles.fieldInput,
-                  { height: 100, textAlignVertical: "top" },
-                ]}
+                onChangeText={(v) => { setEditForm((f) => ({ ...f, description: v })); setEditErrors((e) => ({ ...e, description: null })); }}
+                style={[styles.fieldInput, { height: 100, textAlignVertical: "top" }, editErrors.description && styles.fieldInputError]}
                 placeholder="Briefly describe what you saw"
                 placeholderTextColor="#94A3B8"
                 multiline
               />
+              {!!editErrors.description && <Text style={styles.fieldError}>{editErrors.description}</Text>}
 
               <Text style={styles.fieldLabel}>Location</Text>
               <TextInput
                 value={editForm.location}
-                onChangeText={(v) =>
-                  setEditForm((f) => ({ ...f, location: v }))
-                }
-                style={styles.fieldInput}
+                onChangeText={(v) => { setEditForm((f) => ({ ...f, location: v })); setEditErrors((e) => ({ ...e, location: null })); }}
+                style={[styles.fieldInput, editErrors.location && styles.fieldInputError]}
                 placeholder="Street, area, city"
                 placeholderTextColor="#94A3B8"
               />
+              {!!editErrors.location && <Text style={styles.fieldError}>{editErrors.location}</Text>}
+              {!!editErrors.general && <Text style={[styles.fieldError, { marginTop: 8 }]}>{editErrors.general}</Text>}
 
               <Pressable
                 onPress={handleSaveEdit}
@@ -912,6 +909,28 @@ export default function IssueDetailsScreen({ navigation, route }) {
           setPaymentModalVisible(false);
         }}
       />
+
+      {/* Toast */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.toast,
+          toastMsg.type === "error" ? styles.toastError : styles.toastSuccess,
+          {
+            opacity: toastAnim,
+            transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
+          },
+        ]}
+      >
+        <Ionicons
+          name={toastMsg.type === "error" ? "close-circle" : "checkmark-circle"}
+          size={18}
+          color={toastMsg.type === "error" ? "#B91C1C" : C.green}
+        />
+        <Text style={[styles.toastText, toastMsg.type === "error" && { color: "#B91C1C" }]}>
+          {toastMsg.text}
+        </Text>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -1311,4 +1330,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+  fieldInputError: { borderColor: C.red },
+  fieldError: { fontSize: 12, color: C.red, fontWeight: "600", marginTop: 4 },
+  toast: {
+    position: "absolute",
+    top: 16,
+    left: 18,
+    right: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    zIndex: 999,
+  },
+  toastSuccess: { backgroundColor: "#ECFDF5", borderColor: "#BBF7D0" },
+  toastError:   { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
+  toastText: { flex: 1, fontSize: 13, fontWeight: "700", color: C.text },
 });

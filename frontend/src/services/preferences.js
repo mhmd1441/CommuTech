@@ -6,7 +6,7 @@ const PREF_KEYS = {
 };
 
 let preferences = {
-  notifications: false,
+  notifications: true,
   autoLocation: false,
 };
 
@@ -18,11 +18,12 @@ export async function loadAppPreferences() {
     ]);
 
     preferences = {
-      notifications: entries[0]?.[1] === "1",
+      // null means never set → default true; "0" means user explicitly disabled
+      notifications: entries[0]?.[1] !== "0",
       autoLocation: entries[1]?.[1] === "1",
     };
   } catch {
-    preferences = { notifications: false, autoLocation: false };
+    preferences = { notifications: true, autoLocation: false };
   }
 
   return preferences;

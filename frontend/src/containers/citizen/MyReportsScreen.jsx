@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import BottomNav from "../shared/BottomNav";
 import ReportsLoadingAnimation from "../shared/LoadingPage/ReportsLoadingAnimation";
-import api from "../../services/api";
+import api, { getAuthUser } from "../../services/api";
+import { getPusher } from "../../services/echo";
 import { issueStatusKey, issueStatusLabel } from "../../services/issuePresentation";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
@@ -178,12 +179,15 @@ export default function MyReportsScreen({ navigation }) {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
+  const lastFetchedAt = useRef(0);
 
-  const fetchIssues = useCallback(async () => {
+  const fetchIssues = useCallback(async (force = false) => {
+    if (!force && Date.now() - lastFetchedAt.current < 30_000) return;
     try {
       const apiSort = sortMode === 'status' ? 'newest' : sortMode;
       const { data } = await api.get("/issues", { params: { mine: 1, sort: apiSort } });
       setIssues(data.data || []);
+      lastFetchedAt.current = Date.now();
     } catch (err) {
       console.error("Failed to fetch issues:", err);
     } finally {
@@ -197,6 +201,25 @@ export default function MyReportsScreen({ navigation }) {
       fetchIssues();
     }, [fetchIssues])
   );
+
+  // Real-time: when a notification arrives for one of our issues, refresh that issue in the list
+  useEffect(() => {
+    const user = getAuthUser();
+    if (!user) return;
+    const pusher = getPusher();
+    if (!pusher) return;
+    const handler = (data) => {
+      if (!data?.issue_id) return;
+      api.get(`/issues/${data.issue_id}`)
+        .then(({ data: fresh }) => {
+          setIssues((prev) => prev.map((i) => (i.id === fresh.id ? fresh : i)));
+        })
+        .catch(() => {});
+    };
+    const channel = pusher.subscribe(`private-user.${user.id}`);
+    channel.bind('notification.sent', handler);
+    return () => { channel.unbind('notification.sent', handler); };
+  }, []);
 
   const filtered = useMemo(() => {
     const priorityWeight = { high: 3, medium: 2, low: 1 };
@@ -220,7 +243,7 @@ export default function MyReportsScreen({ navigation }) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchIssues();
+    fetchIssues(true);
   }, [fetchIssues]);
 
   const goToDetail = (issue) => navigation.navigate('IssueDetails', { issue });

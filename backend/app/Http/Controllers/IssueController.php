@@ -35,7 +35,7 @@ class IssueController extends Controller
 
         $query = Issue::with(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
             ->withCount(['upvotes' => fn ($q) => $q->whereColumn('issue_upvotes.user_id', '!=', 'issues.user_id')])
-            ->withCount(['upvotes as has_upvoted' => fn ($q) => $q->where('user_id', $userId)]);
+            ->withExists(['upvotes as has_upvoted' => fn ($q) => $q->where('user_id', $userId)]);
 
         if ($request->boolean('mine')) {
             $query->where('user_id', $userId);
