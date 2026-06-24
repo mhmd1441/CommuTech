@@ -373,6 +373,12 @@ class ReportPageController extends Controller
             ]);
         }
 
+        if (in_array($data['status'], ['in_progress', 'resolved'], true) && empty($data['assigned_to'])) {
+            throw ValidationException::withMessages([
+                'status' => 'Reports can only be marked in progress or resolved after assigning a worker.',
+            ]);
+        }
+
         return $data;
     }
 

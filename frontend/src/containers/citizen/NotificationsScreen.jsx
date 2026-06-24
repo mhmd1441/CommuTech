@@ -333,14 +333,101 @@ export default function NotificationsScreen({ navigation, route }) {
   };
 
   // ── normal tap ────────────────────────────────────────────
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+  };
+
+  const toggleSelect = (notificationId) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(notificationId)) {
+        next.delete(notificationId);
+      } else {
+        next.add(notificationId);
+      }
+
+      if (next.size === 0) {
+        setSelectMode(false);
+      }
+
+      return next;
+    });
+  };
+
+  const handleLongPress = (notif) => {
+    setSelectMode(true);
+    setSelected(new Set([notif.id]));
+  };
+
+  const bulkMarkRead = () => {
+    const selectedIds = new Set(selected);
+    const selectedNotifications = notifications.filter((n) =>
+      selectedIds.has(n.id),
+    );
+    const newlyReadCount = selectedNotifications.filter((n) => !n.read_at).length;
+
+    setNotifications((prev) =>
+      prev.map((n) =>
+        selectedIds.has(n.id)
+          ? { ...n, read_at: n.read_at || new Date().toISOString() }
+          : n,
+      ),
+    );
+    setUnreadCount((prev) => Math.max(0, prev - newlyReadCount));
+    exitSelectMode();
+
+    Promise.all(
+      selectedNotifications
+        .filter((n) => !n.read_at)
+        .map((n) => api.patch(`/notifications/${n.id}/read`)),
+    ).catch(() => {});
+  };
+
+  const bulkMarkUnread = () => {
+    const selectedIds = new Set(selected);
+    const selectedNotifications = notifications.filter((n) =>
+      selectedIds.has(n.id),
+    );
+    const newlyUnreadCount = selectedNotifications.filter((n) => n.read_at).length;
+
+    setNotifications((prev) =>
+      prev.map((n) => (selectedIds.has(n.id) ? { ...n, read_at: null } : n)),
+    );
+    setUnreadCount((prev) => prev + newlyUnreadCount);
+    exitSelectMode();
+
+    Promise.all(
+      selectedNotifications
+        .filter((n) => n.read_at)
+        .map((n) => api.patch(`/notifications/${n.id}/unread`)),
+    ).catch(() => {});
+  };
+
+  const bulkDelete = () => {
+    const selectedIds = new Set(selected);
+    const selectedNotifications = notifications.filter((n) =>
+      selectedIds.has(n.id),
+    );
+    const unreadDeletedCount = selectedNotifications.filter((n) => !n.read_at).length;
+
+    setNotifications((prev) => prev.filter((n) => !selectedIds.has(n.id)));
+    setUnreadCount((prev) => Math.max(0, prev - unreadDeletedCount));
+    exitSelectMode();
+
+    Promise.all(
+      selectedNotifications.map((n) => api.delete(`/notifications/${n.id}`)),
+    ).catch(() => {});
+  };
+
   const handlePress = (notif) => {
     if (selectMode) {
       toggleSelect(notif.id);
       return;
     }
     markRead(notif);
-    if (notif.issue_id)
-      navigation.navigate("IssueDetails", { issue: { id: notif.issue_id } });
+    handleNotifPress(notif);
   };
 
   const handleNotifPress = (notif) => {
