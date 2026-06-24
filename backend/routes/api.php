@@ -73,6 +73,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/read-all', 'markAllRead');
         Route::patch('/{notification}/read', 'markRead');
         Route::patch('/{notification}/unread', 'markUnread');
+        Route::delete('/{notification}', 'destroy');
     });
 
     // worker chat

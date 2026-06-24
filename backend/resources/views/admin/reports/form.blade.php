@@ -29,7 +29,7 @@
                 </div>
                 <div>
                     <label>Assigned Worker</label>
-                    <select name="assigned_to">
+                    <select name="assigned_to" id="assigned-to-select">
                         <option value="">Unassigned</option>
                     @foreach ($workers as $worker)
                         <option value="{{ $worker->id }}" @selected((int) old('assigned_to', $report->assigned_to) === $worker->id)>
@@ -57,11 +57,20 @@
                 </div>
                 <div>
                     <label>Status</label>
-                    <select name="status" required>
+                    <select name="status" id="status-select" required>
                         @foreach ($statuses as $status)
-                            <option value="{{ $status }}" @selected(old('status', $report->status ?: 'pending') === $status)>{{ str_replace('_', ' ', ucfirst($status)) }}</option>
+                            <option
+                                value="{{ $status }}"
+                                @selected(old('status', $report->status ?: 'pending') === $status)
+                                @if (in_array($status, ['in_progress', 'resolved'], true)) data-requires-worker="true" @endif
+                            >
+                                {{ str_replace('_', ' ', ucfirst($status)) }}
+                            </option>
                         @endforeach
                     </select>
+                    <div id="status-worker-helper" class="muted" style="margin-top:6px;">
+                        Assign a worker before moving this report to In Progress or Resolved.
+                    </div>
                 </div>
                 <div>
                     <label>Priority</label>
@@ -98,4 +107,39 @@
             </div>
         </form>
     </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const assignedToSelect = document.getElementById('assigned-to-select');
+            const statusSelect = document.getElementById('status-select');
+            const helper = document.getElementById('status-worker-helper');
+
+            if (!assignedToSelect || !statusSelect || !helper) {
+                return;
+            }
+
+            const workerRequiredStatuses = statusSelect.querySelectorAll('[data-requires-worker="true"]');
+
+            function syncWorkerRequiredStatuses() {
+                const hasWorker = assignedToSelect.value !== '';
+                const selectedOption = statusSelect.options[statusSelect.selectedIndex];
+                const selectedRequiresWorker = selectedOption?.dataset.requiresWorker === 'true';
+
+                workerRequiredStatuses.forEach(function (option) {
+                    option.disabled = !hasWorker && option !== selectedOption;
+                });
+
+                helper.style.display = hasWorker ? 'none' : 'block';
+
+                if (!hasWorker && selectedRequiresWorker) {
+                    helper.textContent = 'Assign a worker before saving this report as In Progress or Resolved.';
+                } else {
+                    helper.textContent = 'Assign a worker before moving this report to In Progress or Resolved.';
+                }
+            }
+
+            assignedToSelect.addEventListener('change', syncWorkerRequiredStatuses);
+            syncWorkerRequiredStatuses();
+        });
+    </script>
 @endsection

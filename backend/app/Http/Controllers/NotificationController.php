@@ -59,4 +59,15 @@ class NotificationController extends Controller
 
         return response()->json(['message' => 'All notifications marked as read.']);
     }
+
+    public function destroy(Request $request, CommuTechNotification $notification)
+    {
+        if ($notification->user_id !== $request->user()->id) {
+            abort(404);
+        }
+
+        $notification->delete();
+
+        return response()->noContent();
+    }
 }
