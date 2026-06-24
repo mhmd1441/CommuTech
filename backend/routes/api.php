@@ -9,6 +9,8 @@ use App\Http\Controllers\IssueDonationController;
 use App\Http\Controllers\MetaController;
 use App\Http\Controllers\MlController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PaymentMethodController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkerIssueController;
@@ -67,6 +69,18 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/me/contributions', [IssueDonationController::class, 'index']);
+
+    // Payment methods (saved cards/wallets)
+    Route::prefix('payment-methods')->controller(PaymentMethodController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::patch('/{paymentMethod}/default', 'setDefault');
+        Route::delete('/{paymentMethod}', 'destroy');
+    });
+
+    // Payment (donate to issue with real payment flow)
+    Route::post('/issues/{issue}/pay', [PaymentController::class, 'pay']);
+    Route::get('/me/transactions', [PaymentController::class, 'transactions']);
 
     Route::prefix('notifications')->controller(NotificationController::class)->group(function () {
         Route::get('/', 'index');
