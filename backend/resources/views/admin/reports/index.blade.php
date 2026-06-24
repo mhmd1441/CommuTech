@@ -126,17 +126,20 @@ default => 'blue',
                     @elseif ($report->sla_breached)
                     <span class="tag red">Breached</span>
                     @elseif ($report->due_at)
-                    @php $hoursLeft = now()->diffInHours($report->due_at, false); @endphp
-                    @if ($hoursLeft < 0)
-                        <span class="tag red">Overdue</span>
-                        @elseif ($hoursLeft < 12)
-                            <span class="tag orange">{{ $hoursLeft }}h left</span>
-                            @else
-                            <span class="tag">{{ round($hoursLeft / 24, 1) }}d left</span>
-                            @endif
-                            @else
-                            <span class="tag">N/A</span>
-                            @endif
+                        @php $minutesLeft = now()->diffInMinutes($report->due_at, false); @endphp
+                        @if ($minutesLeft < 0)
+                            <span class="tag red">Overdue</span>
+                        @elseif ($minutesLeft < 60)
+                            <span class="tag orange">{{ $minutesLeft }}m left</span>
+                        @elseif ($minutesLeft < 24 * 60)
+                            @php $h = floor($minutesLeft / 60); $m = $minutesLeft % 60; @endphp
+                            <span class="tag orange">{{ $h }}h {{ sprintf('%02d', $m) }}m left</span>
+                        @else
+                            <span class="tag">{{ floor($minutesLeft / (24 * 60)) }}d left</span>
+                        @endif
+                    @else
+                        <span class="tag">N/A</span>
+                    @endif
                 </td>
                 <td>
                     <div class="row-actions">

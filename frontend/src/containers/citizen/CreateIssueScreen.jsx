@@ -330,6 +330,28 @@ export default function CreateIssueScreen({ navigation }) {
     }
   };
 
+  const confirmDeletePhoto = () => {
+    Alert.alert(
+      "Delete Photo",
+      "Are you sure you want to delete this photo? You can take a new one after.",
+      [
+        {
+          text: "Cancel",
+          onPress: () => {},
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          onPress: () => {
+            setCapturedPhoto(null);
+            setAiPrediction(null);
+          },
+          style: "destructive",
+        },
+      ]
+    );
+  };
+
   const submitIssue = async () => {
     if (!canSubmit || submitting) return;
 
@@ -593,10 +615,16 @@ export default function CreateIssueScreen({ navigation }) {
             {capturedPhoto ? (
               <View style={styles.photoPreviewWrap}>
                 <Image source={{ uri: capturedPhoto.uri }} style={styles.photoPreview} />
-                <Pressable style={styles.retakePhotoBtn} onPress={captureIssuePhoto}>
-                  <Ionicons name="camera" size={16} color={C.navy} />
-                  <Text style={styles.retakePhotoText}>Retake</Text>
-                </Pressable>
+                <View style={styles.photoActionsRow}>
+                  <Pressable style={styles.retakePhotoBtn} onPress={captureIssuePhoto}>
+                    <Ionicons name="camera" size={16} color={C.navy} />
+                    <Text style={styles.retakePhotoText}>Retake</Text>
+                  </Pressable>
+                  <Pressable style={styles.deletePhotoBtn} onPress={confirmDeletePhoto}>
+                    <Ionicons name="trash-outline" size={16} color={C.red} />
+                    <Text style={styles.deletePhotoText}>Delete</Text>
+                  </Pressable>
+                </View>
               </View>
             ) : (
               <>
@@ -822,11 +850,22 @@ const styles = StyleSheet.create({
     borderColor: C.border, backgroundColor: C.bg,
   },
   photoPreview: { width: "100%", height: 190, backgroundColor: C.border },
-  retakePhotoBtn: {
-    minHeight: 46, flexDirection: "row", alignItems: "center",
-    justifyContent: "center", gap: 8, backgroundColor: "#FFFFFF",
+  photoActionsRow: {
+    flexDirection: "row", gap: 10, paddingHorizontal: 8, paddingVertical: 8,
+    backgroundColor: "#FFFFFF", borderTopWidth: 1, borderTopColor: C.border,
   },
-  retakePhotoText: { color: C.navy, fontWeight: "900" },
+  retakePhotoBtn: {
+    flex: 1, minHeight: 46, flexDirection: "row", alignItems: "center",
+    justifyContent: "center", gap: 8, backgroundColor: "#FFFFFF",
+    borderRadius: 12, borderWidth: 1, borderColor: C.border,
+  },
+  retakePhotoText: { color: C.navy, fontWeight: "900", fontSize: 14 },
+  deletePhotoBtn: {
+    flex: 1, minHeight: 46, flexDirection: "row", alignItems: "center",
+    justifyContent: "center", gap: 8, backgroundColor: "#FEF2F2",
+    borderRadius: 12, borderWidth: 1, borderColor: "#FECACA",
+  },
+  deletePhotoText: { color: C.red, fontWeight: "900", fontSize: 14 },
   submitBtn: {
     marginTop: 14, height: 54, borderRadius: 16,
     backgroundColor: C.navy, alignItems: "center", justifyContent: "center",
