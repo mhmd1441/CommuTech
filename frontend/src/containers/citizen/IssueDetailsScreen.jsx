@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -17,8 +18,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import api, { getAuthUser, issueApi } from "../../services/api";
+import PaymentModal from "./PaymentModal";
 import { getPusher } from "../../services/echo";
-import { fundingPercent, issueStatusKey, issueStatusLabel, money } from "../../services/issuePresentation";
+import {
+  fundingPercent,
+  issueStatusKey,
+  issueStatusLabel,
+  money,
+} from "../../services/issuePresentation";
 
 const C = {
   navy: "#19405F",
@@ -32,11 +39,27 @@ const C = {
   red: "#B91C1C",
 };
 
-
 function statusColor(status) {
-  if (status === "Done" || status === "Resolved" || status === "resolved" || status === "funded") return C.green;
-  if (["In Progress", "in_progress", "in-progress", "under_review", "awaiting_funding", "expired"].includes(status)) return C.orange;
-  if (status === "Under Investigation" || status === "under_investigation") return C.orange;
+  if (
+    status === "Done" ||
+    status === "Resolved" ||
+    status === "resolved" ||
+    status === "funded"
+  )
+    return C.green;
+  if (
+    [
+      "In Progress",
+      "in_progress",
+      "in-progress",
+      "under_review",
+      "awaiting_funding",
+      "expired",
+    ].includes(status)
+  )
+    return C.orange;
+  if (status === "Under Investigation" || status === "under_investigation")
+    return C.orange;
   if (status === "Rejected" || status === "rejected") return C.red;
   return C.navy;
 }
@@ -50,24 +73,53 @@ function priorityColor(priority) {
 export default function IssueDetailsScreen({ navigation, route }) {
   const routeIssue = route?.params?.issue || {};
   const [issue, setIssue] = useState(routeIssue);
-  const [loadingIssue, setLoadingIssue] = useState(!routeIssue.title && !!routeIssue.id);
+  const [loadingIssue, setLoadingIssue] = useState(
+    !routeIssue.title && !!routeIssue.id,
+  );
   const [auditNote, setAuditNote] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [editModal, setEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ title: "", description: "", location: "", category: "" });
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    location: "",
+    category: "",
+  });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [affectedCount, setAffectedCount] = useState(routeIssue.affected_count ?? ((routeIssue.upvotes_count ?? 0) + 1));
-  const [hasUpvoted, setHasUpvoted] = useState(!!(routeIssue.has_upvoted));
+  const [affectedCount, setAffectedCount] = useState(
+    routeIssue.affected_count ?? (routeIssue.upvotes_count ?? 0) + 1,
+  );
+  const [hasUpvoted, setHasUpvoted] = useState(!!routeIssue.has_upvoted);
   const [upvoting, setUpvoting] = useState(false);
-  const [donationAmount, setDonationAmount] = useState("");
-  const [donating, setDonating] = useState(false);
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [auditPhoto, setAuditPhoto] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [editErrors, setEditErrors] = useState({});
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef(null);
+  const [toastMsg, setToastMsg] = useState({ text: "", type: "success" });
+
+  const showToast = (text, type = "success", onDone) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToastMsg({ text, type });
+    Animated.timing(toastAnim, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 0, duration: 220, useNativeDriver: true }).start(() => {
+        onDone?.();
+      });
+    }, 2500);
+  };
 
   const currentUser = getAuthUser();
   const isMyIssue = issue.user_id === currentUser?.id;
-  const canEdit = isMyIssue && issue.id && issue.status === "pending" && issue.funding_status !== "funded";
+  const canEdit =
+    isMyIssue &&
+    issue.id &&
+    issue.status === "pending" &&
+    issue.funding_status !== "funded";
 
   const openEdit = () => {
     setEditForm({
@@ -80,9 +132,12 @@ export default function IssueDetailsScreen({ navigation, route }) {
   };
 
   const handleSaveEdit = async () => {
-    if (editForm.title.trim().length < 4) { Alert.alert("Validation", "Use a clearer title, like Broken streetlight."); return; }
-    if (editForm.description.trim().length < 10) { Alert.alert("Validation", "Add a little more detail in the description."); return; }
-    if (!editForm.location.trim()) { Alert.alert("Validation", "Location is required."); return; }
+    const errs = {};
+    if (editForm.title.trim().length < 4) errs.title = "Use a clearer title, like Broken streetlight.";
+    if (editForm.description.trim().length < 10) errs.description = "Add a little more detail.";
+    if (!editForm.location.trim()) errs.location = "Location is required.";
+    if (Object.keys(errs).length) { setEditErrors(errs); return; }
+    setEditErrors({});
     try {
       setSaving(true);
       const { data } = await api.patch(`/issues/${issue.id}`, {
@@ -94,7 +149,7 @@ export default function IssueDetailsScreen({ navigation, route }) {
       setIssue(data);
       setEditModal(false);
     } catch (e) {
-      Alert.alert("Update Failed", e.message || "Please try again.");
+      setEditErrors({ general: e.message || "Could not save. Please try again." });
     } finally {
       setSaving(false);
     }
@@ -121,17 +176,20 @@ export default function IssueDetailsScreen({ navigation, route }) {
             }
           },
         },
-      ]
+      ],
     );
   };
 
   useEffect(() => {
     if (!routeIssue.title && routeIssue.id) {
-      api.get(`/issues/${routeIssue.id}`)
+      api
+        .get(`/issues/${routeIssue.id}`)
         .then(({ data }) => {
           setIssue(data);
-          setAffectedCount(data.affected_count ?? ((data.upvotes_count ?? 0) + 1));
-          setHasUpvoted(!!(data.has_upvoted));
+          setAffectedCount(
+            data.affected_count ?? (data.upvotes_count ?? 0) + 1,
+          );
+          setHasUpvoted(!!data.has_upvoted);
         })
         .catch(() => {})
         .finally(() => setLoadingIssue(false));
@@ -156,11 +214,14 @@ export default function IssueDetailsScreen({ navigation, route }) {
     const handler = (data) => {
       if (data?.issue_id !== issueId) return;
 
-      api.get(`/issues/${issueId}`)
+      api
+        .get(`/issues/${issueId}`)
         .then(({ data: fresh }) => {
           setIssue(fresh);
-          setAffectedCount(fresh.affected_count ?? ((fresh.upvotes_count ?? 0) + 1));
-          setHasUpvoted(!!(fresh.has_upvoted));
+          setAffectedCount(
+            fresh.affected_count ?? (fresh.upvotes_count ?? 0) + 1,
+          );
+          setHasUpvoted(!!fresh.has_upvoted);
         })
         .catch((e) => console.error("Failed to sync issue update:", e));
     };
@@ -179,7 +240,9 @@ export default function IssueDetailsScreen({ navigation, route }) {
       setUpvoting(true);
       const result = await issueApi.upvote(issue.id);
       setHasUpvoted(result.has_upvoted);
-      setAffectedCount(result.affected_count ?? ((result.upvotes_count ?? 0) + 1));
+      setAffectedCount(
+        result.affected_count ?? (result.upvotes_count ?? 0) + 1,
+      );
     } catch {
       // Keep the current impact count if the request fails.
     } finally {
@@ -192,15 +255,19 @@ export default function IssueDetailsScreen({ navigation, route }) {
     ? issue.priority.charAt(0).toUpperCase() + issue.priority.slice(1)
     : "Medium";
   const showFunding =
-    issue.funding_status && issue.funding_status !== "none" && issue.funding_status !== null;
-  const canDonate = issue.status === "awaiting_funding" && issue.funding_status === "open";
+    issue.funding_status &&
+    issue.funding_status !== "none" &&
+    issue.funding_status !== null;
+  const canDonate =
+    issue.status === "awaiting_funding" && issue.funding_status === "open";
   const progress = fundingPercent(issue);
   const userDonationTotal = Number(issue.user_donation_total || 0);
   const canConfirmResolution =
     isMyIssue &&
     issue.id &&
     issue.status === "resolved" &&
-    (issue.citizen_resolution_confirmed === null || issue.citizen_resolution_confirmed === undefined);
+    (issue.citizen_resolution_confirmed === null ||
+      issue.citizen_resolution_confirmed === undefined);
 
   const imageFormFile = (asset, fallbackName) => {
     const type = asset.mimeType || "image/jpeg";
@@ -217,7 +284,10 @@ export default function IssueDetailsScreen({ navigation, route }) {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Camera Permission", "Allow camera access to attach a review photo.");
+        Alert.alert(
+          "Camera Permission",
+          "Allow camera access to attach a review photo.",
+        );
         return;
       }
 
@@ -231,7 +301,10 @@ export default function IssueDetailsScreen({ navigation, route }) {
         setAuditPhoto(result.assets[0]);
       }
     } catch {
-      Alert.alert("Camera Error", "Could not open the camera. Please try again.");
+      Alert.alert(
+        "Camera Error",
+        "Could not open the camera. Please try again.",
+      );
     }
   };
 
@@ -242,53 +315,43 @@ export default function IssueDetailsScreen({ navigation, route }) {
       formData.append("resolved", resolved ? "1" : "0");
       if (auditNote.trim()) formData.append("note", auditNote.trim());
       if (!resolved && auditPhoto) {
-        formData.append("audit_image", imageFormFile(auditPhoto, "citizen-review"));
+        formData.append(
+          "audit_image",
+          imageFormFile(auditPhoto, "citizen-review"),
+        );
       }
 
-      const { data } = await api.post(`/issues/${issue.id}/confirm-resolution`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data } = await api.post(
+        `/issues/${issue.id}/confirm-resolution`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
       setIssue(data.issue || issue);
       setAuditNote("");
       setAuditPhoto(null);
       if (resolved) {
-        Alert.alert("Resolution Confirmed", "Thank you. This report remains resolved.", [
-          { text: "OK", onPress: () => navigation.navigate("MyReports") },
-        ]);
+        showToast("Resolution confirmed — thank you!", "success", () => navigation.navigate("MyReports"));
       } else {
         setNotice("Review request sent. The admin team will check this report.");
       }
     } catch (error) {
-      Alert.alert("Confirmation Failed", error.response?.data?.message || error.message || "Please try again.");
+      showToast(error.response?.data?.message || error.message || "Confirmation failed. Please try again.", "error");
     } finally {
       setConfirming(false);
     }
   };
 
-  const handleDonate = async () => {
-    if (donating) return;
-    const amount = Number(donationAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert("Donation Amount", "Enter a valid simulated donation amount.");
-      return;
-    }
-
-    try {
-      setDonating(true);
-      const data = await issueApi.donate(issue.id, amount);
-      setIssue(data.issue || issue);
-      setDonationAmount("");
-      Alert.alert("Donation Recorded", data.message || "Your simulated donation was recorded.");
-    } catch (error) {
-      Alert.alert("Donation Failed", error.message || "Please try again.");
-    } finally {
-      setDonating(false);
-    }
-  };
-
   if (loadingIssue) {
     return (
-      <SafeAreaView style={[styles.safe, { alignItems: "center", justifyContent: "center" }]} edges={["top"]}>
+      <SafeAreaView
+        style={[
+          styles.safe,
+          { alignItems: "center", justifyContent: "center" },
+        ]}
+        edges={["top"]}
+      >
         <ActivityIndicator size="large" color={C.navy} />
       </SafeAreaView>
     );
@@ -301,340 +364,485 @@ export default function IssueDetailsScreen({ navigation, route }) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.header}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn}>
-            <Ionicons name="chevron-back" size={22} color={C.navy} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Issue Details</Text>
-          <Pressable onPress={() => navigation.navigate("Notifications", { role: "citizen" })} style={styles.iconBtn}>
-            <Ionicons name="notifications-outline" size={20} color={C.navy} />
-          </Pressable>
-        </View>
-
-        <Image source={{ uri: issue.image_url }} style={styles.heroImage} />
-
-        {notice && (
-          <View style={styles.noticeBox}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={C.green} />
-            <Text style={styles.noticeText}>{notice}</Text>
-          </View>
-        )}
-
-        <View style={styles.card}>
-          <View style={styles.metaRow}>
-            <View style={[styles.pill, { backgroundColor: statusColor(statusKey) + "18" }]}>
-              <Text style={[styles.pillText, { color: statusColor(statusKey) }]}>{status}</Text>
-            </View>
-            <View style={[styles.pill, { backgroundColor: priorityColor(priority) + "18" }]}>
-              <Text style={[styles.pillText, { color: priorityColor(priority) }]}>
-                {priority}
-              </Text>
-            </View>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={styles.iconBtn}
+            >
+              <Ionicons name="chevron-back" size={22} color={C.navy} />
+            </Pressable>
+            <Text style={styles.headerTitle}>Issue Details</Text>
+            <Pressable
+              onPress={() =>
+                navigation.navigate("Notifications", { role: "citizen" })
+              }
+              style={styles.iconBtn}
+            >
+              <Ionicons name="notifications-outline" size={20} color={C.navy} />
+            </Pressable>
           </View>
 
-          <Text style={styles.title}>{issue.title}</Text>
-          <Text style={styles.description}>{issue.description}</Text>
+          <Image source={{ uri: issue.image_url }} style={styles.heroImage} />
 
-          <View style={styles.infoGrid}>
-            <View style={styles.infoItem}>
-              <Ionicons name="business-outline" size={18} color={C.navy} />
-              <View>
-                <Text style={styles.infoLabel}>Category</Text>
-                <Text style={styles.infoValue}>{issue.category || "General"}</Text>
+          {notice && (
+            <View style={styles.noticeBox}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={18}
+                color={C.green}
+              />
+              <Text style={styles.noticeText}>{notice}</Text>
+            </View>
+          )}
+
+          <View style={styles.card}>
+            <View style={styles.metaRow}>
+              <View
+                style={[
+                  styles.pill,
+                  { backgroundColor: statusColor(statusKey) + "18" },
+                ]}
+              >
+                <Text
+                  style={[styles.pillText, { color: statusColor(statusKey) }]}
+                >
+                  {status}
+                </Text>
               </View>
-            </View>
-            <View style={styles.infoItem}>
-              <Ionicons name="calendar-outline" size={18} color={C.navy} />
-              <View>
-                <Text style={styles.infoLabel}>Reported</Text>
-                <Text style={styles.infoValue}>
-                {issue.created_at ? new Date(issue.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : issue.date || "Today"}
+              <View
+                style={[
+                  styles.pill,
+                  { backgroundColor: priorityColor(priority) + "18" },
+                ]}
+              >
+                <Text
+                  style={[styles.pillText, { color: priorityColor(priority) }]}
+                >
+                  {priority}
                 </Text>
               </View>
             </View>
-          </View>
 
-          <View style={styles.locationBox}>
-            <Ionicons name="location-outline" size={20} color={C.orange} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.infoLabel}>Location</Text>
-              <Text style={styles.infoValue}>{issue.location || "Location unavailable"}</Text>
+            <Text style={styles.title}>{issue.title}</Text>
+            <Text style={styles.description}>{issue.description}</Text>
+
+            <View style={styles.infoGrid}>
+              <View style={styles.infoItem}>
+                <Ionicons name="business-outline" size={18} color={C.navy} />
+                <View>
+                  <Text style={styles.infoLabel}>Category</Text>
+                  <Text style={styles.infoValue}>
+                    {issue.category || "General"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.infoItem}>
+                <Ionicons name="calendar-outline" size={18} color={C.navy} />
+                <View>
+                  <Text style={styles.infoLabel}>Reported</Text>
+                  <Text style={styles.infoValue}>
+                    {issue.created_at
+                      ? new Date(issue.created_at).toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : issue.date || "Today"}
+                  </Text>
+                </View>
+              </View>
             </View>
+
+            <View style={styles.locationBox}>
+              <Ionicons name="location-outline" size={20} color={C.orange} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.infoLabel}>Location</Text>
+                <Text style={styles.infoValue}>
+                  {issue.location || "Location unavailable"}
+                </Text>
+              </View>
+            </View>
+
+            {issue.due_at &&
+              !["resolved", "rejected"].includes(issue.status) && (
+                <View
+                  style={[
+                    styles.locationBox,
+                    {
+                      marginTop: 10,
+                      borderColor: issue.sla_breached ? "#FECACA" : C.border,
+                      backgroundColor: issue.sla_breached ? "#FEF2F2" : "#fff",
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={20}
+                    color={issue.sla_breached ? C.red : C.navy}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoLabel}>Resolution Deadline</Text>
+                    <Text
+                      style={[
+                        styles.infoValue,
+                        { color: issue.sla_breached ? C.red : C.text },
+                      ]}
+                    >
+                      {issue.sla_breached ? "⚠ Overdue — " : ""}
+                      {new Date(issue.due_at).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                  </View>
+                </View>
+              )}
           </View>
 
-          {issue.due_at && !["resolved", "rejected"].includes(issue.status) && (
-            <View style={[styles.locationBox, { marginTop: 10, borderColor: issue.sla_breached ? "#FECACA" : C.border, backgroundColor: issue.sla_breached ? "#FEF2F2" : "#fff" }]}>
-              <Ionicons name="time-outline" size={20} color={issue.sla_breached ? C.red : C.navy} />
+          {!isMyIssue ? (
+            <View style={styles.card}>
+              <View style={styles.impactHeader}>
+                <View
+                  style={[
+                    styles.impactIconWrap,
+                    { backgroundColor: hasUpvoted ? "#ECFDF5" : "#FFF7ED" },
+                  ]}
+                >
+                  <Ionicons
+                    name={hasUpvoted ? "checkmark-circle" : "megaphone-outline"}
+                    size={20}
+                    color={hasUpvoted ? C.green : C.orange}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.impactTitle}>
+                    {hasUpvoted
+                      ? "You are counted"
+                      : "Affected by this issue too?"}
+                  </Text>
+                  <Text style={styles.impactSubtitle}>
+                    {hasUpvoted
+                      ? "This report now includes your impact. You can undo this if needed."
+                      : "Add yourself to the affected count so the community impact is clearer."}
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                onPress={handleUpvote}
+                disabled={upvoting}
+                style={[
+                  styles.impactBtn,
+                  hasUpvoted && styles.impactBtnVoted,
+                  upvoting && { opacity: 0.6 },
+                ]}
+              >
+                {upvoting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={
+                        hasUpvoted
+                          ? "checkmark-circle-outline"
+                          : "hand-left-outline"
+                      }
+                      size={18}
+                      color="#fff"
+                    />
+                    <Text style={styles.impactBtnText}>
+                      {hasUpvoted ? "Remove My Count" : "I Have This Issue Too"}
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+
+              <Text style={styles.impactCount}>
+                {affectedCount} affected citizen{affectedCount === 1 ? "" : "s"}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.card, styles.impactReadOnly]}>
+              <Ionicons name="people" size={18} color={C.navy} />
+              <Text style={styles.impactReadOnlyText}>
+                {affectedCount} affected citizen{affectedCount === 1 ? "" : "s"}
+                , including you as the reporter
+              </Text>
+            </View>
+          )}
+
+          {showFunding && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Community Funding</Text>
+              <View style={styles.fundingHeader}>
+                <View>
+                  <Text style={styles.fundingAmount}>
+                    {money(issue.funding_raised)} raised
+                  </Text>
+                  <Text style={styles.fundingGoal}>
+                    Goal: {money(issue.funding_goal)}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.pill,
+                    { backgroundColor: statusColor(statusKey) + "18" },
+                  ]}
+                >
+                  <Text
+                    style={[styles.pillText, { color: statusColor(statusKey) }]}
+                  >
+                    {status}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.progressTrack}>
+                <View
+                  style={[styles.progressFill, { width: `${progress}%` }]}
+                />
+              </View>
+              <Text style={styles.fundingNote}>
+                {progress}% funded
+                {issue.funding_deadline
+                  ? ` • Deadline ${new Date(issue.funding_deadline).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
+                  : ""}
+              </Text>
+
+              {userDonationTotal > 0 && (
+                <Text style={styles.fundingNote}>
+                  You contributed {money(userDonationTotal)} to this issue.
+                </Text>
+              )}
+
+              {canDonate && (
+                <Pressable
+                  style={styles.donateBtn}
+                  onPress={() => setPaymentModalVisible(true)}
+                >
+                  <Ionicons
+                    name="card-outline"
+                    size={18}
+                    color="#fff"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.donateBtnText}>
+                    Contribute to Funding
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Report Progress</Text>
+            {[
+              [
+                "Report received",
+                "Your report has been saved with its photo and location.",
+                true,
+              ],
+              [
+                "Field review",
+                "Available field workers can review and claim this report.",
+                statusKey !== "pending",
+              ],
+              [
+                "Resolution update",
+                "When the issue is marked resolved, you can confirm the result.",
+                statusKey === "resolved",
+              ],
+            ].map(([title, body, done], index) => (
+              <View key={title} style={styles.timelineRow}>
+                <View
+                  style={[styles.timelineDot, done && styles.timelineDotDone]}
+                >
+                  <Text style={styles.timelineNumber}>{index + 1}</Text>
+                </View>
+                <View style={styles.timelineText}>
+                  <Text style={styles.timelineTitle}>{title}</Text>
+                  <Text style={styles.timelineBody}>{body}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {(issue.worker_resolution_note ||
+            issue.worker_resolution_image_url) && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Worker Fix Description</Text>
+              {issue.worker_resolution_note && (
+                <Text style={styles.description}>
+                  {issue.worker_resolution_note}
+                </Text>
+              )}
+              {issue.worker_resolution_image_url && (
+                <Image
+                  source={{ uri: issue.worker_resolution_image_url }}
+                  style={styles.resolutionImage}
+                  resizeMode="cover"
+                />
+              )}
+            </View>
+          )}
+
+          {issue.status === "rejected" && (
+            <View style={styles.rejectedCard}>
+              <Ionicons name="close-circle-outline" size={20} color={C.red} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.infoLabel}>Resolution Deadline</Text>
-                <Text style={[styles.infoValue, { color: issue.sla_breached ? C.red : C.text }]}>
-                  {issue.sla_breached ? "⚠ Overdue — " : ""}{new Date(issue.due_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                <Text style={styles.rejectedTitle}>Report Rejected</Text>
+                <Text style={styles.rejectedText}>
+                  {issue.rejection_reason ||
+                    "This report was reviewed and could not be processed."}
                 </Text>
               </View>
             </View>
           )}
-        </View>
 
-        {!isMyIssue ? (
-          <View style={styles.card}>
-            <View style={styles.impactHeader}>
-              <View style={[styles.impactIconWrap, { backgroundColor: hasUpvoted ? "#ECFDF5" : "#FFF7ED" }]}>
-                <Ionicons
-                  name={hasUpvoted ? "checkmark-circle" : "megaphone-outline"}
-                  size={20}
-                  color={hasUpvoted ? C.green : C.orange}
-                />
-              </View>
+          {issue.status === "under_investigation" && (
+            <View style={styles.auditCard}>
+              <Ionicons name="shield-outline" size={20} color={C.orange} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.impactTitle}>
-                  {hasUpvoted ? "You are counted" : "Affected by this issue too?"}
-                </Text>
-                <Text style={styles.impactSubtitle}>
-                  {hasUpvoted
-                    ? "This report now includes your impact. You can undo this if needed."
-                    : "Add yourself to the affected count so the community impact is clearer."}
+                <Text style={styles.auditTitle}>Under Investigation</Text>
+                <Text style={styles.auditText}>
+                  Your response was sent for review because the resolution was
+                  not confirmed.
                 </Text>
               </View>
             </View>
+          )}
 
-            <Pressable
-              onPress={handleUpvote}
-              disabled={upvoting}
-              style={[styles.impactBtn, hasUpvoted && styles.impactBtnVoted, upvoting && { opacity: 0.6 }]}
-            >
-              {upvoting ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons
-                    name={hasUpvoted ? "checkmark-circle-outline" : "hand-left-outline"}
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={styles.impactBtnText}>
-                    {hasUpvoted ? "Remove My Count" : "I Have This Issue Too"}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-
-            <Text style={styles.impactCount}>
-              {affectedCount} affected citizen{affectedCount === 1 ? "" : "s"}
-            </Text>
-          </View>
-        ) : (
-          <View style={[styles.card, styles.impactReadOnly]}>
-            <Ionicons name="people" size={18} color={C.navy} />
-            <Text style={styles.impactReadOnlyText}>
-              {affectedCount} affected citizen{affectedCount === 1 ? "" : "s"}, including you as the reporter
-            </Text>
-          </View>
-        )}
-
-        {showFunding && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Community Funding</Text>
-            <View style={styles.fundingHeader}>
-              <View>
-                <Text style={styles.fundingAmount}>{money(issue.funding_raised)} raised</Text>
-                <Text style={styles.fundingGoal}>Goal: {money(issue.funding_goal)}</Text>
-              </View>
-              <View style={[styles.pill, { backgroundColor: statusColor(statusKey) + "18" }]}>
-                <Text style={[styles.pillText, { color: statusColor(statusKey) }]}>{status}</Text>
-              </View>
-            </View>
-
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progress}%` }]} />
-            </View>
-            <Text style={styles.fundingNote}>
-              {progress}% funded
-              {issue.funding_deadline
-                ? ` • Deadline ${new Date(issue.funding_deadline).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}`
-                : ""}
-            </Text>
-
-            {userDonationTotal > 0 && (
-              <Text style={styles.fundingNote}>You contributed {money(userDonationTotal)} to this issue.</Text>
-            )}
-
-            {canDonate && (
-              <View style={styles.donationBox}>
-                <Text style={styles.fieldLabel}>Simulated donation amount</Text>
-                <TextInput
-                  value={donationAmount}
-                  onChangeText={setDonationAmount}
-                  keyboardType="decimal-pad"
-                  placeholder="Example: 10"
-                  placeholderTextColor="#94A3B8"
-                  style={styles.fieldInput}
-                />
-                <Pressable
-                  onPress={handleDonate}
-                  disabled={donating}
-                  style={[styles.primaryBtn, { marginTop: 12 }, donating && styles.disabledBtn]}
-                >
-                  {donating ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Donate</Text>}
-                </Pressable>
-              </View>
-            )}
-          </View>
-        )}
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Report Progress</Text>
-          {[
-            ["Report received", "Your report has been saved with its photo and location.", true],
-            ["Field review", "Available field workers can review and claim this report.", statusKey !== "pending"],
-            ["Resolution update", "When the issue is marked resolved, you can confirm the result.", statusKey === "resolved"],
-          ].map(([title, body, done], index) => (
-            <View key={title} style={styles.timelineRow}>
-              <View style={[styles.timelineDot, done && styles.timelineDotDone]}>
-                <Text style={styles.timelineNumber}>{index + 1}</Text>
-              </View>
-              <View style={styles.timelineText}>
-                <Text style={styles.timelineTitle}>{title}</Text>
-                <Text style={styles.timelineBody}>{body}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {(issue.worker_resolution_note || issue.worker_resolution_image_url) && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Worker Fix Description</Text>
-            {issue.worker_resolution_note && (
-              <Text style={styles.description}>{issue.worker_resolution_note}</Text>
-            )}
-            {issue.worker_resolution_image_url && (
-              <Image
-                source={{ uri: issue.worker_resolution_image_url }}
-                style={styles.resolutionImage}
-                resizeMode="cover"
-              />
-            )}
-          </View>
-        )}
-
-        {issue.status === "rejected" && (
-          <View style={styles.rejectedCard}>
-            <Ionicons name="close-circle-outline" size={20} color={C.red} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rejectedTitle}>Report Rejected</Text>
-              <Text style={styles.rejectedText}>
-                {issue.rejection_reason || "This report was reviewed and could not be processed."}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {issue.status === "under_investigation" && (
-          <View style={styles.auditCard}>
-            <Ionicons name="shield-outline" size={20} color={C.orange} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.auditTitle}>Under Investigation</Text>
+          {canConfirmResolution && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Confirm Resolution</Text>
               <Text style={styles.auditText}>
-                Your response was sent for review because the resolution was not confirmed.
+                Is this issue actually resolved?
               </Text>
-            </View>
-          </View>
-        )}
-
-        {canConfirmResolution && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Confirm Resolution</Text>
-            <Text style={styles.auditText}>Is this issue actually resolved?</Text>
-            <TextInput
-              value={auditNote}
-              onChangeText={setAuditNote}
-              placeholder="Optional note for the admin or worker"
-              placeholderTextColor="#94A3B8"
-              style={styles.auditInput}
-              multiline
-              textAlignVertical="top"
-            />
-            <Text style={styles.auditPhotoHint}>Attach a photo if the issue is still not fixed.</Text>
-            {auditPhoto ? (
-              <View style={styles.auditPhotoWrap}>
-                <Image source={{ uri: auditPhoto.uri }} style={styles.auditPhotoPreview} />
-                <Pressable style={styles.auditPhotoAction} onPress={pickAuditPhoto}>
-                  <Ionicons name="camera" size={15} color={C.navy} />
-                  <Text style={styles.auditPhotoActionText}>Retake photo</Text>
+              <TextInput
+                value={auditNote}
+                onChangeText={setAuditNote}
+                placeholder="Optional note for the admin or worker"
+                placeholderTextColor="#94A3B8"
+                style={styles.auditInput}
+                multiline
+                textAlignVertical="top"
+              />
+              <Text style={styles.auditPhotoHint}>
+                Attach a photo if the issue is still not fixed.
+              </Text>
+              {auditPhoto ? (
+                <View style={styles.auditPhotoWrap}>
+                  <Image
+                    source={{ uri: auditPhoto.uri }}
+                    style={styles.auditPhotoPreview}
+                  />
+                  <Pressable
+                    style={styles.auditPhotoAction}
+                    onPress={pickAuditPhoto}
+                  >
+                    <Ionicons name="camera" size={15} color={C.navy} />
+                    <Text style={styles.auditPhotoActionText}>
+                      Retake photo
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.auditPhotoBtn}
+                  onPress={pickAuditPhoto}
+                >
+                  <Ionicons name="camera-outline" size={18} color={C.navy} />
+                  <Text style={styles.auditPhotoBtnText}>Add Review Photo</Text>
+                </Pressable>
+              )}
+              <View style={styles.auditActions}>
+                <Pressable
+                  onPress={() => confirmResolution(false)}
+                  disabled={confirming}
+                  style={[styles.auditNoBtn, confirming && styles.disabledBtn]}
+                >
+                  <Text style={styles.auditNoText}>No, Request Review</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => confirmResolution(true)}
+                  disabled={confirming}
+                  style={[styles.auditYesBtn, confirming && styles.disabledBtn]}
+                >
+                  {confirming ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.auditYesText}>Yes, Resolved</Text>
+                  )}
                 </Pressable>
               </View>
-            ) : (
-              <Pressable style={styles.auditPhotoBtn} onPress={pickAuditPhoto}>
-                <Ionicons name="camera-outline" size={18} color={C.navy} />
-                <Text style={styles.auditPhotoBtnText}>Add Review Photo</Text>
-              </Pressable>
-            )}
-            <View style={styles.auditActions}>
-              <Pressable
-                onPress={() => confirmResolution(false)}
-                disabled={confirming}
-                style={[styles.auditNoBtn, confirming && styles.disabledBtn]}
-              >
-                <Text style={styles.auditNoText}>No, Request Review</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => confirmResolution(true)}
-                disabled={confirming}
-                style={[styles.auditYesBtn, confirming && styles.disabledBtn]}
-              >
-                {confirming ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.auditYesText}>Yes, Resolved</Text>
-                )}
-              </Pressable>
             </View>
-          </View>
-        )}
+          )}
 
-        {canEdit && (
-          <View style={styles.actions}>
-            <Pressable style={styles.editBtn} onPress={openEdit}>
-              <Ionicons name="create-outline" size={18} color={C.navy} />
-              <Text style={styles.editBtnText}>Edit Report</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.cancelBtn, deleting && { opacity: 0.6 }]}
-              onPress={handleCancel}
-              disabled={deleting}
-            >
-              {deleting
-                ? <ActivityIndicator color={C.red} size="small" />
-                : <>
+          {canEdit && (
+            <View style={styles.actions}>
+              <Pressable style={styles.editBtn} onPress={openEdit}>
+                <Ionicons name="create-outline" size={18} color={C.navy} />
+                <Text style={styles.editBtnText}>Edit Report</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.cancelBtn, deleting && { opacity: 0.6 }]}
+                onPress={handleCancel}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator color={C.red} size="small" />
+                ) : (
+                  <>
                     <Ionicons name="trash-outline" size={18} color={C.red} />
                     <Text style={styles.cancelBtnText}>Withdraw</Text>
                   </>
-              }
+                )}
+              </Pressable>
+            </View>
+          )}
+
+          <View style={styles.actions}>
+            <Pressable
+              style={styles.secondaryBtn}
+              onPress={() => navigation.navigate("MyReports")}
+            >
+              <Text style={styles.secondaryText}>My Reports</Text>
+            </Pressable>
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={() => navigation.navigate("CreateIssue")}
+            >
+              <Text style={styles.primaryText}>New Report</Text>
             </Pressable>
           </View>
-        )}
-
-        <View style={styles.actions}>
-          <Pressable style={styles.secondaryBtn} onPress={() => navigation.navigate("MyReports")}>
-            <Text style={styles.secondaryText}>My Reports</Text>
-          </Pressable>
-          <Pressable style={styles.primaryBtn} onPress={() => navigation.navigate("CreateIssue")}>
-            <Text style={styles.primaryText}>New Report</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
+        </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal visible={editModal} animationType="slide" transparent onRequestClose={() => setEditModal(false)}>
-        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <Modal
+        visible={editModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Report</Text>
-              <Pressable onPress={() => setEditModal(false)} style={styles.modalClose}>
+              <Pressable
+                onPress={() => setEditModal(false)}
+                style={styles.modalClose}
+              >
                 <Ionicons name="close" size={20} color={C.navy} />
               </Pressable>
             </View>
@@ -643,45 +851,86 @@ export default function IssueDetailsScreen({ navigation, route }) {
               <Text style={styles.fieldLabel}>Title</Text>
               <TextInput
                 value={editForm.title}
-                onChangeText={(v) => setEditForm((f) => ({ ...f, title: v }))}
-                style={styles.fieldInput}
+                onChangeText={(v) => { setEditForm((f) => ({ ...f, title: v })); setEditErrors((e) => ({ ...e, title: null })); }}
+                style={[styles.fieldInput, editErrors.title && styles.fieldInputError]}
                 placeholder="Broken streetlight"
                 placeholderTextColor="#94A3B8"
               />
+              {!!editErrors.title && <Text style={styles.fieldError}>{editErrors.title}</Text>}
 
               <Text style={styles.fieldLabel}>Description</Text>
               <TextInput
                 value={editForm.description}
-                onChangeText={(v) => setEditForm((f) => ({ ...f, description: v }))}
-                style={[styles.fieldInput, { height: 100, textAlignVertical: "top" }]}
+                onChangeText={(v) => { setEditForm((f) => ({ ...f, description: v })); setEditErrors((e) => ({ ...e, description: null })); }}
+                style={[styles.fieldInput, { height: 100, textAlignVertical: "top" }, editErrors.description && styles.fieldInputError]}
                 placeholder="Briefly describe what you saw"
                 placeholderTextColor="#94A3B8"
                 multiline
               />
+              {!!editErrors.description && <Text style={styles.fieldError}>{editErrors.description}</Text>}
 
               <Text style={styles.fieldLabel}>Location</Text>
               <TextInput
                 value={editForm.location}
-                onChangeText={(v) => setEditForm((f) => ({ ...f, location: v }))}
-                style={styles.fieldInput}
+                onChangeText={(v) => { setEditForm((f) => ({ ...f, location: v })); setEditErrors((e) => ({ ...e, location: null })); }}
+                style={[styles.fieldInput, editErrors.location && styles.fieldInputError]}
                 placeholder="Street, area, city"
                 placeholderTextColor="#94A3B8"
               />
+              {!!editErrors.location && <Text style={styles.fieldError}>{editErrors.location}</Text>}
+              {!!editErrors.general && <Text style={[styles.fieldError, { marginTop: 8 }]}>{editErrors.general}</Text>}
 
               <Pressable
                 onPress={handleSaveEdit}
                 disabled={saving}
-                style={[styles.primaryBtn, { marginTop: 16 }, saving && { opacity: 0.6 }]}
+                style={[
+                  styles.primaryBtn,
+                  { marginTop: 16 },
+                  saving && { opacity: 0.6 },
+                ]}
               >
-                {saving
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.primaryText}>Save Changes</Text>
-                }
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryText}>Save Changes</Text>
+                )}
               </Pressable>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <PaymentModal
+        visible={paymentModalVisible}
+        onClose={() => setPaymentModalVisible(false)}
+        issue={issue}
+        onSuccess={(updatedIssue) => {
+          setIssue(updatedIssue || issue);
+          setPaymentModalVisible(false);
+        }}
+      />
+
+      {/* Toast */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.toast,
+          toastMsg.type === "error" ? styles.toastError : styles.toastSuccess,
+          {
+            opacity: toastAnim,
+            transform: [{ translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
+          },
+        ]}
+      >
+        <Ionicons
+          name={toastMsg.type === "error" ? "close-circle" : "checkmark-circle"}
+          size={18}
+          color={toastMsg.type === "error" ? "#B91C1C" : C.green}
+        />
+        <Text style={[styles.toastText, toastMsg.type === "error" && { color: "#B91C1C" }]}>
+          {toastMsg.text}
+        </Text>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -707,7 +956,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: { fontSize: 18, color: C.navy, fontWeight: "900" },
-  heroImage: { width: "100%", height: 220, borderRadius: 20, backgroundColor: C.border },
+  heroImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: 20,
+    backgroundColor: C.border,
+  },
   noticeBox: {
     marginTop: 14,
     flexDirection: "row",
@@ -719,7 +973,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#ECFDF5",
     padding: 12,
   },
-  noticeText: { flex: 1, color: C.text, fontSize: 13, fontWeight: "800", lineHeight: 18 },
+  noticeText: {
+    flex: 1,
+    color: C.text,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18,
+  },
   card: {
     marginTop: 14,
     backgroundColor: C.card,
@@ -732,7 +992,12 @@ const styles = StyleSheet.create({
   pill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   pillText: { fontSize: 12, fontWeight: "900" },
   title: { fontSize: 22, fontWeight: "900", color: C.text, lineHeight: 28 },
-  description: { marginTop: 10, color: C.muted, fontWeight: "600", lineHeight: 21 },
+  description: {
+    marginTop: 10,
+    color: C.muted,
+    fontWeight: "600",
+    lineHeight: 21,
+  },
   infoGrid: { flexDirection: "row", gap: 10, marginTop: 16 },
   infoItem: {
     flex: 1,
@@ -756,7 +1021,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
   },
-  sectionTitle: { color: C.text, fontSize: 16, fontWeight: "900", marginBottom: 12 },
+  sectionTitle: {
+    color: C.text,
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 12,
+  },
   fundingHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -791,6 +1061,16 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: "#F8FAFC",
   },
+  donateBtn: {
+    marginTop: 14,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: C.navy,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  donateBtnText: { color: "#fff", fontWeight: "900", fontSize: 15 },
   timelineRow: { flexDirection: "row", gap: 12, paddingVertical: 9 },
   timelineDot: {
     width: 28,
@@ -804,15 +1084,28 @@ const styles = StyleSheet.create({
   timelineNumber: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   timelineText: { flex: 1 },
   timelineTitle: { color: C.text, fontWeight: "900" },
-  timelineBody: { marginTop: 3, color: C.muted, fontWeight: "600", lineHeight: 18 },
+  timelineBody: {
+    marginTop: 3,
+    color: C.muted,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
   resolutionImage: {
-    width: "100%", height: 200, borderRadius: 14,
-    marginTop: 12, backgroundColor: C.border,
+    width: "100%",
+    height: 200,
+    borderRadius: 14,
+    marginTop: 12,
+    backgroundColor: C.border,
   },
   rejectedCard: {
-    marginTop: 14, flexDirection: "row", gap: 12,
-    backgroundColor: "#FEF2F2", borderColor: "#FECACA",
-    borderWidth: 1, borderRadius: 18, padding: 16,
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 16,
   },
   rejectedTitle: { color: C.red, fontWeight: "900", marginBottom: 4 },
   rejectedText: { color: C.muted, fontWeight: "700", lineHeight: 19 },
@@ -840,7 +1133,13 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 12,
   },
-  auditPhotoHint: { marginTop: 12, color: C.muted, fontWeight: "700", fontSize: 12, lineHeight: 18 },
+  auditPhotoHint: {
+    marginTop: 12,
+    color: C.muted,
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 18,
+  },
   auditPhotoBtn: {
     marginTop: 8,
     minHeight: 48,
@@ -915,49 +1214,139 @@ const styles = StyleSheet.create({
   secondaryText: { color: C.navy, fontWeight: "900" },
   primaryText: { color: "#FFFFFF", fontWeight: "900" },
   editBtn: {
-    flex: 1, height: 52, borderRadius: 16, borderWidth: 1,
-    borderColor: C.navy, backgroundColor: C.card,
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    flex: 1,
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.navy,
+    backgroundColor: C.card,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
   editBtnText: { color: C.navy, fontWeight: "900" },
   cancelBtn: {
-    flex: 1, height: 52, borderRadius: 16, borderWidth: 1,
-    borderColor: C.red, backgroundColor: "#FEF2F2",
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    flex: 1,
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.red,
+    backgroundColor: "#FEF2F2",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
   cancelBtnText: { color: C.red, fontWeight: "900" },
   modalBackdrop: {
-    flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end",
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
   },
   modalCard: {
-    backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 20, maxHeight: "90%",
+    backgroundColor: C.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: "90%",
   },
   modalHeader: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
   },
   modalTitle: { fontSize: 18, fontWeight: "900", color: C.text },
   modalClose: {
-    width: 34, height: 34, borderRadius: 10, backgroundColor: C.bg,
-    alignItems: "center", justifyContent: "center",
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: C.bg,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  fieldLabel: { color: C.muted, fontWeight: "800", fontSize: 13, marginBottom: 6, marginTop: 12 },
+  fieldLabel: {
+    color: C.muted,
+    fontWeight: "800",
+    fontSize: 13,
+    marginBottom: 6,
+    marginTop: 12,
+  },
   fieldInput: {
-    borderWidth: 1, borderColor: C.border, borderRadius: 14,
-    height: 50, paddingHorizontal: 14, backgroundColor: "#fff",
-    color: C.text, fontSize: 15,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    height: 50,
+    paddingHorizontal: 14,
+    backgroundColor: "#fff",
+    color: C.text,
+    fontSize: 15,
   },
-  impactHeader: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 16 },
-  impactIconWrap: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  impactHeader: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  impactIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   impactTitle: { color: C.text, fontWeight: "900", fontSize: 15 },
-  impactSubtitle: { color: C.muted, fontWeight: "600", fontSize: 13, marginTop: 3, lineHeight: 18 },
+  impactSubtitle: {
+    color: C.muted,
+    fontWeight: "600",
+    fontSize: 13,
+    marginTop: 3,
+    lineHeight: 18,
+  },
   impactBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9,
-    backgroundColor: C.orange, borderRadius: 16, height: 52, marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    backgroundColor: C.orange,
+    borderRadius: 16,
+    height: 52,
+    marginBottom: 12,
   },
   impactBtnVoted: { backgroundColor: C.navy },
   impactBtnText: { color: "#fff", fontWeight: "900", fontSize: 15 },
-  impactCount: { textAlign: "center", color: C.muted, fontWeight: "700", fontSize: 13 },
+  impactCount: {
+    textAlign: "center",
+    color: C.muted,
+    fontWeight: "700",
+    fontSize: 13,
+  },
   impactReadOnly: { flexDirection: "row", alignItems: "center", gap: 10 },
-  impactReadOnlyText: { flex: 1, color: C.muted, fontWeight: "700", fontSize: 13, lineHeight: 19 },
+  impactReadOnlyText: {
+    flex: 1,
+    color: C.muted,
+    fontWeight: "700",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  fieldInputError: { borderColor: C.red },
+  fieldError: { fontSize: 12, color: C.red, fontWeight: "600", marginTop: 4 },
+  toast: {
+    position: "absolute",
+    top: 16,
+    left: 18,
+    right: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    zIndex: 999,
+  },
+  toastSuccess: { backgroundColor: "#ECFDF5", borderColor: "#BBF7D0" },
+  toastError:   { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
+  toastText: { flex: 1, fontSize: 13, fontWeight: "700", color: C.text },
 });

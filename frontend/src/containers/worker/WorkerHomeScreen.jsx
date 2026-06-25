@@ -78,6 +78,7 @@ function personName(person, fallback) {
 
 export default function WorkerHomeScreen({ navigation, route }) {
   const [unreadCount, setUnreadCount] = useState(0);
+  const [chatBadge, setChatBadge] = useState(0);
   const [activeView, setActiveView] = useState("map");
   const [workerTab, setWorkerTab] = useState("active");
   const [assignedIssues, setAssignedIssues] = useState([]);
@@ -202,6 +203,18 @@ export default function WorkerHomeScreen({ navigation, route }) {
     return () => {
       channel.unbind('notification.sent', handler);
     };
+  }, []);
+
+  // Real-time: new chat message badge
+  useEffect(() => {
+    const user = getAuthUser();
+    if (!user) return;
+    const pusher = getPusher();
+    if (!pusher) return;
+    const handler = () => setChatBadge((prev) => prev + 1);
+    const channel = pusher.subscribe(`private-user.${user.id}`);
+    channel.bind('chat.message', handler);
+    return () => { channel.unbind('chat.message', handler); };
   }, []);
 
   // Real-time: new issue created by a citizen
@@ -887,10 +900,15 @@ export default function WorkerHomeScreen({ navigation, route }) {
 
         <View style={styles.headerActions}>
           <Pressable
-            onPress={() => navigation.navigate("Chat")}
+            onPress={() => { setChatBadge(0); navigation.navigate("Chat"); }}
             style={styles.workerBellBtn}
           >
             <Ionicons name="chatbubble-ellipses-outline" size={20} color={COLORS.navy} />
+            {chatBadge > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{chatBadge > 9 ? "9+" : chatBadge}</Text>
+              </View>
+            )}
           </Pressable>
           <Pressable
             onPress={() => { navigation.navigate("Notifications", { role: "worker" }); setUnreadCount(0); }}
