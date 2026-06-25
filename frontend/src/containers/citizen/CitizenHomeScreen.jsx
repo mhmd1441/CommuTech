@@ -177,11 +177,12 @@ export default function CitizenHomeScreen({ navigation, route }) {
 
   useFocusEffect(
     useCallback(() => {
-      // Re-read saved municipality in case user changed it in ProfileScreen
+      // Re-read saved municipality in case user changed it in ProfileScreen,
+      // then fetch with the updated value
       loadAppPreferences().then(() => {
         setSavedMunicipality(getDefaultMunicipality());
+        fetchIssues();
       });
-      fetchIssues();
       api.get('/notifications', { params: { role: 'citizen' } }).then(({ data }) => setUnreadCount(data.unread_count || 0)).catch(() => {});
     }, [selectedFilter, communityMode])
   );

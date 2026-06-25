@@ -17,7 +17,7 @@ use App\Http\Controllers\WorkerIssueController;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/health', fn () => [
+Route::get('/health', fn() => [
     'status' => 'ok',
     'app' => 'CommuTech API',
 ]);

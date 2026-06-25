@@ -639,6 +639,15 @@ export default function IssueDetailsScreen({ navigation, route }) {
                   </Text>
                 </Pressable>
               )}
+
+              {!!issue.funding_change_reason && (
+                <View style={styles.fundingChangeNotice}>
+                  <Ionicons name="information-circle-outline" size={14} color="#92400e" />
+                  <Text style={styles.fundingChangeNoticeText}>
+                    Funding plan was updated by the municipality: {issue.funding_change_reason}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -1052,6 +1061,22 @@ const styles = StyleSheet.create({
     color: C.muted,
     fontWeight: "700",
     lineHeight: 18,
+  },
+  fundingChangeNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 12,
+    backgroundColor: "#fef3c7",
+    borderRadius: 10,
+    padding: 10,
+  },
+  fundingChangeNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#92400e",
+    fontWeight: "600",
+    lineHeight: 17,
   },
   donationBox: {
     marginTop: 14,

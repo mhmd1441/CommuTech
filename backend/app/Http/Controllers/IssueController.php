@@ -142,7 +142,7 @@ class IssueController extends Controller
 
         // Classify image in background — does not block the response
         if (! empty($data['image_url'])) {
-            ClassifyIssueImage::dispatch($issue->id, $data['image_url']);
+            ClassifyIssueImage::dispatchAfterResponse($issue->id, $data['image_url']);
         }
 
         $notification = CommuTechNotification::create([

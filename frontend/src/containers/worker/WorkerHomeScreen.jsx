@@ -127,6 +127,7 @@ export default function WorkerHomeScreen({ navigation, route }) {
     : nearbyIssues;
 
   const workerRegionRef = useRef(null);
+  const pendingIssuesRef = useRef([]);
 
   const loadWorkerIssues = useCallback(async () => {
     try {
@@ -169,6 +170,24 @@ export default function WorkerHomeScreen({ navigation, route }) {
       setWorkerRegion(nextRegion);
       workerRegionRef.current = nextRegion;
       mapRef.current?.animateToRegion(nextRegion, 700);
+
+      // Flush any Pusher events that arrived before GPS was ready
+      if (pendingIssuesRef.current.length > 0) {
+        const nearby = pendingIssuesRef.current.filter((issue) => {
+          if (!issue.latitude || !issue.longitude) return false;
+          return haversineMeters(
+            nextRegion.latitude, nextRegion.longitude,
+            parseFloat(issue.latitude), parseFloat(issue.longitude)
+          ) <= RADIUS_METERS;
+        });
+        pendingIssuesRef.current = [];
+        if (nearby.length > 0) {
+          setNearbyIssues((prev) => {
+            const existingIds = new Set(prev.map((i) => i.id));
+            return [...nearby.filter((i) => !existingIds.has(i.id)), ...prev];
+          });
+        }
+      }
 
       // Both in parallel — assigned was already in-flight
       const [assignedResponse, nearbyResponse] = await Promise.all([
@@ -233,9 +252,16 @@ export default function WorkerHomeScreen({ navigation, route }) {
     if (!pusher) return;
     const channel = pusher.subscribe("issues");
     channel.bind("issue.created", (issue) => {
-      // Only add to nearby if it has coordinates and is within radius
       const region = workerRegionRef.current;
-      if (!region || !issue.latitude || !issue.longitude) return;
+
+      // GPS not ready yet — queue the issue, process it when GPS resolves
+      if (!region) {
+        pendingIssuesRef.current = [...pendingIssuesRef.current, issue];
+        return;
+      }
+
+      // GPS ready — filter by distance immediately
+      if (!issue.latitude || !issue.longitude) return;
       const dist = haversineMeters(
         region.latitude, region.longitude,
         parseFloat(issue.latitude), parseFloat(issue.longitude)

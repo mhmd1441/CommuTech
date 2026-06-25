@@ -388,6 +388,13 @@ function ProfileScreen({ navigation }) {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [municipalitySearch, setMunicipalitySearch] = useState('');
+  const filteredMunicipalities = useMemo(() => {
+    const q = municipalitySearch.toLowerCase();
+    const list = q
+      ? LEBANESE_MUNICIPALITIES.filter((m) => m.toLowerCase().includes(q))
+      : LEBANESE_MUNICIPALITIES;
+    return [{ label: 'None (use my GPS)', value: null }, ...list.map((m) => ({ label: m, value: m }))];
+  }, [municipalitySearch]);
   const [district, setDistrict] = useState(formatDistrict(initialProfile, getDefaultMunicipality()));
   const [passwordForm, setPasswordForm] = useState({
     current: '',
@@ -891,15 +898,7 @@ function ProfileScreen({ navigation }) {
                   autoCapitalize="none"
                 />
                 <FlatList
-                  data={[
-                    { label: 'None (use my GPS)', value: null },
-                    ...LEBANESE_MUNICIPALITIES
-                      .filter((m) =>
-                        !municipalitySearch ||
-                        m.toLowerCase().includes(municipalitySearch.toLowerCase())
-                      )
-                      .map((m) => ({ label: m, value: m })),
-                  ]}
+                  data={filteredMunicipalities}
                   keyExtractor={(item) => item.label}
                   style={{ maxHeight: 320 }}
                   keyboardShouldPersistTaps="handled"

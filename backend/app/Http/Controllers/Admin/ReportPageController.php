@@ -102,7 +102,7 @@ class ReportPageController extends Controller
         $data = $request->validate([
             'funding_type' => ['required', Rule::in(Issue::FUNDING_TYPES)],
             'municipality_contribution' => ['nullable', 'numeric', 'min:0'],
-            'funding_deadline' => ['required_if:funding_type,community,mixed', 'nullable', 'date', 'after_or_equal:today'],
+            'funding_deadline' => ['nullable', 'date', 'after_or_equal:today', Rule::requiredIf(fn () => in_array($request->input('funding_type'), ['community', 'mixed']))],
         ]);
 
         $estimatedCost = (float) $report->estimated_cost;
@@ -232,6 +232,89 @@ class ReportPageController extends Controller
         return redirect()
             ->route('admin.reports.show', $report)
             ->with('status', 'Funding request rejected.');
+    }
+
+    public function updateFunding(Request $request, Issue $report)
+    {
+        $allowedStatuses = ['open', 'none', 'funded', 'expired'];
+        $allowedTypes    = ['municipal', 'community', 'mixed'];
+
+        if (! in_array($report->funding_status, $allowedStatuses) || ! in_array($report->funding_type, $allowedTypes)) {
+            return back()->withErrors([
+                'funding' => 'Funding can only be updated after an initial approval.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'funding_type'             => ['required', Rule::in(Issue::FUNDING_TYPES)],
+            'municipality_contribution' => ['nullable', 'numeric', 'min:0'],
+            'funding_deadline'         => ['nullable', 'date'],
+            'change_reason'            => ['required', 'string', 'min:10', 'max:1200'],
+        ]);
+
+        $estimatedCost           = (float) $report->estimated_cost;
+        $newType                 = $data['funding_type'];
+        $municipalityContribution = round((float) ($data['municipality_contribution'] ?? 0), 2);
+
+        if ($estimatedCost <= 0) {
+            return back()->withErrors(['funding' => 'Estimated cost must be set before changing funding.']);
+        }
+
+        if ($newType === 'mixed' && ($municipalityContribution <= 0 || $municipalityContribution >= $estimatedCost)) {
+            return back()->withErrors([
+                'municipality_contribution' => 'Mixed funding needs a municipal contribution greater than 0 and less than the estimated cost.',
+            ]);
+        }
+
+        $oldTypeLabel = ucfirst($report->funding_type ?? 'unknown');
+        $newTypeLabel = ucfirst($newType);
+
+        if ($newType === 'municipal') {
+            $report->update([
+                'status'                    => 'in_progress',
+                'funding_status'            => 'none',
+                'funding_type'              => 'municipal',
+                'funding_goal'              => null,
+                'funding_raised'            => 0,
+                'funding_deadline'          => null,
+                'municipality_contribution' => $estimatedCost,
+                'funding_change_reason'     => $data['change_reason'],
+                'funding_approved_at'       => now(),
+                'funding_funded_at'         => null,
+            ]);
+        } else {
+            if ($newType === 'community') {
+                $municipalityContribution = 0;
+            }
+            $fundingGoal = round($estimatedCost - $municipalityContribution, 2);
+            $deadline = isset($data['funding_deadline'])
+                ? $data['funding_deadline']
+                : $report->funding_deadline?->format('Y-m-d');
+            $report->update([
+                'status'                    => 'awaiting_funding',
+                'funding_status'            => 'open',
+                'funding_type'              => $newType,
+                'funding_goal'              => $fundingGoal,
+                'funding_raised'            => 0,
+                'funding_deadline'          => $deadline,
+                'municipality_contribution' => $municipalityContribution,
+                'funding_change_reason'     => $data['change_reason'],
+                'funding_approved_at'       => now(),
+                'funding_funded_at'         => null,
+            ]);
+        }
+
+        $this->notify(
+            $report->user_id,
+            $report->id,
+            'citizen',
+            'Funding Decision Updated',
+            'The funding type for your report "'.$report->title.'" was changed from '.$oldTypeLabel.' to '.$newTypeLabel.'. Reason: '.$data['change_reason']
+        );
+
+        return redirect()
+            ->route('admin.reports.show', $report)
+            ->with('status', 'Funding decision updated from '.$oldTypeLabel.' to '.$newTypeLabel.'.');
     }
 
     public function create()
