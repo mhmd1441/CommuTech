@@ -117,6 +117,30 @@ export default function WorkerHomeScreen({ navigation, route }) {
     : nearbyIssues;
 
   const nearbyMunicipalityRef = useRef(null);
+  const pendingIssuesRef = useRef([]);
+  const municipalityReadyRef = useRef(false);
+
+  // Applies the same relevance rule as the live issue.created handler below —
+  // self-issue exclusion + municipality match — to any issues that arrived via
+  // Pusher before the worker's municipality had finished loading.
+  const flushPendingIssues = (municipality) => {
+    if (pendingIssuesRef.current.length === 0) return;
+    const queued = pendingIssuesRef.current;
+    pendingIssuesRef.current = [];
+
+    const relevant = queued.filter((issue) => {
+      if (currentUser && Number(issue.user_id) === Number(currentUser.id)) return false;
+      if (issue.municipality_en && issue.municipality_en !== municipality) return false;
+      return true;
+    });
+
+    if (relevant.length > 0) {
+      setNearbyIssues((prev) => {
+        const existingIds = new Set(prev.map((i) => i.id));
+        return [...relevant.filter((i) => !existingIds.has(i.id)), ...prev];
+      });
+    }
+  };
 
   const loadWorkerIssues = useCallback(async () => {
     try {
@@ -141,6 +165,8 @@ export default function WorkerHomeScreen({ navigation, route }) {
         setNearbyMode(mode);
         setNearbyMunicipality(nearbyResponse.data.municipality || null);
         nearbyMunicipalityRef.current = nearbyResponse.data.municipality || null;
+        municipalityReadyRef.current = true;
+        flushPendingIssues(nearbyMunicipalityRef.current);
         setNearbyIssues([...(nearbyResponse.data.data || []), ...(nearbyResponse.data.unlocated || [])]);
         return;
       }
@@ -175,6 +201,8 @@ export default function WorkerHomeScreen({ navigation, route }) {
       setNearbyMode(mode);
       setNearbyMunicipality(nearbyResponse.data.municipality || null);
       nearbyMunicipalityRef.current = nearbyResponse.data.municipality || null;
+      municipalityReadyRef.current = true;
+      flushPendingIssues(nearbyMunicipalityRef.current);
       setAssignedIssues(assignedResponse.data.data || []);
       setNearbyIssues([...(nearbyResponse.data.data || []), ...(nearbyResponse.data.unlocated || [])]);
     } catch (error) {
@@ -227,6 +255,14 @@ export default function WorkerHomeScreen({ navigation, route }) {
       // surface issues in the worker's own municipality, plus "unlocated" ones where
       // the PostGIS lookup failed at creation (municipality_en is null).
       if (currentUser && Number(issue.user_id) === Number(currentUser.id)) return;
+
+      // Municipality not loaded yet — queue the issue, flushPendingIssues will
+      // process it once loadWorkerIssues resolves instead of dropping it.
+      if (!municipalityReadyRef.current) {
+        pendingIssuesRef.current = [...pendingIssuesRef.current, issue];
+        return;
+      }
+
       const municipality = nearbyMunicipalityRef.current;
       if (issue.municipality_en && issue.municipality_en !== municipality) return;
       setNearbyIssues((prev) => {

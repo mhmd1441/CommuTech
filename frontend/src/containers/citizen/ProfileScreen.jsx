@@ -14,6 +14,7 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
+  FlatList,
   Linking,
   Platform,
 } from 'react-native';
@@ -24,7 +25,157 @@ import BottomNav from "../shared/BottomNav";
 import JumpingDots from "../shared/LoadingPage/JumpingDots";
 import api, { getAuthUser, setAuthUser as setStoredAuthUser, profileApi, authApi } from "../../services/api";
 import { disconnectPusher } from "../../services/echo";
-import { loadAppPreferences, setAppPreference } from "../../services/preferences";
+import { loadAppPreferences, setAppPreference, getDefaultMunicipality, setDefaultMunicipality } from "../../services/preferences";
+
+// ─── Lebanese Municipalities ──────────────────────────────────────────────────
+const LEBANESE_MUNICIPALITIES = [
+  "Aaba","Aabadiyeh","Aabaydat","Aabbassiyeh","Aabdine","Aabra","Aadbil","Aadchit El Chqif",
+  "Aadchit El Qoussair","Aadloun","Aadoueh","Aadoussiyeh","Aafsdiq","Aain Aalaq","Aain Aarab",
+  "Aain El Ghouaybeh","Aain El Qabu","Aain Es Siyaa Chadoura","Aain Ibl","Aaintaroun","Aaiyat",
+  "Aaiyeh","Aakkar El Attiqa","Aalali","Aali Et Taher","Aalita","Aalma","Aalma Ech-Chaab",
+  "Aalmane","Aalmat Ech Chmaliyeh","Aalmat Ej Jnoubiyeh","Aamara","Aamayer","Aamchit",
+  "Aammiq El Chouf","Aamra","Aamshki","Aanout","Aanqoun","Aaqtanit","Aarab Ej Jall","Aaraiya",
+  "Aarbaniyeh","Aardat","Aarmeh","Aarsal","Aathrine","Aaynab","Aayoun","Aayoun El Ghizlane",
+  "Aayroun","Aayta Ech Chaab","Aaytanit","Aaytat","Aaytit","Aaziyeh","Aazouniyeh","Aazze",
+  "Abey","Ablah","Abou Chech","Abou Mizane","Abou Qamha","Achrafieh","Adma","Adonis","Adous",
+  "Ain Aar","Ain Abou Abdallah","Ain Al Kharruba","Ain Al Sindyana","Ain Anoub","Ain Arab",
+  "Ain Baal","Ain Bourday","Ain Bousouar","Ain Drafil","Ain Ed Delb","Ain Ed Delbeh",
+  "Ain El Delbeh","Ain El Mir","Ain El Qash","Ain El Remmaneh","Ain El Rihaneh","Ain El Safsaf",
+  "Ain El Tina","Ain Et Toufaha","Ain Jdideh","Ain Jrain","Ain Kafr Zabad","Ain Kfaa",
+  "Ain Ksour","Ain Mouaffaq","Ain Qana","Ain Qinya","Ain Saadeh","Ain Tanta","Ain Trez",
+  "Ain Yaaqoub","Ain Zaitoune","Ain Zebdeh","Ainbal","Aintoura","Ajaltoun","Al Birah",
+  "Al Kanisa","Al Qalaa","Aley","Amaret El Baykat","Amioun","Anan","Anjar","Ansar","Antelias",
+  "Arab Salim","Aramoun","Aramta","Arnoun","Arqoub","Arsoun","Arzoun","As Salihani","Ashqout",
+  "Aydamun","Ayha","Ayn Jarfa","Aynata","Ayta Al Jabal","Azour","Azra",
+  "Baabda","Baabdat","Baalbek","Baalchmay","Baaloul","Baaourta","Baaqline","Baassir",
+  "Bab Maraa","Badbhoun","Baflay","Baiqoun","Bakhaoun","Balhoss","Balluna","Bani Haiyane",
+  "Baqinnaya","Baraachit","Bardeh","Barghoun","Barish","Barja","Barsa","Barti","Basbina",
+  "Bashura","Baskinta","Batha","Batoulay","Batroumine","Batroun","Baushrieh","Baysour",
+  "Bayssour","Bayt Lif","Bazouriyeh","Bazyoun","Bchaaleh","Bchamoun","Bcharre","Bchetfine",
+  "Bdebba","Bdedoun","Bebnine","Beddaoui","Bedias","Bednayel","Behdaydat","Beino",
+  "Beit Chebab","Beit Ech Chaar","Beit Ed Dine","Beit El Haouch","Beit El Kekko","Beit Habbaq",
+  "Beit Lahia","Beit Mery","Beit Shama","Beit Yahoun","Beit Zoud","Bejjeh","Bekaatet-Achkout",
+  "Bekhaaz","Bentael","Benwati","Berbara","Berket Hejoula","Berqayel","Beshwat","Bestiyat",
+  "Bezbina","Bfaroueh","Bhannine","Bhersaf","Bhouara","Biakout","Bichtlida","Bijdarfil",
+  "Bikfaya","Billa","Binnay","Bint Jbail","Bisri","Bissariyeh","Biyad","Bizhel","Bkeftine",
+  "Bkhichtay","Blat","Blaybel","Blida","Bmahrain","Bmahray","Bmakine","Bmariam","Bnabil",
+  "Bnehran","Borj Akkar","Borj El Yahoudiyeh","Borj En-Naqoura","Borj Qalaouiye","Borj Rahhal",
+  "Bou Zrideh","Bouar","Bouarej","Boudai","Boukak El Dine","Bourghos","Bourj El Brajneh",
+  "Bourjein","Bouslaiya","Boussit","Boustane","Bqaa Kafra","Bqaatouta","Bqarsouna","Bqosta",
+  "Braij","Braiqah","Bramiyeh","Brissat","Brital","Broummana","Bsaba",
+  "Bsalim, Mezher, and Majzoub","Bsatine","Bshille","Bsifrine","Bsous","Btalloun","Btaychiyeh",
+  "Btebyat","Btedaai","Bteghrine","Btekhnay","Burj Al Muluk","Burj Al Shamali","Burj Hammoud",
+  "Butshay","Bzal","Bzebdine","Bzoummar",
+  "Chaaitiyeh","Chabtine","Chahtoul","Chammis","Chaqra","Chatine","Chehabiyeh",
+  "Cheikh Mohammad","Cheikh Taba","Cheikh Zennad","Chekka","Chemlane","Chenan Aair",
+  "Chikhane","Chmout","Chouane","Chouit","Chtoura",
+  "Dahr Abi Yaghi","Dahr El Ahmar","Dahr El Souane","Dair Shamra","Dakoue","Dalhamiye",
+  "Dalhoun","Damit","Danbou","Daoudiyeh","Daoura","Daqqoun","Dar Chmizzine","Dar Mreisse",
+  "Daraaoun","Daraiya","Daraya","Darb El Sim","Darbechtar","Darine","Dayr Al Aachayer",
+  "Dayr Mimas","Dayret Nahr El-Kabir","Dbayeh","Debaal","Debl","Deddeh","Deir Aames",
+  "Deir Aammar","Deir Al Qamar","Deir Baba","Deir Baqlouch","Deir Dourit","Deir El Ahmar",
+  "Deir El Balamand","Deir El Ghazal","Deir El Harf","Deir El Zahrani","Deir Kfifane",
+  "Deir Khouna","Deir Kifa","Deir Koucheh","Deir Ntar","Deir Qanoun El Ain",
+  "Deir Qanoun En Nahr","Deir Qoubel","Deir Siriane","Deir Tamiche","Dekwaneh","Dellafeh",
+  "Demachqiyeh","Derdaghaiya","Dfoun","Dhayra","Dhour El Choueir","Dibbabiye","Dibbine",
+  "Dik El Mehdeh","Dimane","Dlaybeh","Dlebta","Douair El Remmaneh","Doueir","Douris","Duwar",
+  "Eddeh","Eghbeh","Ehmej","El Aamriye","El Aarida","El Ain","El Kfour","El Mina",
+  "El Miyasseh","El Qlaiaat","Enfeh","Erkay",
+  "Fanar","Faraya","Fardis","Fatqa","Fatreh","Faytroun","Ferhet","Fghal","Fiaa","Fnaydeq",
+  "Fourzol","Frat","Fraydes","Freike","Froun","Furn Ech-Chebbak",
+  "Ghaboun","Ghadir","Ghalboun","Ghandouriye","Gharifeh","Gharzouz","Ghassaniyeh","Ghazir",
+  "Ghaziyeh","Ghbaleh","Ghedrass","Ghineh","Ghorfine","Ghosta","Ghouma","Ghzaile",
+  "Habboush","Habil","Habshit","Hadath El Jebbeh","Haddatha","Hadtoun","Haitoura","Halat",
+  "Halba","Hallousiyyeh","Hamat","Hamoul","Hamra","Hanine","Hannaouiye","Haouch Barada",
+  "Haouch En Nebi","Haouch Snaid","Haouch Tall Safiye","Haouchab","Haoush El Harimeh","Haqel",
+  "Harbata","Harbouna","Haret El Belleni","Haret Hamzeh","Haret Hreik","Haret Saida",
+  "Haret Sakhr","Harharaya","Haris","Harissa","Harouf","Hartiyeh","Hasbaya","Hasbaya El Metn",
+  "Hasrayel","Hasrout","Hassaniyeh","Haytla","Haytula","Hayzouq","Hazerta","Hbaline","Hboub",
+  "Hebbariyeh","Hebouss","Hedd","Henniyeh","Heri","Hermel","Hilane","Himlaya","Hiyata",
+  "Hizzine","Hjoula","Hlaliyeh","Hlaliyeh Saida","Hmaileh","Hmaiss","Hnaider","Hokr Ed-Dahri",
+  "Hokr Etti","Hoshmosh","Houch El Ghanam","Houmal","Houmine El Faouqa","Houmine Et Tahta",
+  "Houra","Hraiqis","Hrajel","Hreisheh","Hsarat","Hsoun","Hula",
+  "Iaat","Ibl Es Saqi","Ighmid","Ilat","Iskandarouna",
+  "Jabal Toura","Jadra","Jaj","Jal El Dib","Janine","Janneh","Jarjouaa","Jarmaq","Jbaa",
+  "Jbal El Botm","Jbeil","Jdaideh","Jdaidet El Matn","Jdaidet Ghazir","Jdeideh El Joumeh",
+  "Jdeidet El Qaitaa","Jdita","Jebrayel","Jeddayel","Jeita","Jennata","Jensnaya","Jenta",
+  "Jezzine","Jibbayn","Jibshit","Jieh","Jijim","Jisr Al Qadi","Jleiliyeh","Jlisseh","Jmaijmeh",
+  "Jmailiyeh","Jouaiya","Jouar","Jouar El Haouz","Joub Jannine","Jouret Arsoun","Jouret Ballout",
+  "Jouret Bedrane","Jouret E Qattine","Jouret El Tormos","Jouret Mhad","Jrane","Jurnaya",
+  "Kafr","Kafr Kila","Kafr Quq","Kafr Rumman","Kafra","Kahale","Kamed El Laouz",
+  "Kaoutariyet Es Siyad","Karkha","Kartaboun","Kawashra","Kawkaba","Kefraiya Koura","Kefraya",
+  "Ketermaya","Keyfoun","Kfar Aaqab","Kfar Aaqqa","Kfar Amay","Kfar Baal","Kfar Beda",
+  "Kfar Beit","Kfar Chellan","Kfar Chouba","Kfar Dabash","Kfar Dajal","Kfar Danis",
+  "Kfar Dlaqous","Kfar Dounine","Kfar Falous","Kfar Faqoud","Kfar Fila","Kfar Habou",
+  "Kfar Hamel","Kfar Hata","Kfar Hatta","Kfar Houneh","Kfar Jarra","Kfar Kiddeh",
+  "Kfar Mashoun","Kfar Matta","Kfar Melki","Kfar Noun","Kfar Qatra","Kfar Qouas",
+  "Kfar Saroun","Kfar Selouane","Kfar Shellal","Kfar Shima","Kfar Sir","Kfar Tay",
+  "Kfar Tebnit","Kfar Yassine","Kfaraabida","Kfarhamam","Kfarjaouz","Kfifane","Kfoun","Kfour",
+  "Khallat Al Mutayn","Khalouat","Kharayeb","Kharbeh","Khartoum","Khenchara","Khiam","Khiara",
+  "Khirbet Ed Douair Saida","Khirbet Qanafar","Khirbet Selm","Khodr","Khraibeh","Khreibeh",
+  "Khreibet Ej Jindi","Khzaiz","Klayaa","Knaisse","Knaisseh","Kneisset Hnaider","Kniseh",
+  "Kornet El Hamra","Kouba","Koueikhat","Kounine","Kour","Kroum Aarab",
+  "Labweh","Lailake","Lala","Laqlouq","Lassa","Lebaa","Lehfed","Louayzeh","Loubieh","Loussia",
+  "Maad","Maaniyeh","Maarab","Maarakeh","Maaroub","Maasser Beit Ed Dine","Maaysra",
+  "Maghdoucheh","Mahmoudiya","Majdal Balhiss","Majdalaya","Majdalouna","Majdalun","Majdel",
+  "Majdel Aanjar","Majdel Selm","Majdel Tarchich","Majdelyoun","Majdelzoun",
+  "Majidiyeh Hasbaiya","Maknounieh","Makseh","Mansouri","Mansourieh","Mansouriyet Bhamdoun",
+  "Maqnah","Mar Abda El Mchammar","Mar Boutros Karm Et Tine","Mar Mama","Mar Moussa",
+  "Mar Roukoz - Dahr El Hossein","Mar Sarkis","Marj El Zhour","Marjaba","Marjayoun","Markaba",
+  "Markabta","Marnba","Maroun Er Ras","Marwanieh","Mashghara","Mashraah","Masla","Masqa",
+  "Masrah","Massa","Massaaoudiyeh","Mastita","Maydoun","Mayfadoun","Mayfouq","Mayrouba",
+  "Mazboud","Mazraa","Mazraat Aarab Soukkar","Mazraat Al Shouf","Mazraat Daraya",
+  "Mazraat Ed Douair","Mazraat El Bayad","Mazraat El Maaden","Mazraat El Mathane",
+  "Mazraat El Yahoudiyeh","Mazraat Er Ras","Mazraat Er Remtaniyeh","Mazraat Ez-Zalloutiyeh",
+  "Mazraat Kaoutariyet Er Riz","Mazraat Khallet Khazen","Mazraat Mechref","Mazraat Sarada",
+  "Mazraat Tamra","Mazraat Tayr Semhat","Mazraat Zighrine","Mazraet Deir Aoukar",
+  "Mazraet El Hadira","Mazraet Kfardebiane","Mazraet Mrah El Mir","Mazraet Yachou",
+  "Mchekhti","Mchikha","Mechmech","Medawar","Mehmarch","Meiss Ej-Jabal","Mejdlaiya",
+  "Merdashe","Meri","Merouahine","Meshmesh","Mghayer","Mhaibib","Mhaidse","Mhamra",
+  "Mharbiye","Mhaydse","Mheilib","Mighraq Aakkar","Minet el Hosn","Miniyeh","Minyara",
+  "Miriata","Miyeh w Miyeh","Mjaydel","Mkalles","Moghr El Ahwal","Moqraq","Mounjez","Mounsef",
+  "Moussaitbeh","Mqaiteaa","Mradieh","Mrah El Hajj","Mrah El Hbas","Mrah El Sreij","Mrah Shdid",
+  "Mrayjat","Mresti","Mrouj","Mshane","Mtaileb","Mtain","Mtayriyeh","Mtolleh","Mzairaa Baabda",
+  "Mzakkeh","Mzaraat El Khreibeh","Mzraat Kefraya",
+  "Naameh","Nabatieh Et Tahta","Nabatiyeh El Fawqa","Nabi Shit","Nabi Youcheaa","Naffakhiyeh",
+  "Nahleh","Nahr El Dahab","Nahr Ibrahim","Najjariyeh","Nakhleh","Namoura","Nani Aila",
+  "Naqqach","Nasriyet Rizq","Nemrine","Nfayseh","Niha","Niha Sour","Nmairiyeh",
+  "Odaisseh","Okaibe","Port of Beirut",
+  "Qaa Er Rim","Qaaqaait El Jisr","Qaaqour","Qabrikha","Qalamoun","Qalaouiyeh","Qalhat","Qana",
+  "Qannebet Salima","Qantara","Qaraoun","Qarha","Qarha Aakkar","Qarnayel","Qarneh","Qarqaf",
+  "Qarsita","Qartaba","Qatmoun","Qatrani","Qattarah","Qawzah","Qehmez","Qelaya","Qennabet",
+  "Qennarit","Qlaileh","Qleiat","Qloud El Baqieh","Qmatiyeh","Qobbayaa","Qornet Chahouane",
+  "Qorqraiya","Qortada","Qoubber Chamra","Qoussaya","Qraiyeh","Qsaibe","Qsaibeh","Qsair",
+  "Raachine","Raait","Rabb Et Tlatine","Rachaaine","Rachaiya El Foukhar","Rafid","Rahbeh",
+  "Raimat","Ram","Ramoute","Ramyet Bent Jbayl","Ras Beirut","Ras El Metn","Ras Masqa",
+  "Ras Nhach","Ras Osta","Rasha","Rashaf","Rashana","Rashkida","Rayaq","Rayfoun","Recheknanay",
+  "Rejmeh","Riha","Rihane","Rihaniye","Rihaniyet-Miniyeh","Rimhala","Rmadiyeh","Rmah","Rmaich",
+  "Rmeil","Rmoul","Rouaiset El Ballout","Rouaysset En Naamane","Roumieh","Roumine","Roummanet",
+  "Rum","Rumayla",
+  "Saadine","Saadnayel","Saaide","Saddiqine","Safad Al Battikh","Safarayh","Safra","Saghbine",
+  "Sahel Aalma","Saidnaya","Saifi","Saksakiyeh","Salaiyeb","Salhiyeh","Salima","Sammaqiyeh",
+  "Samqaniyeh","Saqi Richmaya","Saqiet El Khayt","Sarafand","Sarba","Sari","Sawfar","Sawiri",
+  "Sayssouq","Sebrine","Sejoud","Selaa","Selaata","Selfaya","Seraaita","Serraaine Et Tahta",
+  "Sfaila","Sfaynet El Qaitaa","Sfenta","Sghar","Shaat","Shahim","Shamaa","Shamate","Shanay",
+  "Shane","Shaqdouf","Sharbila","Sharbine","Sharqiyeh","Shayleh","Shbail","Shebaa","Shehour",
+  "Sheikhlar","Sherin","Shihine","Shir Hmairine","Shmayseh","Shmestar","Shouaya",
+  "Shoueifat El Quoubbeh","Shoukine","Shualiq","Sibline","Sidon","Sinai","Sindianet Zeidane",
+  "Sinn El Fil","Sir Ed Danniyeh","Sir El Gharbiyeh","Sirhmoul","Smar Jbayl","Sniyeh",
+  "Souaneh","Soultaniyet","Souq El Gharb","Srar","Srayri","Srifa","Srobbine",
+  "Taaid","Taalbaya","Taazaniyeh","Tabarja","Tabbaya","Tachaa","Taibeh",
+  "Tall Aabbas Ech Charqi","Tall Bireh","Tall Hmayra","Tall Znoub","Talloussa","Talya",
+  "Tanbourit","Taraya","Tarchich","Tartij","Tayr Debbeh","Tayr Falsay","Tayr Harfa","Tayyiba",
+  "Teffahta","Terbol","Terbol-Miniyeh","Thoum","Tibnine","Tiri","Tlayleh","Touayri","Touayteh",
+  "Toul","Touline","Toura","Tourzaiya","Tripoli","Tyre",
+  "Wadi Baanqoudaine","Wadi El Doum","Wadi El Jamous","Wadi El Karm El Matn","Wadi El Laymoun",
+  "Wadi Jilo","Wadi Shahine","Wardaniyeh","Wardiye","Wata Amaret Chalhoub","Wata El Jaouz",
+  "Wata El Mrouj","Wata Sillam",
+  "Yahchouch","Yahfoufa","Yanouh","Yarine","Yaroun","Yatar","Yohmor","Younine",
+  "Zaaitre","Zaarouriyeh","Zabbougha","Zaghdraiya","Zakrit","Zakroun","Zalqa","Zandouqa",
+  "Zaraaoun","Zawtar El Gharbiyeh","Zawtar El Sharqiyeh","Zebdol","Zebqine","Zefta","Zeita",
+  "Zgharta","Zhalta","Zibdine","Zighrine","Zillaya","Zouk Bhanine","Zouk el Kharab",
+  "Zouk Mikael","Zouk Mosbeh","Zrariyeh","Zuqaq Al Blat",
+].sort();
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -112,7 +263,8 @@ function displayName(profile) {
   return parts.join(' ') || profile.name || 'Profile loading...';
 }
 
-function formatDistrict(profile) {
+function formatDistrict(profile, savedMunicipality) {
+  if (savedMunicipality) return savedMunicipality;
   return [profile.area, profile.city].filter(Boolean).join(', ') || profile.city || 'No district yet';
 }
 
@@ -235,7 +387,15 @@ function ProfileScreen({ navigation }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
-  const [district, setDistrict] = useState(formatDistrict(initialProfile));
+  const [municipalitySearch, setMunicipalitySearch] = useState('');
+  const filteredMunicipalities = useMemo(() => {
+    const q = municipalitySearch.toLowerCase();
+    const list = q
+      ? LEBANESE_MUNICIPALITIES.filter((m) => m.toLowerCase().includes(q))
+      : LEBANESE_MUNICIPALITIES;
+    return [{ label: 'None (use my GPS)', value: null }, ...list.map((m) => ({ label: m, value: m }))];
+  }, [municipalitySearch]);
+  const [district, setDistrict] = useState(formatDistrict(initialProfile, getDefaultMunicipality()));
   const [passwordForm, setPasswordForm] = useState({
     current: '',
     next: '',
@@ -289,7 +449,7 @@ function ProfileScreen({ navigation }) {
         const profile = normalizeProfile(user);
         setPersonalInfo(profile);
         setProfileForm(profile);
-        setDistrict(formatDistrict(profile));
+        setDistrict(formatDistrict(profile, getDefaultMunicipality()));
       } catch (error) {
         console.error('Failed to load profile:', error);
         setStatsLoading(false);
@@ -400,7 +560,7 @@ function ProfileScreen({ navigation }) {
       setStoredAuthUser(data.user);
       setPersonalInfo(profile);
       setProfileForm(profile);
-      setDistrict(formatDistrict(profile));
+      setDistrict(formatDistrict(profile, getDefaultMunicipality()));
 
       showToast(profile.is_verified ? 'Profile picture updated — profile verified!' : 'Profile picture updated.');
     } catch (error) {
@@ -456,7 +616,7 @@ function ProfileScreen({ navigation }) {
       setStoredAuthUser(data.user);
       setPersonalInfo(profile);
       setProfileForm(profile);
-      setDistrict(formatDistrict(profile));
+      setDistrict(formatDistrict(profile, getDefaultMunicipality()));
       setActiveModal(null);
 
       showToast(profile.is_verified ? 'Profile saved — now verified!' : 'Profile saved.');
@@ -689,7 +849,7 @@ function ProfileScreen({ navigation }) {
                 {activeModal === 'personal'
                   ? 'Personal Info'
                   : activeModal === 'district'
-                  ? 'Default District'
+                  ? 'Default Municipality'
                   : 'Change Password'}
               </Text>
               <TouchableOpacity style={styles.modalClose} onPress={() => { setActiveModal(null); setPasswordForm({ current: '', next: '', confirm: '' }); }}>
@@ -729,15 +889,28 @@ function ProfileScreen({ navigation }) {
 
             {activeModal === 'district' && (
               <View style={styles.modalBody}>
-                {['Hamra, Beirut', 'Achrafieh, Beirut', 'Jounieh', 'Tripoli', 'Saida'].map(
-                  (option) => {
-                    const selected = option === district;
+                <TextInput
+                  style={styles.municipalitySearch}
+                  placeholder="Search municipality…"
+                  placeholderTextColor={C.muted}
+                  value={municipalitySearch}
+                  onChangeText={setMunicipalitySearch}
+                  autoCapitalize="none"
+                />
+                <FlatList
+                  data={filteredMunicipalities}
+                  keyExtractor={(item) => item.label}
+                  style={{ maxHeight: 320 }}
+                  keyboardShouldPersistTaps="handled"
+                  renderItem={({ item }) => {
+                    const selected = item.value === getDefaultMunicipality();
                     return (
                       <TouchableOpacity
-                        key={option}
                         style={[styles.districtOption, selected && styles.districtOptionActive]}
-                        onPress={() => {
-                          setDistrict(option);
+                        onPress={async () => {
+                          await setDefaultMunicipality(item.value);
+                          setDistrict(item.value || formatDistrict(personalInfo, null));
+                          setMunicipalitySearch('');
                           setActiveModal(null);
                         }}
                       >
@@ -746,18 +919,13 @@ function ProfileScreen({ navigation }) {
                           size={18}
                           color={selected ? C.navy : C.muted}
                         />
-                        <Text
-                          style={[
-                            styles.districtOptionText,
-                            selected && styles.districtOptionTextActive,
-                          ]}
-                        >
-                          {option}
+                        <Text style={[styles.districtOptionText, selected && styles.districtOptionTextActive]}>
+                          {item.label}
                         </Text>
                       </TouchableOpacity>
                     );
-                  }
-                )}
+                  }}
+                />
               </View>
             )}
 
@@ -1024,6 +1192,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     color: C.text,
     backgroundColor: '#fff',
+  },
+  municipalitySearch: {
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 12,
+    color: C.text,
+    backgroundColor: '#f7f8fa',
+    marginBottom: 8,
+    fontSize: 14,
   },
   districtOption: {
     minHeight: 48,

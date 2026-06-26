@@ -16,6 +16,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import BottomNav from "../shared/BottomNav";
 import api, { getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
+import { getDefaultMunicipality, loadAppPreferences } from "../../services/preferences";
 import { issueStatusKey, issueStatusLabel } from "../../services/issuePresentation";
 
 const COLORS = {
@@ -124,6 +125,7 @@ export default function CitizenHomeScreen({ navigation, route }) {
   const [locationStatus, setLocationStatus] = useState("idle");
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [savedMunicipality, setSavedMunicipality] = useState(() => getDefaultMunicipality());
   const { height } = useWindowDimensions();
   const mapHeight = Math.max(420, height - 315);
   const mapRef = useRef(null);
@@ -175,7 +177,12 @@ export default function CitizenHomeScreen({ navigation, route }) {
 
   useFocusEffect(
     useCallback(() => {
-      fetchIssues();
+      // Re-read saved municipality in case user changed it in ProfileScreen,
+      // then fetch with the updated value
+      loadAppPreferences().then(() => {
+        setSavedMunicipality(getDefaultMunicipality());
+        fetchIssues();
+      });
       api.get('/notifications', { params: { role: 'citizen' } }).then(({ data }) => setUnreadCount(data.unread_count || 0)).catch(() => {});
     }, [selectedFilter, communityMode])
   );
@@ -233,12 +240,16 @@ export default function CitizenHomeScreen({ navigation, route }) {
       if (!silent) setLoading(true);
       const params = {};
       if (communityMode) {
-        if (!userRegion) {
+        const muni = getDefaultMunicipality();
+        if (muni) {
+          params.municipality = muni;
+        } else if (!userRegion) {
           if (!silent) setLoading(false);
           return;
+        } else {
+          params.lat = userRegion.latitude;
+          params.lng = userRegion.longitude;
         }
-        params.lat = userRegion.latitude;
-        params.lng = userRegion.longitude;
       } else {
         params.mine = 1;
       }
@@ -405,16 +416,24 @@ export default function CitizenHomeScreen({ navigation, route }) {
         </ScrollView>
 
         {/* Content */}
-        {communityMode && locationStatus === "loading" ? (
+        {communityMode && savedMunicipality && (
+          <View style={styles.municipalityBanner}>
+            <Ionicons name="location" size={13} color={COLORS.navy} />
+            <Text style={styles.municipalityBannerText}>{savedMunicipality}</Text>
+            <Text style={styles.municipalityBannerHint}>Change in Profile → Default Municipality</Text>
+          </View>
+        )}
+
+        {communityMode && !savedMunicipality && locationStatus === "loading" ? (
           <View style={styles.noLocationWrap}>
             <ActivityIndicator size="large" color={COLORS.navy} />
             <Text style={styles.noLocationText}>Getting your location…</Text>
           </View>
-        ) : communityMode && locationStatus !== "granted" ? (
+        ) : communityMode && !savedMunicipality && locationStatus !== "granted" ? (
           <View style={styles.noLocationWrap}>
             <Ionicons name="location-outline" size={44} color={COLORS.muted} />
             <Text style={styles.noLocationTitle}>Location Required</Text>
-            <Text style={styles.noLocationText}>Enable location to see community issues in your area.</Text>
+            <Text style={styles.noLocationText}>Enable location to see community issues in your area, or set a Default Municipality in your Profile.</Text>
           </View>
         ) : viewMode === "map" ? (
           <View style={styles.mapCard}>
@@ -630,4 +649,16 @@ const styles = StyleSheet.create({
   calloutVotes: { fontSize: 11, color: COLORS.navy, fontWeight: "700", marginTop: 2 },
   voteChip: { flexDirection: "row", alignItems: "center", gap: 4 },
   voteChipText: { fontSize: 11, color: COLORS.navy, fontWeight: "800" },
+  municipalityBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.navy + "12",
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  municipalityBannerText: { fontSize: 13, fontWeight: "800", color: COLORS.navy },
+  municipalityBannerHint: { fontSize: 11, color: COLORS.muted, fontWeight: "600", marginLeft: "auto" },
 });

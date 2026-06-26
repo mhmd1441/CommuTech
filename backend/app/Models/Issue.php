@@ -80,6 +80,7 @@ class Issue extends Model
         'funding_deadline',
         'municipality_contribution',
         'funding_request_note',
+        'funding_change_reason',
         'funding_approved_at',
         'funding_funded_at',
     ];

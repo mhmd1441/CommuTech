@@ -133,10 +133,23 @@
                     <div class="kv"><span>Funding Status</span><strong><span class="tag {{ $tagClass($report->funding_status) }}">{{ str_replace('_', ' ', $report->funding_status ?? 'none') }}</span></strong></div>
                     <div class="kv"><span>Funding Type</span><strong>{{ $report->funding_type ? ucfirst($report->funding_type) : 'N/A' }}</strong></div>
                     <div class="kv"><span>Estimated Cost</span><strong>{{ $money($report->estimated_cost) }}</strong></div>
-                    <div class="kv"><span>Community Goal</span><strong>{{ $money($report->funding_goal) }}</strong></div>
-                    <div class="kv"><span>Raised</span><strong>{{ $money($report->funding_raised) }}</strong></div>
-                    <div class="kv"><span>Municipality Contribution</span><strong>{{ $money($report->municipality_contribution) }}</strong></div>
-                    <div class="kv"><span>Deadline</span><strong>{{ $report->funding_deadline?->format('M j, Y') ?? 'N/A' }}</strong></div>
+                    @if ($report->funding_type === 'municipal')
+                        <div class="kv"><span>Municipality Covers</span><strong>{{ $money($report->municipality_contribution) }}</strong></div>
+                    @elseif ($report->funding_type === 'mixed')
+                        <div class="kv"><span>Municipality Contribution</span><strong>{{ $money($report->municipality_contribution) }}</strong></div>
+                        <div class="kv"><span>Community Goal</span><strong>{{ $money($report->funding_goal) }}</strong></div>
+                        <div class="kv"><span>Raised</span><strong>{{ $money($report->funding_raised) }}</strong></div>
+                        <div class="kv"><span>Deadline</span><strong>{{ $report->funding_deadline?->format('M j, Y') ?? 'N/A' }}</strong></div>
+                    @elseif ($report->funding_type === 'community')
+                        <div class="kv"><span>Community Goal</span><strong>{{ $money($report->funding_goal) }}</strong></div>
+                        <div class="kv"><span>Raised</span><strong>{{ $money($report->funding_raised) }}</strong></div>
+                        <div class="kv"><span>Deadline</span><strong>{{ $report->funding_deadline?->format('M j, Y') ?? 'N/A' }}</strong></div>
+                    @else
+                        <div class="kv"><span>Community Goal</span><strong>{{ $money($report->funding_goal) }}</strong></div>
+                        <div class="kv"><span>Raised</span><strong>{{ $money($report->funding_raised) }}</strong></div>
+                        <div class="kv"><span>Municipality Contribution</span><strong>{{ $money($report->municipality_contribution) }}</strong></div>
+                        <div class="kv"><span>Deadline</span><strong>{{ $report->funding_deadline?->format('M j, Y') ?? 'N/A' }}</strong></div>
+                    @endif
                     <div class="kv"><span>Approved At</span><strong>{{ $report->funding_approved_at?->format('M j, Y g:i A') ?? 'N/A' }}</strong></div>
                 </div>
 
@@ -152,6 +165,13 @@
                     <label>Worker Funding Justification</label>
                     <div class="body-copy">{{ $report->funding_request_note ?? 'No funding request was submitted.' }}</div>
                 </div>
+
+                @if ($report->funding_change_reason)
+                    <div class="kv" style="margin-top:8px;">
+                        <span>Change Reason</span>
+                        <strong style="color:#c0392b;">{{ $report->funding_change_reason }}</strong>
+                    </div>
+                @endif
 
                 @if ($report->funding_status === 'requested')
                     <div class="funding-actions">
@@ -185,6 +205,41 @@
                             <label>Reason</label>
                             <textarea name="rejection_reason" required placeholder="Explain why this request cannot be processed.">{{ old('rejection_reason') }}</textarea>
                             <button class="button danger" type="submit" style="margin-top:12px;">Reject Request</button>
+                        </form>
+                    </div>
+                @endif
+
+                @if (in_array($report->funding_status, ['open','none','funded','expired']) && in_array($report->funding_type, ['municipal','community','mixed']))
+                    <div class="funding-actions" style="margin-top:16px;">
+                        <form method="POST" action="{{ route('admin.reports.funding.update', $report) }}">
+                            @csrf
+                            <h2 style="font-size:15px;">Update Funding Decision</h2>
+                            @error('funding') <p style="color:red;font-size:13px;">{{ $message }}</p> @enderror
+                            @error('municipality_contribution') <p style="color:red;font-size:13px;">{{ $message }}</p> @enderror
+                            <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+                                <div>
+                                    <label>New Funding Type</label>
+                                    <select name="funding_type" required>
+                                        <option value="municipal" {{ $report->funding_type === 'municipal' ? 'selected' : '' }}>Municipal</option>
+                                        <option value="community" {{ $report->funding_type === 'community' ? 'selected' : '' }}>Community</option>
+                                        <option value="mixed" {{ $report->funding_type === 'mixed' ? 'selected' : '' }}>Mixed</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>Funding Deadline</label>
+                                    <input type="date" name="funding_deadline" value="{{ old('funding_deadline', $report->funding_deadline?->format('Y-m-d')) }}">
+                                </div>
+                                <div class="full">
+                                    <label>Municipality Contribution</label>
+                                    <input name="municipality_contribution" value="{{ old('municipality_contribution', $report->municipality_contribution) }}" placeholder="Only needed for mixed funding">
+                                </div>
+                                <div class="full">
+                                    <label>Reason for Change <span style="color:red">*</span></label>
+                                    <textarea name="change_reason" required placeholder="e.g. Municipality cannot cover full cost, switching to mixed funding to collect community contributions." style="min-height:72px;">{{ old('change_reason') }}</textarea>
+                                    @error('change_reason') <p style="color:red;font-size:12px;">{{ $message }}</p> @enderror
+                                </div>
+                            </div>
+                            <button class="button primary" type="submit" style="margin-top:12px;">Update Funding Decision</button>
                         </form>
                     </div>
                 @endif

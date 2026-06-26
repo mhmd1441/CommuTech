@@ -21,17 +21,19 @@ class IssueController extends Controller
     public function index(Request $request)
     {
         $data = $request->validate([
-            'category' => ['nullable', 'string'],
-            'status' => ['nullable', 'string'],
-            'mine' => ['nullable', 'boolean'],
-            'sort' => ['nullable', Rule::in(['newest', 'oldest', 'priority'])],
-            'lat' => ['nullable', 'numeric', 'between:-90,90'],
-            'lng' => ['nullable', 'numeric', 'between:-180,180'],
+            'category'     => ['nullable', 'string'],
+            'status'       => ['nullable', 'string'],
+            'mine'         => ['nullable', 'boolean'],
+            'sort'         => ['nullable', Rule::in(['newest', 'oldest', 'priority'])],
+            'lat'          => ['nullable', 'numeric', 'between:-90,90'],
+            'lng'          => ['nullable', 'numeric', 'between:-180,180'],
+            'municipality' => ['nullable', 'string', 'max:120'],
         ]);
 
         $userId = $request->user()->id;
 
-        $communityMode = isset($data['lat']) && isset($data['lng']) && ! $request->boolean('mine');
+        $communityMode = (isset($data['municipality']) || (isset($data['lat']) && isset($data['lng'])))
+            && ! $request->boolean('mine');
 
         $query = Issue::with(['user:id,name,email,phone', 'assignee:id,name,email,phone'])
             ->withCount(['upvotes' => fn ($q) => $q->whereColumn('issue_upvotes.user_id', '!=', 'issues.user_id')])
@@ -41,7 +43,10 @@ class IssueController extends Controller
             $query->where('user_id', $userId);
         }
 
-        if (isset($data['lat']) && isset($data['lng'])) {
+        if (! empty($data['municipality'])) {
+            // Direct municipality name supplied — skip PostGIS entirely
+            $query->where('municipality_en', $data['municipality']);
+        } elseif (isset($data['lat']) && isset($data['lng'])) {
             try {
                 $row = DB::selectOne(
                     "SELECT name_en FROM municipalities
@@ -137,7 +142,7 @@ class IssueController extends Controller
 
         // Classify image in background — does not block the response
         if (! empty($data['image_url'])) {
-            ClassifyIssueImage::dispatch($issue->id, $data['image_url']);
+            ClassifyIssueImage::dispatchAfterResponse($issue->id, $data['image_url']);
         }
 
         $notification = CommuTechNotification::create([

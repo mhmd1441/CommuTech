@@ -44,6 +44,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/{report}/edit', 'edit')->name('edit');
             Route::post('/{report}/funding/approve', 'approveFunding')->name('funding.approve');
             Route::post('/{report}/funding/reject', 'rejectFunding')->name('funding.reject');
+            Route::post('/{report}/funding/update', 'updateFunding')->name('funding.update');
             Route::put('/{report}', 'update')->name('update');
             Route::delete('/{report}', 'destroy')->name('destroy');
         });
