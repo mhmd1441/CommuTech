@@ -17,6 +17,7 @@
         field.style.display = workerChecked ? 'block' : 'none';
         if (input) {
             input.disabled = !workerChecked;
+            input.required = workerChecked;
             if (!workerChecked) input.value = '';
         }
     }
@@ -104,7 +105,7 @@
                     <input name="profile_picture_url" type="url" value="{{ old('profile_picture_url', $user->profile_picture_url) }}">
                 </div>
                 <div id="municipality-field" style="display: none;">
-                    <label>Assigned Municipality</label>
+                    <label>Assigned Municipality (required for workers)</label>
                     <input
                         name="assigned_municipality"
                         list="municipalities-list"
@@ -117,6 +118,9 @@
                             <option value="{{ $m }}">
                         @endforeach
                     </datalist>
+                    @error('assigned_municipality')
+                        <small style="color: #B91C1C;">{{ $message }}</small>
+                    @enderror
                 </div>
                 @if ($mode === 'create')
                     <div>

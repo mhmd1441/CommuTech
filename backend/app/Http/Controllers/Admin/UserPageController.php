@@ -230,7 +230,10 @@ class UserPageController extends Controller
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
             'profile_picture_url' => ['nullable', 'url', 'max:2048'],
-            'assigned_municipality' => ['nullable', 'string', 'max:120'],
+            'assigned_municipality' => [
+                Rule::requiredIf(in_array(User::ROLE_WORKER, $request->input('roles', []), true)),
+                'nullable', 'string', 'max:120',
+            ],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 
@@ -284,7 +287,10 @@ class UserPageController extends Controller
             'street' => ['nullable', 'string', 'max:160'],
             'building' => ['nullable', 'string', 'max:80'],
             'profile_picture_url' => ['nullable', 'url', 'max:2048'],
-            'assigned_municipality' => ['nullable', 'string', 'max:120'],
+            'assigned_municipality' => [
+                Rule::requiredIf(in_array(User::ROLE_WORKER, $request->input('roles', []), true)),
+                'nullable', 'string', 'max:120',
+            ],
             'password' => ['sometimes', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 

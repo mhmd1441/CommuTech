@@ -18,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import MapView, { Callout, Circle, Marker } from "react-native-maps";
+import MapView, { Callout, Marker } from "react-native-maps";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -41,24 +41,12 @@ const COLORS = {
   softBlue: "#EAF1F7",
 };
 
-const RADIUS_METERS = 5000;
-const RADIUS_LABEL = "5 km";
-
 const DEFAULT_REGION = {
   latitude: 33.8938,
   longitude: 35.5018,
   latitudeDelta: 0.015,
   longitudeDelta: 0.015,
 };
-
-function haversineMeters(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 function getPriorityColor(priority) {
   switch (priority?.toLowerCase()) {
@@ -93,7 +81,7 @@ export default function WorkerHomeScreen({ navigation, route }) {
   const [workerTab, setWorkerTab] = useState("active");
   const [assignedIssues, setAssignedIssues] = useState([]);
   const [nearbyIssues, setNearbyIssues] = useState([]);
-  const [nearbyMode, setNearbyMode] = useState("gps_fallback");
+  const [nearbyMode, setNearbyMode] = useState("municipality");
   const [nearbyMunicipality, setNearbyMunicipality] = useState(null);
   const [workerRegion, setWorkerRegion] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -126,8 +114,31 @@ export default function WorkerHomeScreen({ navigation, route }) {
     ? (workerTab === "active" ? activeAssigned : completedAssigned)
     : nearbyIssues;
 
-  const workerRegionRef = useRef(null);
+  const nearbyMunicipalityRef = useRef(null);
   const pendingIssuesRef = useRef([]);
+  const municipalityReadyRef = useRef(false);
+
+  // Applies the same relevance rule as the live issue.created handler below —
+  // self-issue exclusion + municipality match — to any issues that arrived via
+  // Pusher before the worker's municipality had finished loading.
+  const flushPendingIssues = (municipality) => {
+    if (pendingIssuesRef.current.length === 0) return;
+    const queued = pendingIssuesRef.current;
+    pendingIssuesRef.current = [];
+
+    const relevant = queued.filter((issue) => {
+      if (currentUser && Number(issue.user_id) === Number(currentUser.id)) return false;
+      if (issue.municipality_en && issue.municipality_en !== municipality) return false;
+      return true;
+    });
+
+    if (relevant.length > 0) {
+      setNearbyIssues((prev) => {
+        const existingIds = new Set(prev.map((i) => i.id));
+        return [...relevant.filter((i) => !existingIds.has(i.id)), ...prev];
+      });
+    }
+  };
 
   const loadWorkerIssues = useCallback(async () => {
     try {
@@ -142,16 +153,18 @@ export default function WorkerHomeScreen({ navigation, route }) {
       if (permission.status !== "granted") {
         Alert.alert("Location Needed", "Worker mode needs location permission to show nearby unassigned issues.");
         setWorkerRegion(DEFAULT_REGION);
-        workerRegionRef.current = DEFAULT_REGION;
 
         const [assignedResponse, nearbyResponse] = await Promise.all([
           assignedPromise,
           api.get("/worker/issues/nearby"),
         ]);
         setAssignedIssues(assignedResponse.data.data || []);
-        const mode = nearbyResponse.data.mode || "gps_fallback";
+        const mode = nearbyResponse.data.mode || "municipality";
         setNearbyMode(mode);
         setNearbyMunicipality(nearbyResponse.data.municipality || null);
+        nearbyMunicipalityRef.current = nearbyResponse.data.municipality || null;
+        municipalityReadyRef.current = true;
+        flushPendingIssues(nearbyMunicipalityRef.current);
         setNearbyIssues([...(nearbyResponse.data.data || []), ...(nearbyResponse.data.unlocated || [])]);
         return;
       }
@@ -168,42 +181,20 @@ export default function WorkerHomeScreen({ navigation, route }) {
       };
 
       setWorkerRegion(nextRegion);
-      workerRegionRef.current = nextRegion;
       mapRef.current?.animateToRegion(nextRegion, 700);
-
-      // Flush any Pusher events that arrived before GPS was ready
-      if (pendingIssuesRef.current.length > 0) {
-        const nearby = pendingIssuesRef.current.filter((issue) => {
-          if (!issue.latitude || !issue.longitude) return false;
-          return haversineMeters(
-            nextRegion.latitude, nextRegion.longitude,
-            parseFloat(issue.latitude), parseFloat(issue.longitude)
-          ) <= RADIUS_METERS;
-        });
-        pendingIssuesRef.current = [];
-        if (nearby.length > 0) {
-          setNearbyIssues((prev) => {
-            const existingIds = new Set(prev.map((i) => i.id));
-            return [...nearby.filter((i) => !existingIds.has(i.id)), ...prev];
-          });
-        }
-      }
 
       // Both in parallel — assigned was already in-flight
       const [assignedResponse, nearbyResponse] = await Promise.all([
         assignedPromise,
-        api.get("/worker/issues/nearby", {
-          params: {
-            latitude: nextRegion.latitude,
-            longitude: nextRegion.longitude,
-            radius: RADIUS_METERS,
-          },
-        }),
+        api.get("/worker/issues/nearby"),
       ]);
 
-      const mode = nearbyResponse.data.mode || "gps_fallback";
+      const mode = nearbyResponse.data.mode || "municipality";
       setNearbyMode(mode);
       setNearbyMunicipality(nearbyResponse.data.municipality || null);
+      nearbyMunicipalityRef.current = nearbyResponse.data.municipality || null;
+      municipalityReadyRef.current = true;
+      flushPendingIssues(nearbyMunicipalityRef.current);
       setAssignedIssues(assignedResponse.data.data || []);
       setNearbyIssues([...(nearbyResponse.data.data || []), ...(nearbyResponse.data.unlocated || [])]);
     } catch (error) {
@@ -252,26 +243,24 @@ export default function WorkerHomeScreen({ navigation, route }) {
     if (!pusher) return;
     const channel = pusher.subscribe("issues");
     channel.bind("issue.created", (issue) => {
-      const region = workerRegionRef.current;
+      // Mirrors the backend's municipality match in WorkerIssueController::nearby() —
+      // surface issues in the worker's own municipality, plus "unlocated" ones where
+      // the PostGIS lookup failed at creation (municipality_en is null).
+      if (currentUser && Number(issue.user_id) === Number(currentUser.id)) return;
 
-      // GPS not ready yet — queue the issue, process it when GPS resolves
-      if (!region) {
+      // Municipality not loaded yet — queue the issue, flushPendingIssues will
+      // process it once loadWorkerIssues resolves instead of dropping it.
+      if (!municipalityReadyRef.current) {
         pendingIssuesRef.current = [...pendingIssuesRef.current, issue];
         return;
       }
 
-      // GPS ready — filter by distance immediately
-      if (!issue.latitude || !issue.longitude) return;
-      const dist = haversineMeters(
-        region.latitude, region.longitude,
-        parseFloat(issue.latitude), parseFloat(issue.longitude)
-      );
-      if (dist <= RADIUS_METERS) {
-        setNearbyIssues((prev) => {
-          if (prev.some((i) => i.id === issue.id)) return prev;
-          return [issue, ...prev];
-        });
-      }
+      const municipality = nearbyMunicipalityRef.current;
+      if (issue.municipality_en && issue.municipality_en !== municipality) return;
+      setNearbyIssues((prev) => {
+        if (prev.some((i) => i.id === issue.id)) return prev;
+        return [issue, ...prev];
+      });
     });
     return () => { channel.unbind("issue.created"); };
   }, []);
@@ -982,6 +971,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
             showsMyLocationButton
             onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
           >
+            {/* GPS-radius circle overlay — disabled. Every worker now has an assigned
+                municipality (enforced in the admin panel), so nearbyMode is always
+                "municipality" and this never rendered anyway. Left commented out
+                instead of deleted in case the GPS fallback is restored later.
             {nearbyMode !== "municipality" && (
               <Circle
                 center={{ latitude: activeRegion.latitude, longitude: activeRegion.longitude }}
@@ -990,6 +983,7 @@ export default function WorkerHomeScreen({ navigation, route }) {
                 fillColor="rgba(25, 64, 95, 0.12)"
               />
             )}
+            */}
             {/* Orange pins — nearby unassigned issues */}
             {mapNearbyIssues.map((issue) => (
               <Marker
@@ -1033,16 +1027,19 @@ export default function WorkerHomeScreen({ navigation, route }) {
             </View>
           )}
 
+          {/* GPS-radius badge variant disabled — every worker has an assigned municipality now,
+              so nearbyMode is always "municipality". Old ternary:
+              name={nearbyMode === "municipality" ? "business-outline" : "radio-button-on-outline"}
+              text={nearbyMode === "municipality" ? (nearbyMunicipality || "Municipality") : `${RADIUS_LABEL} radius`}
+          */}
           <View style={styles.radiusBadge}>
             <Ionicons
-              name={nearbyMode === "municipality" ? "business-outline" : "radio-button-on-outline"}
+              name={nearbyMode === "no_municipality" ? "warning-outline" : "business-outline"}
               size={14}
               color={COLORS.navy}
             />
             <Text style={styles.radiusText}>
-              {nearbyMode === "municipality"
-                ? (nearbyMunicipality || "Municipality")
-                : `${RADIUS_LABEL} radius`}
+              {nearbyMode === "no_municipality" ? "No municipality" : (nearbyMunicipality || "Municipality")}
             </Text>
           </View>
 
@@ -1062,12 +1059,13 @@ export default function WorkerHomeScreen({ navigation, route }) {
               <Text style={styles.listTitle}>
                 {activeView === "assigned" ? "My Reports" : "Nearby Reports"}
               </Text>
+              {/* GPS-radius subtitle variant disabled — see radiusBadge comment above. */}
               <Text style={styles.listSubtitle}>
                 {activeView === "assigned"
                   ? "Your assigned work."
-                  : nearbyMode === "municipality"
-                  ? `Unassigned reports in ${nearbyMunicipality || "your municipality"}.`
-                  : `Unassigned reports within ${RADIUS_LABEL}.`}
+                  : nearbyMode === "no_municipality"
+                  ? "No municipality assigned — contact your administrator."
+                  : `Unassigned reports in ${nearbyMunicipality || "your municipality"}.`}
               </Text>
             </View>
             <Pressable onPress={loadWorkerIssues} style={styles.iconBtn}>
@@ -1114,15 +1112,17 @@ export default function WorkerHomeScreen({ navigation, route }) {
                     color={workerTab === "completed" ? COLORS.green : COLORS.muted}
                   />
                   <Text style={styles.emptyTitle}>
-                    {activeView !== "assigned" ? "No nearby reports"
+                    {activeView !== "assigned"
+                      ? (nearbyMode === "no_municipality" ? "No municipality assigned" : "No nearby reports")
                       : workerTab === "completed" ? "No completed reports yet"
                       : "No active reports"}
                   </Text>
+                  {/* GPS-radius empty-state variant disabled — see radiusBadge comment above. */}
                   <Text style={styles.emptyText}>
                     {activeView !== "assigned"
-                      ? nearbyMode === "municipality"
-                        ? `Unassigned issues in ${nearbyMunicipality || "your municipality"} will appear here.`
-                        : "Unassigned issues in your radius will appear here."
+                      ? (nearbyMode === "no_municipality"
+                        ? "You have no municipality assigned. Please contact your administrator."
+                        : `Unassigned issues in ${nearbyMunicipality || "your municipality"} will appear here.`)
                       : workerTab === "completed"
                       ? "Reports you mark as resolved will appear here."
                       : "Reports you assign to yourself will appear here."}

@@ -28,12 +28,6 @@ class WorkerIssueController extends Controller
 
     public function nearby(Request $request)
     {
-        $data = $request->validate([
-            'latitude'  => ['nullable', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
-            'radius'    => ['nullable', 'integer', 'min:50', 'max:5000'],
-        ]);
-
         $worker = $request->user();
 
         if ($worker->assigned_municipality) {
@@ -67,42 +61,51 @@ class WorkerIssueController extends Controller
             ]);
         }
 
-        // Fallback — GPS radius (worker has no assigned municipality)
-        $latitude  = (float) ($data['latitude'] ?? 0);
-        $longitude = (float) ($data['longitude'] ?? 0);
-        $radius    = (int) ($data['radius'] ?? 100);
-
-        // PostGIS filters by radius in SQL — no full table load into PHP
-        $issues = Issue::query()
-            ->with(['user:id,name,email,phone'])
-            ->withCount('upvotes')
-            ->whereNull('assigned_to')
-            ->where('user_id', '!=', $worker->id)
-            ->where('status', 'pending')
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->whereRaw(
-                'ST_DWithin(
-                    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
-                    ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
-                    ?
-                )',
-                [$longitude, $latitude, $radius]
-            )
-            ->selectRaw(
-                '*, ST_Distance(
-                    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
-                    ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography
-                ) AS distance_meters',
-                [$longitude, $latitude]
-            )
-            ->orderBy('distance_meters')
-            ->get();
+        // GPS radius fallback — disabled. Admin now requires assigned_municipality
+        // whenever the "worker" role is selected (see UserPageController::store/update),
+        // so a worker reaching this branch should no longer be possible. Left commented
+        // out instead of deleted in case this needs to be restored later.
+        //
+        // $latitude  = (float) ($data['latitude'] ?? 0);
+        // $longitude = (float) ($data['longitude'] ?? 0);
+        // $radius    = (int) ($data['radius'] ?? 100);
+        //
+        // $issues = Issue::query()
+        //     ->with(['user:id,name,email,phone'])
+        //     ->withCount('upvotes')
+        //     ->whereNull('assigned_to')
+        //     ->where('user_id', '!=', $worker->id)
+        //     ->where('status', 'pending')
+        //     ->whereNotNull('latitude')
+        //     ->whereNotNull('longitude')
+        //     ->whereRaw(
+        //         'ST_DWithin(
+        //             ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+        //             ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
+        //             ?
+        //         )',
+        //         [$longitude, $latitude, $radius]
+        //     )
+        //     ->selectRaw(
+        //         '*, ST_Distance(
+        //             ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+        //             ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography
+        //         ) AS distance_meters',
+        //         [$longitude, $latitude]
+        //     )
+        //     ->orderBy('distance_meters')
+        //     ->get();
+        //
+        // return response()->json([
+        //     'mode'   => 'gps_fallback',
+        //     'data'   => $issues,
+        //     'radius' => $radius,
+        // ]);
 
         return response()->json([
-            'mode'   => 'gps_fallback',
-            'data'   => $issues,
-            'radius' => $radius,
+            'mode'      => 'no_municipality',
+            'data'      => [],
+            'unlocated' => [],
         ]);
     }
 

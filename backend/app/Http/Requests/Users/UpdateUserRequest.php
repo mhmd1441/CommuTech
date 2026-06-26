@@ -54,7 +54,33 @@ class UpdateUserRequest extends FormRequest
             'street' => ['sometimes', 'nullable', 'string', 'max:160'],
             'building' => ['sometimes', 'nullable', 'string', 'max:80'],
             'profile_picture_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'assigned_municipality' => ['sometimes', 'nullable', 'string', 'max:120'],
             'password' => ['sometimes', 'confirmed', Password::min(8)->letters()->numbers()],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        // Doing this as an array rule (e.g. Rule::requiredIf) doesn't work here: 'sometimes'
+        // makes the validator skip the whole field — including the required check — whenever
+        // it's absent from the request, which is exactly the case we need to catch (a PATCH
+        // that adds the worker role but never sends a municipality at all).
+        $validator->after(function ($validator) {
+            $roles = $this->input('roles');
+            $becomingWorker = is_array($roles) && in_array(User::ROLE_WORKER, $roles, true);
+
+            if (! $becomingWorker) {
+                return;
+            }
+
+            $hasExisting = filled($this->route('user')?->assigned_municipality);
+            $municipalityMissing = $this->has('assigned_municipality')
+                ? blank($this->input('assigned_municipality'))
+                : ! $hasExisting;
+
+            if ($municipalityMissing) {
+                $validator->errors()->add('assigned_municipality', 'The assigned municipality field is required.');
+            }
+        });
     }
 }
