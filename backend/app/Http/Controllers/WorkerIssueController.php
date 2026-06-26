@@ -28,12 +28,6 @@ class WorkerIssueController extends Controller
 
     public function nearby(Request $request)
     {
-        $data = $request->validate([
-            'latitude'  => ['nullable', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
-            'radius'    => ['nullable', 'integer', 'min:50', 'max:5000'],
-        ]);
-
         $worker = $request->user();
 
         if ($worker->assigned_municipality) {

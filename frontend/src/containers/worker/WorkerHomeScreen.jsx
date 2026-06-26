@@ -41,8 +41,6 @@ const COLORS = {
   softBlue: "#EAF1F7",
 };
 
-const RADIUS_METERS = 5000;
-
 const DEFAULT_REGION = {
   latitude: 33.8938,
   longitude: 35.5018,
@@ -188,13 +186,7 @@ export default function WorkerHomeScreen({ navigation, route }) {
       // Both in parallel — assigned was already in-flight
       const [assignedResponse, nearbyResponse] = await Promise.all([
         assignedPromise,
-        api.get("/worker/issues/nearby", {
-          params: {
-            latitude: nextRegion.latitude,
-            longitude: nextRegion.longitude,
-            radius: RADIUS_METERS,
-          },
-        }),
+        api.get("/worker/issues/nearby"),
       ]);
 
       const mode = nearbyResponse.data.mode || "municipality";
