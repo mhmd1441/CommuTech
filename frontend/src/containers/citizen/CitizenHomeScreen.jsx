@@ -131,6 +131,8 @@ export default function CitizenHomeScreen({ navigation, route }) {
   const mapRef = useRef(null);
   const fetchingRef = useRef(false);
   const pendingRefreshRef = useRef(false);
+  const communityModeRef = useRef(communityMode);
+  useEffect(() => { communityModeRef.current = communityMode; }, [communityMode]);
 
   useEffect(() => {
     let isMounted = true;
@@ -191,14 +193,14 @@ export default function CitizenHomeScreen({ navigation, route }) {
   // If a fetch is already running, mark it as pending — fetchIssues will
   // run one final pass after the in-flight request finishes.
   useEffect(() => {
-    if (communityMode && userRegion) {
+    if (communityMode && (getDefaultMunicipality() || userRegion)) {
       if (fetchingRef.current) {
         pendingRefreshRef.current = true;
       } else {
         fetchIssues();
       }
     }
-  }, [userRegion]);
+  }, [userRegion, communityMode]);
 
   useEffect(() => {
     const user = getAuthUser();
@@ -221,6 +223,8 @@ export default function CitizenHomeScreen({ navigation, route }) {
     const issueChannel = pusher.subscribe("issues");
     issueChannel.bind("issue.created", (issue) => {
       if (!communityMode) return;
+      const muni = getDefaultMunicipality();
+      if (muni && issue.municipality_en !== muni) return;
       setIssues((prev) => {
         if (prev.some((i) => i.id === issue.id)) return prev;
         return [issue, ...prev];
@@ -239,7 +243,7 @@ export default function CitizenHomeScreen({ navigation, route }) {
     try {
       if (!silent) setLoading(true);
       const params = {};
-      if (communityMode) {
+      if (communityModeRef.current) {
         const muni = getDefaultMunicipality();
         if (muni) {
           params.municipality = muni;
@@ -367,13 +371,13 @@ export default function CitizenHomeScreen({ navigation, route }) {
         {/* Community / My Issues tab */}
         <View style={styles.modeTabs}>
           <Pressable
-            onPress={() => { setCommunityMode(false); setLoading(true); }}
+            onPress={() => setCommunityMode(false)}
             style={[styles.modeTab, !communityMode && styles.modeTabActive]}
           >
             <Text style={[styles.modeTabText, !communityMode && styles.modeTabTextActive]}>My Issues</Text>
           </Pressable>
           <Pressable
-            onPress={() => { setCommunityMode(true); setLoading(true); }}
+            onPress={() => setCommunityMode(true)}
             style={[styles.modeTab, communityMode && styles.modeTabActive]}
           >
             <Ionicons name="people-outline" size={14} color={communityMode ? "#fff" : COLORS.navy} />

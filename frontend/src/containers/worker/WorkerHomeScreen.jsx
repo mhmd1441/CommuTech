@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -24,7 +30,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import api, { apiError, getAuthUser } from "../../services/api";
 import { getPusher } from "../../services/echo";
-import { fundingPercent, issueStatusLabel, money } from "../../services/issuePresentation";
+import {
+  fundingPercent,
+  issueStatusLabel,
+  money,
+} from "../../services/issuePresentation";
 import { WEB_BASE_URL } from "../../config";
 
 const COLORS = {
@@ -67,11 +77,19 @@ function formatDistance(issue) {
 
   if (!Number.isFinite(meters) || meters <= 0) return null;
 
-  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km away` : `${meters} m away`;
+  return meters >= 1000
+    ? `${(meters / 1000).toFixed(1)} km away`
+    : `${meters} m away`;
 }
 
 function personName(person, fallback) {
-  return person?.name || [person?.first_name, person?.father_name, person?.last_name].filter(Boolean).join(" ") || fallback;
+  return (
+    person?.name ||
+    [person?.first_name, person?.father_name, person?.last_name]
+      .filter(Boolean)
+      .join(" ") ||
+    fallback
+  );
 }
 
 export default function WorkerHomeScreen({ navigation, route }) {
@@ -103,16 +121,19 @@ export default function WorkerHomeScreen({ navigation, route }) {
 
   const activeAssigned = useMemo(
     () => assignedIssues.filter((i) => i.status !== "resolved"),
-    [assignedIssues]
+    [assignedIssues],
   );
   const completedAssigned = useMemo(
     () => assignedIssues.filter((i) => i.status === "resolved"),
-    [assignedIssues]
+    [assignedIssues],
   );
 
-  const reportList = activeView === "assigned"
-    ? (workerTab === "active" ? activeAssigned : completedAssigned)
-    : nearbyIssues;
+  const reportList =
+    activeView === "assigned"
+      ? workerTab === "active"
+        ? activeAssigned
+        : completedAssigned
+      : nearbyIssues;
 
   const nearbyMunicipalityRef = useRef(null);
   const pendingIssuesRef = useRef([]);
@@ -127,8 +148,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
     pendingIssuesRef.current = [];
 
     const relevant = queued.filter((issue) => {
-      if (currentUser && Number(issue.user_id) === Number(currentUser.id)) return false;
-      if (issue.municipality_en && issue.municipality_en !== municipality) return false;
+      if (currentUser && Number(issue.user_id) === Number(currentUser.id))
+        return false;
+      if (issue.municipality_en && issue.municipality_en !== municipality)
+        return false;
       return true;
     });
 
@@ -151,7 +174,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
       const permission = await Location.requestForegroundPermissionsAsync();
 
       if (permission.status !== "granted") {
-        Alert.alert("Location Needed", "Worker mode needs location permission to show nearby unassigned issues.");
+        Alert.alert(
+          "Location Needed",
+          "Worker mode needs location permission to show nearby unassigned issues.",
+        );
         setWorkerRegion(DEFAULT_REGION);
 
         const [assignedResponse, nearbyResponse] = await Promise.all([
@@ -162,10 +188,14 @@ export default function WorkerHomeScreen({ navigation, route }) {
         const mode = nearbyResponse.data.mode || "municipality";
         setNearbyMode(mode);
         setNearbyMunicipality(nearbyResponse.data.municipality || null);
-        nearbyMunicipalityRef.current = nearbyResponse.data.municipality || null;
+        nearbyMunicipalityRef.current =
+          nearbyResponse.data.municipality || null;
         municipalityReadyRef.current = true;
         flushPendingIssues(nearbyMunicipalityRef.current);
-        setNearbyIssues([...(nearbyResponse.data.data || []), ...(nearbyResponse.data.unlocated || [])]);
+        setNearbyIssues([
+          ...(nearbyResponse.data.data || []),
+          ...(nearbyResponse.data.unlocated || []),
+        ]);
         return;
       }
 
@@ -196,10 +226,16 @@ export default function WorkerHomeScreen({ navigation, route }) {
       municipalityReadyRef.current = true;
       flushPendingIssues(nearbyMunicipalityRef.current);
       setAssignedIssues(assignedResponse.data.data || []);
-      setNearbyIssues([...(nearbyResponse.data.data || []), ...(nearbyResponse.data.unlocated || [])]);
+      setNearbyIssues([
+        ...(nearbyResponse.data.data || []),
+        ...(nearbyResponse.data.unlocated || []),
+      ]);
     } catch (error) {
       console.error("Failed to load worker issues:", error);
-      Alert.alert("Worker Mode", error.message || "Could not load worker issues.");
+      Alert.alert(
+        "Worker Mode",
+        error.message || "Could not load worker issues.",
+      );
     } finally {
       setLoading(false);
     }
@@ -208,8 +244,11 @@ export default function WorkerHomeScreen({ navigation, route }) {
   useFocusEffect(
     useCallback(() => {
       loadWorkerIssues();
-      api.get('/notifications', { params: { role: 'worker' } }).then(({ data }) => setUnreadCount(data.unread_count || 0)).catch(() => {});
-    }, [loadWorkerIssues])
+      api
+        .get("/notifications", { params: { role: "worker" } })
+        .then(({ data }) => setUnreadCount(data.unread_count || 0))
+        .catch(() => {});
+    }, [loadWorkerIssues]),
   );
 
   useEffect(() => {
@@ -217,11 +256,13 @@ export default function WorkerHomeScreen({ navigation, route }) {
     if (!user) return;
     const pusher = getPusher();
     if (!pusher) return;
-    const handler = (data) => { if (data?.recipient_role === 'worker') setUnreadCount((prev) => prev + 1); };
+    const handler = (data) => {
+      if (data?.recipient_role === "worker") setUnreadCount((prev) => prev + 1);
+    };
     const channel = pusher.subscribe(`private-user.${user.id}`);
-    channel.bind('notification.sent', handler);
+    channel.bind("notification.sent", handler);
     return () => {
-      channel.unbind('notification.sent', handler);
+      channel.unbind("notification.sent", handler);
     };
   }, []);
 
@@ -233,8 +274,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
     if (!pusher) return;
     const handler = () => setChatBadge((prev) => prev + 1);
     const channel = pusher.subscribe(`private-user.${user.id}`);
-    channel.bind('chat.message', handler);
-    return () => { channel.unbind('chat.message', handler); };
+    channel.bind("chat.message", handler);
+    return () => {
+      channel.unbind("chat.message", handler);
+    };
   }, []);
 
   // Real-time: new issue created by a citizen
@@ -246,7 +289,8 @@ export default function WorkerHomeScreen({ navigation, route }) {
       // Mirrors the backend's municipality match in WorkerIssueController::nearby() —
       // surface issues in the worker's own municipality, plus "unlocated" ones where
       // the PostGIS lookup failed at creation (municipality_en is null).
-      if (currentUser && Number(issue.user_id) === Number(currentUser.id)) return;
+      if (currentUser && Number(issue.user_id) === Number(currentUser.id))
+        return;
 
       // Municipality not loaded yet — queue the issue, flushPendingIssues will
       // process it once loadWorkerIssues resolves instead of dropping it.
@@ -256,13 +300,16 @@ export default function WorkerHomeScreen({ navigation, route }) {
       }
 
       const municipality = nearbyMunicipalityRef.current;
-      if (issue.municipality_en && issue.municipality_en !== municipality) return;
+      if (issue.municipality_en && issue.municipality_en !== municipality)
+        return;
       setNearbyIssues((prev) => {
         if (prev.some((i) => i.id === issue.id)) return prev;
         return [issue, ...prev];
       });
     });
-    return () => { channel.unbind("issue.created"); };
+    return () => {
+      channel.unbind("issue.created");
+    };
   }, []);
 
   useEffect(() => {
@@ -281,7 +328,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
         const assigned = Number(data.assigned_to) === Number(currentUser?.id);
         openIssue(data, assigned);
       } catch (error) {
-        Alert.alert("Couldn't open report", "This report may no longer be available.");
+        Alert.alert(
+          "Couldn't open report",
+          "This report may no longer be available.",
+        );
       }
     })();
   }, [route?.params?.openIssueId]);
@@ -303,8 +353,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
         const longitude = parseFloat(issue.longitude);
         return {
           ...issue,
-          coords: Number.isFinite(latitude) && Number.isFinite(longitude)
-            ? { latitude, longitude } : null,
+          coords:
+            Number.isFinite(latitude) && Number.isFinite(longitude)
+              ? { latitude, longitude }
+              : null,
         };
       })
       .filter((issue) => issue.coords);
@@ -318,14 +370,17 @@ export default function WorkerHomeScreen({ navigation, route }) {
         const longitude = parseFloat(issue.longitude);
         return {
           ...issue,
-          coords: Number.isFinite(latitude) && Number.isFinite(longitude)
-            ? { latitude, longitude } : null,
+          coords:
+            Number.isFinite(latitude) && Number.isFinite(longitude)
+              ? { latitude, longitude }
+              : null,
         };
       })
       .filter((issue) => issue.coords);
   }, [assignedIssues]);
 
-  const assignedWithoutCoords = activeAssigned.length - mapAssignedIssues.length;
+  const assignedWithoutCoords =
+    activeAssigned.length - mapAssignedIssues.length;
 
   const openMapsNavigation = (issue) => {
     const lat = Number(issue.latitude);
@@ -333,7 +388,7 @@ export default function WorkerHomeScreen({ navigation, route }) {
     const label = encodeURIComponent(issue.title || "Issue");
     const url = `https://maps.google.com/?daddr=${lat},${lng}&q=${label}`;
     Linking.openURL(url).catch(() =>
-      Alert.alert("Navigation", "Could not open maps app.")
+      Alert.alert("Navigation", "Could not open maps app."),
     );
   };
 
@@ -352,29 +407,38 @@ export default function WorkerHomeScreen({ navigation, route }) {
         onPress: async () => {
           const permission = await ImagePicker.requestCameraPermissionsAsync();
           if (!permission.granted) {
-            Alert.alert("Permission needed", "Allow camera access to take a photo.");
+            Alert.alert(
+              "Permission needed",
+              "Allow camera access to take a photo.",
+            );
             return;
           }
           const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.7,
           });
-          if (!result.canceled && result.assets?.[0]) setResolutionPhoto(result.assets[0]);
+          if (!result.canceled && result.assets?.[0])
+            setResolutionPhoto(result.assets[0]);
         },
       },
       {
         text: "Gallery",
         onPress: async () => {
-          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          const permission =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (!permission.granted) {
-            Alert.alert("Permission needed", "Allow gallery access to pick a photo.");
+            Alert.alert(
+              "Permission needed",
+              "Allow gallery access to pick a photo.",
+            );
             return;
           }
           const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.7,
           });
-          if (!result.canceled && result.assets?.[0]) setResolutionPhoto(result.assets[0]);
+          if (!result.canceled && result.assets?.[0])
+            setResolutionPhoto(result.assets[0]);
         },
       },
       { text: "Cancel", style: "cancel" },
@@ -384,7 +448,9 @@ export default function WorkerHomeScreen({ navigation, route }) {
   const assignToMe = async (issue) => {
     try {
       setBusyIssueId(issue.id);
-      const { data } = await api.patch(`/worker/issues/${issue.id}/assign-to-me`);
+      const { data } = await api.patch(
+        `/worker/issues/${issue.id}/assign-to-me`,
+      );
       setSelectedIssue({ issue: data.issue, assigned: true });
       await loadWorkerIssues();
     } catch (error) {
@@ -409,16 +475,22 @@ export default function WorkerHomeScreen({ navigation, route }) {
     }
 
     if (note.length < 10) {
-      Alert.alert("Funding Justification", "Please explain why this issue needs funding.");
+      Alert.alert(
+        "Funding Justification",
+        "Please explain why this issue needs funding.",
+      );
       return;
     }
 
     try {
       setBusyIssueId(issue.id);
-      const { data } = await api.post(`/worker/issues/${issue.id}/funding-request`, {
-        estimated_cost: estimatedCost,
-        funding_request_note: note,
-      });
+      const { data } = await api.post(
+        `/worker/issues/${issue.id}/funding-request`,
+        {
+          estimated_cost: estimatedCost,
+          funding_request_note: note,
+        },
+      );
 
       setSelectedIssue({ issue: data.issue, assigned: true });
       await loadWorkerIssues();
@@ -458,11 +530,17 @@ export default function WorkerHomeScreen({ navigation, route }) {
   const markResolved = async (issue) => {
     const note = resolutionNote.trim();
     if (note.length < 5) {
-      Alert.alert("Fix Description", "Please describe what you fixed before marking this report as resolved.");
+      Alert.alert(
+        "Fix Description",
+        "Please describe what you fixed before marking this report as resolved.",
+      );
       return;
     }
     if (!resolutionPhoto) {
-      Alert.alert("Resolution Proof", "Please add a proof photo before marking this report as resolved.");
+      Alert.alert(
+        "Resolution Proof",
+        "Please add a proof photo before marking this report as resolved.",
+      );
       return;
     }
 
@@ -501,22 +579,34 @@ export default function WorkerHomeScreen({ navigation, route }) {
     const distanceLabel = formatDistance(issue);
 
     return (
-      <Pressable onPress={() => openIssue(issue, assigned)} style={styles.reportCard}>
+      <Pressable
+        onPress={() => openIssue(issue, assigned)}
+        style={styles.reportCard}
+      >
         <View style={styles.reportCardTop}>
-          <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
+          <View
+            style={[styles.priorityDot, { backgroundColor: priorityColor }]}
+          />
           <Text style={styles.reportTitle} numberOfLines={1}>
             {issue.title}
           </Text>
           <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
         </View>
         <Text style={styles.reportMeta} numberOfLines={1}>
-          {[issue.category, distanceLabel || issue.location].filter(Boolean).join(" - ")}
+          {[issue.category, distanceLabel || issue.location]
+            .filter(Boolean)
+            .join(" - ")}
         </Text>
         <Text style={styles.reportDescription} numberOfLines={2}>
           {issue.description}
         </Text>
         <View style={styles.reportFooter}>
-          <Text style={[styles.priorityPill, { color: priorityColor, borderColor: priorityColor }]}>
+          <Text
+            style={[
+              styles.priorityPill,
+              { color: priorityColor, borderColor: priorityColor },
+            ]}
+          >
             {issue.priority}
           </Text>
           <Text style={styles.statusPill}>{issueStatusLabel(issue)}</Text>
@@ -533,7 +623,12 @@ export default function WorkerHomeScreen({ navigation, route }) {
         ["assigned", "My Reports", "clipboard-outline"],
       ].map(([key, label, icon]) => {
         const active = activeView === key;
-        const count = key === "nearby" ? nearbyIssues.length : key === "assigned" ? assignedIssues.length : null;
+        const count =
+          key === "nearby"
+            ? nearbyIssues.length
+            : key === "assigned"
+              ? assignedIssues.length
+              : null;
 
         return (
           <Pressable
@@ -541,10 +636,18 @@ export default function WorkerHomeScreen({ navigation, route }) {
             onPress={() => setActiveView(key)}
             style={[styles.tabBtn, active && styles.tabBtnActive]}
           >
-            <Ionicons name={icon} size={16} color={active ? "#fff" : COLORS.navy} />
-            <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+            <Ionicons
+              name={icon}
+              size={16}
+              color={active ? "#fff" : COLORS.navy}
+            />
+            <Text style={[styles.tabText, active && styles.tabTextActive]}>
+              {label}
+            </Text>
             {count !== null && (
-              <Text style={[styles.tabCount, active && styles.tabCountActive]}>{count}</Text>
+              <Text style={[styles.tabCount, active && styles.tabCountActive]}>
+                {count}
+              </Text>
             )}
           </Pressable>
         );
@@ -556,23 +659,54 @@ export default function WorkerHomeScreen({ navigation, route }) {
     const { issue, assigned } = selectedIssue;
     const priorityColor = getPriorityColor(issue.priority);
     const reporter = personName(issue.user, "Unknown citizen");
-    const assignee = personName(issue.assignee, issue.assigned_to ? "Assigned worker" : "Unassigned");
-    const isOwnCitizenReport = Number(issue.user_id) === Number(currentUser?.id);
-    const fundingBlocked = ["requested", "open", "expired"].includes(issue.funding_status);
-    const canRequestFunding = assigned && !isOwnCitizenReport && issue.status === "pending" && issue.funding_status === "none";
-    const canStartRepair = assigned && !isOwnCitizenReport && issue.status === "pending" && ["none", "funded"].includes(issue.funding_status);
-    const canResolve = assigned && !isOwnCitizenReport && issue.status === "in_progress" && !fundingBlocked;
+    const assignee = personName(
+      issue.assignee,
+      issue.assigned_to ? "Assigned worker" : "Unassigned",
+    );
+    const isOwnCitizenReport =
+      Number(issue.user_id) === Number(currentUser?.id);
+    const fundingBlocked = ["requested", "open", "expired"].includes(
+      issue.funding_status,
+    );
+    const canRequestFunding =
+      assigned &&
+      !isOwnCitizenReport &&
+      issue.status === "pending" &&
+      issue.funding_status === "none";
+    const canStartRepair =
+      assigned &&
+      !isOwnCitizenReport &&
+      issue.status === "pending" &&
+      ["none", "funded"].includes(issue.funding_status);
+    const canResolve =
+      assigned &&
+      !isOwnCitizenReport &&
+      issue.status === "in_progress" &&
+      !fundingBlocked;
     const showFunding = issue.funding_status && issue.funding_status !== "none";
     const progress = fundingPercent(issue);
-    const showPrimaryAction = (!assigned && !isOwnCitizenReport) || canStartRepair || canResolve;
-    const primaryActionLabel = !assigned ? "Assign to me" : canStartRepair ? "Mark In Progress" : "Mark Resolved";
-    const primaryActionIcon = !assigned ? "briefcase-outline" : canStartRepair ? "play-circle-outline" : "checkmark-circle-outline";
+    const showPrimaryAction =
+      (!assigned && !isOwnCitizenReport) || canStartRepair || canResolve;
+    const primaryActionLabel = !assigned
+      ? "Assign to me"
+      : canStartRepair
+        ? "Mark In Progress"
+        : "Mark Resolved";
+    const primaryActionIcon = !assigned
+      ? "briefcase-outline"
+      : canStartRepair
+        ? "play-circle-outline"
+        : "checkmark-circle-outline";
     const primaryAction = () => {
       if (!assigned) return assignToMe(issue);
       if (canStartRepair) return startRepair(issue);
       return markResolved(issue);
     };
-    const isPubliclyVisible = ["in_progress", "resolved", "under_investigation"].includes(issue.status);
+    const isPubliclyVisible = [
+      "in_progress",
+      "resolved",
+      "under_investigation",
+    ].includes(issue.status);
     const qrUrl = `${WEB_BASE_URL}/issue/${issue.id}/sticker-image`;
     const handleDownloadQr = async () => {
       setDownloadingQr(true);
@@ -586,7 +720,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
         }
       } catch (e) {
         console.error("QR download failed:", e);
-        Alert.alert("Download failed", "Could not download the QR code. Check your connection and try again.");
+        Alert.alert(
+          "Download failed",
+          "Could not download the QR code. Check your connection and try again.",
+        );
       } finally {
         setDownloadingQr(false);
       }
@@ -600,7 +737,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
           keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
         >
           <View style={styles.detailHeader}>
-            <Pressable onPress={() => setSelectedIssue(null)} style={styles.iconBtn}>
+            <Pressable
+              onPress={() => setSelectedIssue(null)}
+              style={styles.iconBtn}
+            >
               <Ionicons name="chevron-back" size={22} color={COLORS.navy} />
             </Pressable>
             <Text style={styles.detailHeaderTitle}>Report Details</Text>
@@ -610,8 +750,17 @@ export default function WorkerHomeScreen({ navigation, route }) {
           </View>
 
           {notice && (
-            <View style={[styles.noticeBox, notice.type === "success" && styles.noticeSuccess]}>
-              <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.green} />
+            <View
+              style={[
+                styles.noticeBox,
+                notice.type === "success" && styles.noticeSuccess,
+              ]}
+            >
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={18}
+                color={COLORS.green}
+              />
               <Text style={styles.noticeText}>{notice.message}</Text>
             </View>
           )}
@@ -621,242 +770,331 @@ export default function WorkerHomeScreen({ navigation, route }) {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-          {issue.image_url ? (
-            <Image source={{ uri: issue.image_url }} style={styles.detailImage} />
-          ) : (
-            <View style={styles.noImageBox}>
-              <Ionicons name="image-outline" size={30} color={COLORS.muted} />
-              <Text style={styles.noImageText}>No image attached yet</Text>
-            </View>
-          )}
-
-          <View style={styles.detailCard}>
-            <View style={styles.detailChips}>
-              <Text style={[styles.detailPriority, { color: priorityColor, borderColor: priorityColor }]}>
-                {issue.priority}
-              </Text>
-              <Text style={styles.statusPill}>{issueStatusLabel(issue)}</Text>
-              {formatDistance(issue) && <Text style={styles.statusPill}>{formatDistance(issue)}</Text>}
-              {(issue.upvotes_count ?? 0) > 0 && (
-                <Text style={styles.statusPill}>👥 {issue.upvotes_count} affected</Text>
-              )}
-            </View>
-
-            <Text style={styles.detailTitle}>{issue.title}</Text>
-            <Text style={styles.detailDescription}>{issue.description}</Text>
-          </View>
-
-          <View style={styles.detailCard}>
-            <Text style={styles.sectionTitle}>People</Text>
-            <View style={styles.infoRow}>
-              <Ionicons name="person-outline" size={18} color={COLORS.navy} />
-              <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Reported by</Text>
-                <Text style={styles.infoValue}>{reporter}</Text>
+            {issue.image_url ? (
+              <Image
+                source={{ uri: issue.image_url }}
+                style={styles.detailImage}
+              />
+            ) : (
+              <View style={styles.noImageBox}>
+                <Ionicons name="image-outline" size={30} color={COLORS.muted} />
+                <Text style={styles.noImageText}>No image attached yet</Text>
               </View>
-            </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="briefcase-outline" size={18} color={COLORS.orange} />
-              <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Assigned to</Text>
-                <Text style={styles.infoValue}>{assignee}</Text>
-              </View>
-            </View>
-          </View>
+            )}
 
-          {isOwnCitizenReport && (
-            <View style={[styles.detailCard, styles.conflictCard]}>
-              <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.danger} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.conflictTitle}>Assignment restricted</Text>
-                <Text style={styles.conflictText}>
-                  You submitted this report as a citizen, so it must be handled by another worker.
+            <View style={styles.detailCard}>
+              <View style={styles.detailChips}>
+                <Text
+                  style={[
+                    styles.detailPriority,
+                    { color: priorityColor, borderColor: priorityColor },
+                  ]}
+                >
+                  {issue.priority}
                 </Text>
+                <Text style={styles.statusPill}>{issueStatusLabel(issue)}</Text>
+                {formatDistance(issue) && (
+                  <Text style={styles.statusPill}>{formatDistance(issue)}</Text>
+                )}
+                {(issue.upvotes_count ?? 0) > 0 && (
+                  <Text style={styles.statusPill}>
+                    👥 {issue.upvotes_count} affected
+                  </Text>
+                )}
               </View>
-            </View>
-          )}
 
-          <View style={styles.detailCard}>
-            <Text style={styles.sectionTitle}>Report Info</Text>
-            <View style={styles.infoRow}>
-              <Ionicons name="business-outline" size={18} color={COLORS.navy} />
-              <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Category</Text>
-                <Text style={styles.infoValue}>{issue.category}</Text>
-              </View>
+              <Text style={styles.detailTitle}>{issue.title}</Text>
+              <Text style={styles.detailDescription}>{issue.description}</Text>
             </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={18} color={COLORS.orange} />
-              <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Location</Text>
-                <Text style={styles.infoValue}>{issue.location}</Text>
-              </View>
-            </View>
-            {issue.latitude && issue.longitude && (
+
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>People</Text>
               <View style={styles.infoRow}>
-                <Ionicons name="navigate-outline" size={18} color={COLORS.green} />
+                <Ionicons name="person-outline" size={18} color={COLORS.navy} />
                 <View style={styles.infoText}>
-                  <Text style={styles.infoLabel}>Coordinates</Text>
-                  <Text style={styles.infoValue}>
-                    {Number(issue.latitude).toFixed(5)}, {Number(issue.longitude).toFixed(5)}
+                  <Text style={styles.infoLabel}>Reported by</Text>
+                  <Text style={styles.infoValue}>{reporter}</Text>
+                </View>
+              </View>
+              <View style={styles.infoRow}>
+                <Ionicons
+                  name="briefcase-outline"
+                  size={18}
+                  color={COLORS.orange}
+                />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>Assigned to</Text>
+                  <Text style={styles.infoValue}>{assignee}</Text>
+                </View>
+              </View>
+            </View>
+
+            {isOwnCitizenReport && (
+              <View style={[styles.detailCard, styles.conflictCard]}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={20}
+                  color={COLORS.danger}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.conflictTitle}>
+                    Assignment restricted
+                  </Text>
+                  <Text style={styles.conflictText}>
+                    You submitted this report as a citizen, so it must be
+                    handled by another worker.
                   </Text>
                 </View>
               </View>
             )}
-          </View>
 
-          {issue.worker_resolution_note && (
             <View style={styles.detailCard}>
-              <Text style={styles.sectionTitle}>Worker Fix Description</Text>
-              <Text style={styles.detailDescription}>{issue.worker_resolution_note}</Text>
-            </View>
-          )}
-
-          {showFunding && (
-            <View style={styles.detailCard}>
-              <Text style={styles.sectionTitle}>Funding</Text>
-              <View style={styles.fundingSummaryRow}>
-                <View>
-                  <Text style={styles.fundingAmount}>{money(issue.funding_raised)} raised</Text>
-                  <Text style={styles.inputHint}>Goal: {money(issue.funding_goal)}</Text>
+              <Text style={styles.sectionTitle}>Report Info</Text>
+              <View style={styles.infoRow}>
+                <Ionicons
+                  name="business-outline"
+                  size={18}
+                  color={COLORS.navy}
+                />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>Category</Text>
+                  <Text style={styles.infoValue}>{issue.category}</Text>
                 </View>
-                <Text style={styles.statusPill}>{issueStatusLabel(issue)}</Text>
               </View>
-              {Number(issue.funding_goal || 0) > 0 && (
-                <>
-                  <View style={styles.progressTrack}>
-                    <View style={[styles.progressFill, { width: `${progress}%` }]} />
+              <View style={styles.infoRow}>
+                <Ionicons
+                  name="location-outline"
+                  size={18}
+                  color={COLORS.orange}
+                />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>Location</Text>
+                  <Text style={styles.infoValue}>{issue.location}</Text>
+                </View>
+              </View>
+              {issue.latitude && issue.longitude && (
+                <View style={styles.infoRow}>
+                  <Ionicons
+                    name="navigate-outline"
+                    size={18}
+                    color={COLORS.green}
+                  />
+                  <View style={styles.infoText}>
+                    <Text style={styles.infoLabel}>Coordinates</Text>
+                    <Text style={styles.infoValue}>
+                      {Number(issue.latitude).toFixed(5)},{" "}
+                      {Number(issue.longitude).toFixed(5)}
+                    </Text>
                   </View>
-                  <Text style={styles.inputHint}>{progress}% funded</Text>
-                </>
-              )}
-              {!!issue.estimated_cost && (
-                <Text style={styles.detailDescription}>Estimated repair cost: {money(issue.estimated_cost)}</Text>
-              )}
-              {!!issue.funding_request_note && (
-                <Text style={styles.detailDescription}>{issue.funding_request_note}</Text>
+                </View>
               )}
             </View>
-          )}
 
-          {canRequestFunding && (
-            <View style={styles.detailCard}>
-              <Text style={styles.sectionTitle}>Request Funding</Text>
-              <Text style={styles.inputHint}>Use this only when the issue is valid but cannot be repaired directly without budget approval.</Text>
-              <TextInput
-                value={fundingCost}
-                onChangeText={setFundingCost}
-                keyboardType="decimal-pad"
-                placeholder="Estimated cost"
-                placeholderTextColor="#94A3B8"
-                style={styles.fundingInput}
-              />
-              <TextInput
-                value={fundingRequestNote}
-                onChangeText={setFundingRequestNote}
-                placeholder="Explain why funding is needed"
-                placeholderTextColor="#94A3B8"
-                style={[styles.resolutionInput, { marginTop: 10 }]}
-                multiline
-                textAlignVertical="top"
-              />
+            {issue.worker_resolution_note && (
+              <View style={styles.detailCard}>
+                <Text style={styles.sectionTitle}>Worker Fix Description</Text>
+                <Text style={styles.detailDescription}>
+                  {issue.worker_resolution_note}
+                </Text>
+              </View>
+            )}
+
+            {showFunding && (
+              <View style={styles.detailCard}>
+                <Text style={styles.sectionTitle}>Funding</Text>
+                <View style={styles.fundingSummaryRow}>
+                  <View>
+                    <Text style={styles.fundingAmount}>
+                      {money(issue.funding_raised)} raised
+                    </Text>
+                    <Text style={styles.inputHint}>
+                      Goal: {money(issue.funding_goal)}
+                    </Text>
+                  </View>
+                  <Text style={styles.statusPill}>
+                    {issueStatusLabel(issue)}
+                  </Text>
+                </View>
+                {Number(issue.funding_goal || 0) > 0 && (
+                  <>
+                    <View style={styles.progressTrack}>
+                      <View
+                        style={[styles.progressFill, { width: `${progress}%` }]}
+                      />
+                    </View>
+                    <Text style={styles.inputHint}>{progress}% funded</Text>
+                  </>
+                )}
+                {!!issue.estimated_cost && (
+                  <Text style={styles.detailDescription}>
+                    Estimated repair cost: {money(issue.estimated_cost)}
+                  </Text>
+                )}
+                {!!issue.funding_request_note && (
+                  <Text style={styles.detailDescription}>
+                    {issue.funding_request_note}
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {canRequestFunding && (
+              <View style={styles.detailCard}>
+                <Text style={styles.sectionTitle}>Request Funding</Text>
+                <Text style={styles.inputHint}>
+                  Use this only when the issue is valid but cannot be repaired
+                  directly without budget approval.
+                </Text>
+                <TextInput
+                  value={fundingCost}
+                  onChangeText={setFundingCost}
+                  keyboardType="decimal-pad"
+                  placeholder="Estimated cost"
+                  placeholderTextColor="#94A3B8"
+                  style={styles.fundingInput}
+                />
+                <TextInput
+                  value={fundingRequestNote}
+                  onChangeText={setFundingRequestNote}
+                  placeholder="Explain why funding is needed"
+                  placeholderTextColor="#94A3B8"
+                  style={[styles.resolutionInput, { marginTop: 10 }]}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <Pressable
+                  onPress={() => requestFunding(issue)}
+                  disabled={busyIssueId === issue.id}
+                  style={[
+                    styles.fundingRequestBtn,
+                    busyIssueId === issue.id && { opacity: 0.55 },
+                  ]}
+                >
+                  {busyIssueId === issue.id ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="wallet-outline" size={18} color="#fff" />
+                      <Text style={styles.primaryActionText}>
+                        Send Funding Request
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            )}
+
+            {canResolve && (
+              <View style={styles.detailCard}>
+                <Text style={styles.sectionTitle}>Fix Description</Text>
+                <Text style={styles.inputHint}>
+                  Describe what you did before marking this report as resolved.
+                </Text>
+                <TextInput
+                  value={resolutionNote}
+                  onChangeText={setResolutionNote}
+                  placeholder="Example: Replaced the damaged streetlight bulb and tested the light."
+                  placeholderTextColor="#94A3B8"
+                  style={styles.resolutionInput}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <Text style={[styles.inputHint, { marginTop: 12 }]}>
+                  Resolution photo (required)
+                </Text>
+                {resolutionPhoto ? (
+                  <View style={styles.resolutionPhotoWrap}>
+                    <Image
+                      source={{ uri: resolutionPhoto.uri }}
+                      style={styles.resolutionPhotoPreview}
+                    />
+                    <Pressable
+                      style={styles.retakeResolutionBtn}
+                      onPress={captureResolutionPhoto}
+                    >
+                      <Ionicons name="camera" size={14} color={COLORS.navy} />
+                      <Text style={styles.retakeResolutionText}>Retake</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={styles.resolutionCameraBtn}
+                    onPress={captureResolutionPhoto}
+                  >
+                    <Ionicons
+                      name="camera-outline"
+                      size={18}
+                      color={COLORS.navy}
+                    />
+                    <Text style={styles.resolutionCameraBtnText}>
+                      Take Photo
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </ScrollView>
+
+          <View style={styles.detailActionBar}>
+            {assigned && issue.latitude && issue.longitude && (
               <Pressable
-                onPress={() => requestFunding(issue)}
+                onPress={() => openMapsNavigation(issue)}
+                style={styles.navigateAction}
+              >
+                <Ionicons
+                  name="navigate-outline"
+                  size={18}
+                  color={COLORS.navy}
+                />
+                <Text style={styles.navigateActionText}>Navigate</Text>
+              </Pressable>
+            )}
+            {isPubliclyVisible && (
+              <Pressable
+                onPress={() => {
+                  setQrImageStatus("loading");
+                  setQrVisible(true);
+                }}
+                style={styles.qrAction}
+              >
+                <Ionicons
+                  name="qr-code-outline"
+                  size={20}
+                  color={COLORS.navy}
+                />
+              </Pressable>
+            )}
+            {showPrimaryAction && (
+              <Pressable
+                onPress={primaryAction}
                 disabled={busyIssueId === issue.id}
-                style={[styles.fundingRequestBtn, busyIssueId === issue.id && { opacity: 0.55 }]}
+                style={[
+                  styles.primaryAction,
+                  canResolve && styles.resolveAction,
+                  busyIssueId === issue.id && { opacity: 0.55 },
+                ]}
               >
                 {busyIssueId === issue.id ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <>
-                    <Ionicons name="wallet-outline" size={18} color="#fff" />
-                    <Text style={styles.primaryActionText}>Send Funding Request</Text>
+                    <Ionicons name={primaryActionIcon} size={18} color="#fff" />
+                    <Text style={styles.primaryActionText}>
+                      {primaryActionLabel}
+                    </Text>
                   </>
                 )}
               </Pressable>
-            </View>
-          )}
-
-          {canResolve && (
-            <View style={styles.detailCard}>
-              <Text style={styles.sectionTitle}>Fix Description</Text>
-              <Text style={styles.inputHint}>Describe what you did before marking this report as resolved.</Text>
-              <TextInput
-                value={resolutionNote}
-                onChangeText={setResolutionNote}
-                placeholder="Example: Replaced the damaged streetlight bulb and tested the light."
-                placeholderTextColor="#94A3B8"
-                style={styles.resolutionInput}
-                multiline
-                textAlignVertical="top"
-              />
-              <Text style={[styles.inputHint, { marginTop: 12 }]}>Resolution photo (required)</Text>
-              {resolutionPhoto ? (
-                <View style={styles.resolutionPhotoWrap}>
-                  <Image source={{ uri: resolutionPhoto.uri }} style={styles.resolutionPhotoPreview} />
-                  <Pressable style={styles.retakeResolutionBtn} onPress={captureResolutionPhoto}>
-                    <Ionicons name="camera" size={14} color={COLORS.navy} />
-                    <Text style={styles.retakeResolutionText}>Retake</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable style={styles.resolutionCameraBtn} onPress={captureResolutionPhoto}>
-                  <Ionicons name="camera-outline" size={18} color={COLORS.navy} />
-                  <Text style={styles.resolutionCameraBtnText}>Take Photo</Text>
-                </Pressable>
-              )}
-            </View>
-          )}
-          </ScrollView>
-
-          <View style={styles.detailActionBar}>
-          {assigned && issue.latitude && issue.longitude && (
-            <Pressable
-              onPress={() => openMapsNavigation(issue)}
-              style={styles.navigateAction}
-            >
-              <Ionicons name="navigate-outline" size={18} color={COLORS.navy} />
-              <Text style={styles.navigateActionText}>Navigate</Text>
-            </Pressable>
-          )}
-          {isPubliclyVisible && (
-            <Pressable
-              onPress={() => { setQrImageStatus("loading"); setQrVisible(true); }}
-              style={styles.qrAction}
-            >
-              <Ionicons name="qr-code-outline" size={20} color={COLORS.navy} />
-            </Pressable>
-          )}
-          {showPrimaryAction && (
-            <Pressable
-              onPress={primaryAction}
-              disabled={busyIssueId === issue.id}
-              style={[
-                styles.primaryAction,
-                canResolve && styles.resolveAction,
-                busyIssueId === issue.id && { opacity: 0.55 },
-              ]}
-            >
-              {busyIssueId === issue.id ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Ionicons
-                    name={primaryActionIcon}
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={styles.primaryActionText}>
-                    {primaryActionLabel}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          )}
+            )}
           </View>
         </KeyboardAvoidingView>
 
-        <Modal visible={qrVisible} transparent animationType="fade" onRequestClose={() => setQrVisible(false)}>
+        <Modal
+          visible={qrVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setQrVisible(false)}
+        >
           <View style={styles.qrOverlay}>
             <View style={styles.qrCard}>
               <ScrollView
@@ -864,7 +1102,10 @@ export default function WorkerHomeScreen({ navigation, route }) {
                 showsVerticalScrollIndicator={false}
               >
                 <Text style={styles.sectionTitle}>Public Status QR Code</Text>
-                <Text style={styles.inputHint}>Anyone can scan this to view the report's public status — no login required.</Text>
+                <Text style={styles.inputHint}>
+                  Anyone can scan this to view the report's public status — no
+                  login required.
+                </Text>
                 <View style={styles.qrImageWrap}>
                   {qrImageStatus !== "error" && (
                     <Image
@@ -881,9 +1122,18 @@ export default function WorkerHomeScreen({ navigation, route }) {
                   )}
                   {qrImageStatus === "error" && (
                     <View style={styles.qrImageError}>
-                      <Ionicons name="cloud-offline-outline" size={26} color={COLORS.muted} />
-                      <Text style={styles.qrErrorText}>Couldn't load the QR code.</Text>
-                      <Pressable onPress={() => setQrImageStatus("loading")} style={styles.qrRetryBtn}>
+                      <Ionicons
+                        name="cloud-offline-outline"
+                        size={26}
+                        color={COLORS.muted}
+                      />
+                      <Text style={styles.qrErrorText}>
+                        Couldn't load the QR code.
+                      </Text>
+                      <Pressable
+                        onPress={() => setQrImageStatus("loading")}
+                        style={styles.qrRetryBtn}
+                      >
                         <Text style={styles.qrRetryText}>Retry</Text>
                       </Pressable>
                     </View>
@@ -892,18 +1142,30 @@ export default function WorkerHomeScreen({ navigation, route }) {
                 <Pressable
                   onPress={handleDownloadQr}
                   disabled={downloadingQr}
-                  style={[styles.qrDownloadBtn, downloadingQr && { opacity: 0.55 }]}
+                  style={[
+                    styles.qrDownloadBtn,
+                    downloadingQr && { opacity: 0.55 },
+                  ]}
                 >
                   {downloadingQr ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <>
-                      <Ionicons name="download-outline" size={18} color="#fff" />
-                      <Text style={styles.primaryActionText}>Download / Share</Text>
+                      <Ionicons
+                        name="download-outline"
+                        size={18}
+                        color="#fff"
+                      />
+                      <Text style={styles.primaryActionText}>
+                        Download / Share
+                      </Text>
                     </>
                   )}
                 </Pressable>
-                <Pressable onPress={() => setQrVisible(false)} style={styles.qrCloseBtn}>
+                <Pressable
+                  onPress={() => setQrVisible(false)}
+                  style={styles.qrCloseBtn}
+                >
                   <Text style={styles.navigateActionText}>Close</Text>
                 </Pressable>
               </ScrollView>
@@ -923,34 +1185,56 @@ export default function WorkerHomeScreen({ navigation, route }) {
             <Text style={styles.modePillText}>Worker Mode</Text>
           </View>
           <Text style={styles.title}>Field Work</Text>
-          <Text style={styles.subtitle}>Nearby unassigned reports and your assigned work.</Text>
+          <Text style={styles.subtitle}>
+            Nearby unassigned reports and your assigned work.
+          </Text>
         </View>
 
         <View style={styles.headerActions}>
           <Pressable
-            onPress={() => { setChatBadge(0); navigation.navigate("Chat"); }}
+            onPress={() => {
+              setChatBadge(0);
+              navigation.navigate("Chat");
+            }}
             style={styles.workerBellBtn}
           >
-            <Ionicons name="chatbubble-ellipses-outline" size={20} color={COLORS.navy} />
+            <Ionicons
+              name="chatbubble-ellipses-outline"
+              size={20}
+              color={COLORS.navy}
+            />
             {chatBadge > 0 && (
               <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>{chatBadge > 9 ? "9+" : chatBadge}</Text>
+                <Text style={styles.bellBadgeText}>
+                  {chatBadge > 9 ? "9+" : chatBadge}
+                </Text>
               </View>
             )}
           </Pressable>
           <Pressable
-            onPress={() => { navigation.navigate("Notifications", { role: "worker" }); setUnreadCount(0); }}
+            onPress={() => {
+              navigation.navigate("Notifications", { role: "worker" });
+              setUnreadCount(0);
+            }}
             style={styles.workerBellBtn}
           >
-            <Ionicons name="notifications-outline" size={20} color={COLORS.navy} />
+            <Ionicons
+              name="notifications-outline"
+              size={20}
+              color={COLORS.navy}
+            />
             {unreadCount > 0 && (
               <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                <Text style={styles.bellBadgeText}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
               </View>
             )}
           </Pressable>
           <Pressable
-            onPress={() => navigation.reset({ index: 0, routes: [{ name: "CitizenHome" }] })}
+            onPress={() =>
+              navigation.reset({ index: 0, routes: [{ name: "CitizenHome" }] })
+            }
             style={styles.citizenBtn}
           >
             <Ionicons name="person-outline" size={17} color={COLORS.navy} />
@@ -969,7 +1253,9 @@ export default function WorkerHomeScreen({ navigation, route }) {
             initialRegion={activeRegion}
             showsUserLocation
             showsMyLocationButton
-            onMapReady={() => mapRef.current?.animateToRegion(activeRegion, 500)}
+            onMapReady={() =>
+              mapRef.current?.animateToRegion(activeRegion, 500)
+            }
           >
             {/* GPS-radius circle overlay — disabled. Every worker now has an assigned
                 municipality (enforced in the admin panel), so nearbyMode is always
@@ -993,9 +1279,15 @@ export default function WorkerHomeScreen({ navigation, route }) {
               >
                 <Callout onPress={() => openIssue(issue, false)}>
                   <View style={styles.callout}>
-                    <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>
+                      {issue.title}
+                    </Text>
                     <Text style={styles.calloutMeta}>{issue.category}</Text>
-                    <Text style={[styles.calloutPriority, { color: "#EC9F4B" }]}>UNASSIGNED</Text>
+                    <Text
+                      style={[styles.calloutPriority, { color: "#EC9F4B" }]}
+                    >
+                      UNASSIGNED
+                    </Text>
                     <Text style={styles.calloutTap}>Tap to claim</Text>
                   </View>
                 </Callout>
@@ -1010,9 +1302,15 @@ export default function WorkerHomeScreen({ navigation, route }) {
               >
                 <Callout onPress={() => openIssue(issue, true)}>
                   <View style={styles.callout}>
-                    <Text style={styles.calloutTitle} numberOfLines={1}>{issue.title}</Text>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>
+                      {issue.title}
+                    </Text>
                     <Text style={styles.calloutMeta}>{issue.category}</Text>
-                    <Text style={[styles.calloutPriority, { color: "#4AA85C" }]}>MY ISSUE</Text>
+                    <Text
+                      style={[styles.calloutPriority, { color: "#4AA85C" }]}
+                    >
+                      MY ISSUE
+                    </Text>
                     <Text style={styles.calloutTap}>Tap to view details</Text>
                   </View>
                 </Callout>
@@ -1034,20 +1332,35 @@ export default function WorkerHomeScreen({ navigation, route }) {
           */}
           <View style={styles.radiusBadge}>
             <Ionicons
-              name={nearbyMode === "no_municipality" ? "warning-outline" : "business-outline"}
+              name={
+                nearbyMode === "no_municipality"
+                  ? "warning-outline"
+                  : "business-outline"
+              }
               size={14}
               color={COLORS.navy}
             />
             <Text style={styles.radiusText}>
-              {nearbyMode === "no_municipality" ? "No municipality" : (nearbyMunicipality || "Municipality")}
+              {nearbyMode === "no_municipality"
+                ? "No municipality"
+                : nearbyMunicipality || "Municipality"}
             </Text>
           </View>
 
           {assignedWithoutCoords > 0 && (
-            <Pressable style={styles.missingPinsBadge} onPress={() => setActiveView("assigned")}>
-              <Ionicons name="warning-outline" size={13} color={COLORS.orange} />
+            <Pressable
+              style={styles.missingPinsBadge}
+              onPress={() => setActiveView("assigned")}
+            >
+              <Ionicons
+                name="warning-outline"
+                size={13}
+                color={COLORS.orange}
+              />
               <Text style={styles.missingPinsText}>
-                {assignedWithoutCoords} assigned {assignedWithoutCoords === 1 ? "issue" : "issues"} not on map → View list
+                {assignedWithoutCoords} assigned{" "}
+                {assignedWithoutCoords === 1 ? "issue" : "issues"} not on map →
+                View list
               </Text>
             </Pressable>
           )}
@@ -1064,8 +1377,8 @@ export default function WorkerHomeScreen({ navigation, route }) {
                 {activeView === "assigned"
                   ? "Your assigned work."
                   : nearbyMode === "no_municipality"
-                  ? "No municipality assigned — contact your administrator."
-                  : `Unassigned reports in ${nearbyMunicipality || "your municipality"}.`}
+                    ? "No municipality assigned — contact your administrator."
+                    : `Unassigned reports in ${nearbyMunicipality || "your municipality"}.`}
               </Text>
             </View>
             <Pressable onPress={loadWorkerIssues} style={styles.iconBtn}>
@@ -1076,18 +1389,34 @@ export default function WorkerHomeScreen({ navigation, route }) {
           {activeView === "assigned" && (
             <View style={styles.workerTabsRow}>
               <Pressable
-                style={[styles.workerTab, workerTab === "active" && styles.workerTabActive]}
+                style={[
+                  styles.workerTab,
+                  workerTab === "active" && styles.workerTabActive,
+                ]}
                 onPress={() => setWorkerTab("active")}
               >
-                <Text style={[styles.workerTabText, workerTab === "active" && styles.workerTabTextActive]}>
+                <Text
+                  style={[
+                    styles.workerTabText,
+                    workerTab === "active" && styles.workerTabTextActive,
+                  ]}
+                >
                   Active ({activeAssigned.length})
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.workerTab, workerTab === "completed" && styles.workerTabActive]}
+                style={[
+                  styles.workerTab,
+                  workerTab === "completed" && styles.workerTabActive,
+                ]}
                 onPress={() => setWorkerTab("completed")}
               >
-                <Text style={[styles.workerTabText, workerTab === "completed" && styles.workerTabTextActive]}>
+                <Text
+                  style={[
+                    styles.workerTabText,
+                    workerTab === "completed" && styles.workerTabTextActive,
+                  ]}
+                >
                   Completed ({completedAssigned.length})
                 </Text>
               </Pressable>
@@ -1099,38 +1428,52 @@ export default function WorkerHomeScreen({ navigation, route }) {
               <ActivityIndicator size="large" color={COLORS.navy} />
             </View>
           ) : (
-            <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            >
               {reportList.length === 0 ? (
                 <View style={styles.emptyBox}>
                   <Ionicons
                     name={
-                      activeView !== "assigned" ? "map-outline"
-                      : workerTab === "completed" ? "checkmark-done-outline"
-                      : "clipboard-outline"
+                      activeView !== "assigned"
+                        ? "map-outline"
+                        : workerTab === "completed"
+                          ? "checkmark-done-outline"
+                          : "clipboard-outline"
                     }
                     size={30}
-                    color={workerTab === "completed" ? COLORS.green : COLORS.muted}
+                    color={
+                      workerTab === "completed" ? COLORS.green : COLORS.muted
+                    }
                   />
                   <Text style={styles.emptyTitle}>
                     {activeView !== "assigned"
-                      ? (nearbyMode === "no_municipality" ? "No municipality assigned" : "No nearby reports")
-                      : workerTab === "completed" ? "No completed reports yet"
-                      : "No active reports"}
+                      ? nearbyMode === "no_municipality"
+                        ? "No municipality assigned"
+                        : "No nearby reports"
+                      : workerTab === "completed"
+                        ? "No completed reports yet"
+                        : "No active reports"}
                   </Text>
                   {/* GPS-radius empty-state variant disabled — see radiusBadge comment above. */}
                   <Text style={styles.emptyText}>
                     {activeView !== "assigned"
-                      ? (nearbyMode === "no_municipality"
+                      ? nearbyMode === "no_municipality"
                         ? "You have no municipality assigned. Please contact your administrator."
-                        : `Unassigned issues in ${nearbyMunicipality || "your municipality"} will appear here.`)
+                        : `Unassigned issues in ${nearbyMunicipality || "your municipality"} will appear here.`
                       : workerTab === "completed"
-                      ? "Reports you mark as resolved will appear here."
-                      : "Reports you assign to yourself will appear here."}
+                        ? "Reports you mark as resolved will appear here."
+                        : "Reports you assign to yourself will appear here."}
                   </Text>
                 </View>
               ) : (
                 reportList.map((issue) => (
-                  <ReportCard key={issue.id} issue={issue} assigned={activeView === "assigned"} />
+                  <ReportCard
+                    key={issue.id}
+                    issue={issue}
+                    assigned={activeView === "assigned"}
+                  />
                 ))
               )}
             </ScrollView>
@@ -1168,18 +1511,36 @@ const styles = StyleSheet.create({
   },
   modePillText: { color: COLORS.navy, fontWeight: "900", fontSize: 11 },
   title: { color: COLORS.text, fontSize: 24, fontWeight: "900" },
-  subtitle: { color: COLORS.muted, fontWeight: "700", fontSize: 12, marginTop: 4 },
+  subtitle: {
+    color: COLORS.muted,
+    fontWeight: "700",
+    fontSize: 12,
+    marginTop: 4,
+  },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   workerBellBtn: {
-    width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.card,
-    borderWidth: 1, borderColor: COLORS.border,
-    alignItems: "center", justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
   bellBadge: {
-    position: "absolute", top: -4, right: -4,
-    minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center",
-    paddingHorizontal: 4, borderWidth: 2, borderColor: "#fff",
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: "#fff",
   },
   bellBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   citizenBtn: {
@@ -1284,10 +1645,20 @@ const styles = StyleSheet.create({
   },
   radiusText: { color: COLORS.navy, fontWeight: "900", fontSize: 12 },
   callout: { width: 190, padding: 8 },
-  calloutTitle: { color: COLORS.text, fontSize: 14, fontWeight: "900", marginBottom: 4 },
+  calloutTitle: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
   calloutMeta: { color: COLORS.muted, fontSize: 12, fontWeight: "700" },
   calloutPriority: { fontSize: 12, fontWeight: "900", marginTop: 2 },
-  calloutTap: { marginTop: 6, color: COLORS.navy, fontSize: 11, fontWeight: "800" },
+  calloutTap: {
+    marginTop: 6,
+    color: COLORS.navy,
+    fontSize: 11,
+    fontWeight: "800",
+  },
   listPage: { flex: 1 },
   listHeader: {
     flexDirection: "row",
@@ -1338,7 +1709,12 @@ const styles = StyleSheet.create({
     marginTop: 22,
   },
   emptyTitle: { color: COLORS.text, fontWeight: "900", marginTop: 10 },
-  emptyText: { color: COLORS.muted, fontWeight: "700", textAlign: "center", marginTop: 5 },
+  emptyText: {
+    color: COLORS.muted,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 5,
+  },
   reportCard: {
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -1353,7 +1729,12 @@ const styles = StyleSheet.create({
   },
   priorityDot: { width: 9, height: 9, borderRadius: 5 },
   reportTitle: { flex: 1, color: COLORS.text, fontSize: 16, fontWeight: "900" },
-  reportMeta: { marginTop: 7, color: COLORS.muted, fontWeight: "800", fontSize: 12 },
+  reportMeta: {
+    marginTop: 7,
+    color: COLORS.muted,
+    fontWeight: "800",
+    fontSize: 12,
+  },
   reportDescription: {
     marginTop: 8,
     color: COLORS.muted,
@@ -1445,8 +1826,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
   },
   conflictTitle: { color: COLORS.danger, fontSize: 14, fontWeight: "900" },
-  conflictText: { marginTop: 3, color: COLORS.muted, fontSize: 13, fontWeight: "700", lineHeight: 18 },
-  detailChips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  conflictText: {
+    marginTop: 3,
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  detailChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
   detailPriority: {
     fontSize: 11,
     fontWeight: "900",
@@ -1456,9 +1848,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
-  detailTitle: { color: COLORS.text, fontSize: 22, fontWeight: "900", lineHeight: 28 },
-  detailDescription: { color: COLORS.muted, fontWeight: "600", lineHeight: 21, marginTop: 10 },
-  sectionTitle: { color: COLORS.text, fontSize: 16, fontWeight: "900", marginBottom: 10 },
+  detailTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 28,
+  },
+  detailDescription: {
+    color: COLORS.muted,
+    fontWeight: "600",
+    lineHeight: 21,
+    marginTop: 10,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
   infoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1472,8 +1879,18 @@ const styles = StyleSheet.create({
   },
   infoText: { flex: 1 },
   infoLabel: { color: COLORS.muted, fontSize: 11, fontWeight: "900" },
-  infoValue: { color: COLORS.text, marginTop: 3, fontWeight: "900", lineHeight: 18 },
-  inputHint: { color: COLORS.muted, fontWeight: "700", lineHeight: 18, marginBottom: 10 },
+  infoValue: {
+    color: COLORS.text,
+    marginTop: 3,
+    fontWeight: "900",
+    lineHeight: 18,
+  },
+  inputHint: {
+    color: COLORS.muted,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginBottom: 10,
+  },
   fundingSummaryRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1526,16 +1943,35 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   resolutionCameraBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, height: 46, borderRadius: 14, borderWidth: 1,
-    borderColor: COLORS.border, backgroundColor: COLORS.bg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.bg,
   },
-  resolutionCameraBtnText: { color: COLORS.navy, fontWeight: "900", fontSize: 14 },
-  resolutionPhotoWrap: { borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: COLORS.border },
+  resolutionCameraBtnText: {
+    color: COLORS.navy,
+    fontWeight: "900",
+    fontSize: 14,
+  },
+  resolutionPhotoWrap: {
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   resolutionPhotoPreview: { width: "100%", height: 160 },
   retakeResolutionBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, paddingVertical: 10, backgroundColor: COLORS.bg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    backgroundColor: COLORS.bg,
   },
   retakeResolutionText: { color: COLORS.navy, fontWeight: "800", fontSize: 13 },
   detailActionBar: {
