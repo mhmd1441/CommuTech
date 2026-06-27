@@ -99,6 +99,21 @@ export const authApi = {
     }
   },
 
+  async setTokenAndFetchUser(token) {
+    try {
+      authToken = token;
+      const { data } = await api.get("/me");
+      authUser = data;
+      await AsyncStorage.setItem("auth_token", token);
+      await AsyncStorage.setItem("auth_user", JSON.stringify(data));
+      await AsyncStorage.setItem("remember_auth", "1");
+      return data;
+    } catch (error) {
+      authToken = null;
+      throw apiError(error);
+    }
+  },
+
   async logout() {
     try {
       const { data } = await api.post("/auth/logout");

@@ -16,7 +16,10 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import { authApi } from "../../services/api";
+import { WEB_BASE_URL } from "../../config";
 
 const COLORS = {
   navy: "#19405F",
@@ -37,6 +40,30 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const onGoogleLogin = async () => {
+    try {
+      setGoogleLoading(true);
+      setError("");
+      const returnUrl = Linking.createURL("auth");
+      const startUrl = `${WEB_BASE_URL}/api/auth/google/start?return_url=${encodeURIComponent(returnUrl)}`;
+      const result = await WebBrowser.openAuthSessionAsync(startUrl, returnUrl);
+      if (result.type === "success") {
+        const parsed = Linking.parse(result.url);
+        const token = parsed.queryParams?.token;
+        if (!token) { setError("Google login failed — no token received."); return; }
+        await authApi.setTokenAndFetchUser(token);
+        navigation.replace("CitizenHome");
+      } else if (result.type === "cancel") {
+        setError("Google sign-in was cancelled.");
+      }
+    } catch (e) {
+      setError(e.message || "Google login failed.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const shimmerX = useRef(new Animated.Value(-1)).current;
 
@@ -221,14 +248,11 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           <Pressable
-            onPress={() => {
-              Alert.alert(
-                "Google sign-in",
-                "Google login needs backend OAuth setup, so it is only a placeholder for now."
-              );
-            }}
+            onPress={onGoogleLogin}
+            disabled={googleLoading}
             style={({ pressed }) => [
               styles.googleBtn,
+              googleLoading && { opacity: 0.6 },
               pressed && { opacity: 0.9 },
             ]}
           >

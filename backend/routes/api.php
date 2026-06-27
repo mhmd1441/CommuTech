@@ -31,6 +31,8 @@ Route::prefix('auth')->group(function () {
         Route::post('/forgot-password', 'forgotPassword')->middleware('throttle:5,1');
         Route::post('/verify-otp', 'verifyOtp')->middleware('throttle:5,1');
         Route::post('/reset-password', 'resetPassword')->middleware('throttle:5,1');
+        Route::get('/google/start', 'googleStart');
+        Route::get('/google/callback', 'googleCallback');
     });
 
     Route::controller(EmailVerificationController::class)->prefix('email')->middleware('throttle:5,1')->group(function () {

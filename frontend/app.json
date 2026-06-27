@@ -2,6 +2,8 @@
   "expo": {
     "name": "CommuTech",
     "slug": "commutech",
+    "scheme": "commutech",
+    "owner": "mhmd1441",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./src/assets/commutech_logo.png",
@@ -29,6 +31,14 @@
     },
     "web": {
       "favicon": "./src/assets/commutech_logo.png"
+    },
+    "plugins": [
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ba66a7dc-b12f-46c3-899a-7d41ec707b48"
+      }
     }
   }
 }

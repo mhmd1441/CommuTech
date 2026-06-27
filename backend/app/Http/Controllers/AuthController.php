@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Http;
+use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
@@ -194,6 +196,98 @@ class AuthController extends Controller
         }
 
         return response()->json(['message' => 'Code verified.']);
+    }
+
+    public function googleStart(Request $request)
+    {
+        $returnUrl = $request->query('return_url', '');
+        $state     = \Str::random(40);
+        Cache::put("google_oauth_{$state}", $returnUrl, now()->addMinutes(10));
+
+        return Socialite::driver('google')
+            ->stateless()
+            ->with(['state' => $state])
+            ->redirect();
+    }
+
+    public function googleCallback(Request $request)
+    {
+        $state     = $request->query('state', '');
+        $returnUrl = Cache::pull("google_oauth_{$state}", '');
+
+        try {
+            $googleUser = Socialite::driver('google')->stateless()->user();
+        } catch (\Throwable $e) {
+            return response('<h3>Authentication failed. Please close this window and try again.</h3>', 400)
+                ->header('Content-Type', 'text/html');
+        }
+
+        $user = User::updateOrCreate(
+            ['email' => strtolower($googleUser->getEmail())],
+            [
+                'name'      => $googleUser->getName() ?? $googleUser->getEmail(),
+                'google_id' => $googleUser->getId(),
+                'password'  => Hash::make(\Str::random(24)),
+            ]
+        );
+
+        if (! $user->hasAnyRole(['citizen', 'worker', 'municipality'])) {
+            $user->syncRolesByName(['citizen']);
+        }
+
+        $token = $user->createToken('mobile')->plainTextToken;
+
+        if ($returnUrl) {
+            $sep = str_contains($returnUrl, '?') ? '&' : '?';
+            return redirect($returnUrl . $sep . 'token=' . urlencode($token));
+        }
+
+        return response()->json(['token' => $token]);
+    }
+
+    public function googleTokenLogin(Request $request)
+    {
+        $request->validate(['token' => ['required', 'string']]);
+
+        try {
+            // Exchange authorization code for access token
+            $tokenResponse = Http::post('https://oauth2.googleapis.com/token', [
+                'code'          => $request->token,
+                'client_id'     => config('services.google.client_id'),
+                'client_secret' => config('services.google.client_secret'),
+                'redirect_uri'  => 'https://auth.expo.io/@mhmd1441/commutech',
+                'grant_type'    => 'authorization_code',
+            ]);
+
+            if ($tokenResponse->failed()) {
+                return response()->json(['message' => 'Failed to exchange Google code.'], 401);
+            }
+
+            $accessToken = $tokenResponse->json()['access_token'];
+            $googleUser  = Socialite::driver('google')->stateless()->userFromToken($accessToken);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Invalid Google token.'], 401);
+        }
+
+        $user = User::updateOrCreate(
+            ['email' => strtolower($googleUser->getEmail())],
+            [
+                'name'      => $googleUser->getName() ?? $googleUser->getEmail(),
+                'google_id' => $googleUser->getId(),
+                'password'  => Hash::make(\Str::random(24)),
+            ]
+        );
+
+        if (! $user->hasAnyRole(['citizen', 'worker', 'municipality'])) {
+            $user->syncRolesByName(['citizen']);
+        }
+
+        return response()->json([
+            'message'      => 'Logged in successfully.',
+            'user'         => $user->load('roles'),
+            'access_token' => $user->createToken('mobile')->plainTextToken,
+            'token_type'   => 'Bearer',
+        ]);
     }
 
     public function resetPassword(Request $request)
