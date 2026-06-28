@@ -43,9 +43,12 @@ class IssueController extends Controller
             $query->where('user_id', $userId);
         }
 
+        $resolvedMunicipality = null;
+
         if (! empty($data['municipality'])) {
             // Direct municipality name supplied — skip PostGIS entirely
             $query->where('municipality_en', $data['municipality']);
+            $resolvedMunicipality = $data['municipality'];
         } elseif (isset($data['lat']) && isset($data['lng'])) {
             try {
                 $row = DB::selectOne(
@@ -56,6 +59,7 @@ class IssueController extends Controller
                 );
                 if ($row) {
                     $query->where('municipality_en', $row->name_en);
+                    $resolvedMunicipality = $row->name_en;
                 }
             } catch (\Throwable $e) {
                 \Log::warning('Municipality filter failed: ' . $e->getMessage());
@@ -83,7 +87,10 @@ class IssueController extends Controller
         $issues = $query->paginate(20);
         $issues->getCollection()->transform(fn (Issue $issue) => $this->withImpactAttributes($issue, $userId));
 
-        return response()->json($issues);
+        return response()->json([
+            ...$issues->toArray(),
+            'resolved_municipality' => $resolvedMunicipality,
+        ]);
     }
 
     public function store(Request $request)
