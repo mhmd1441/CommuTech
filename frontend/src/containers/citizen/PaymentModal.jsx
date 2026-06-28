@@ -86,6 +86,9 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
   // New PayPal form
   const [paypalEmail, setPaypalEmail] = useState("");
 
+  // Custom amount
+  const [customAmount, setCustomAmount] = useState("");
+
   // Save toggle
   const [saveMethod, setSaveMethod] = useState(false);
 
@@ -109,6 +112,7 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
     setSelectedType(null);
     setCardNumber(""); setExpiry(""); setCvv(""); setCardName("");
     setWalletPhone(""); setPaypalEmail("");
+    setCustomAmount("");
     setSaveMethod(false);
     setFormError("");
     setReference(""); setErrorMsg("");
@@ -127,12 +131,29 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
   };
 
   // ── Step: method selection ────────────────────────────────────────────────
+  const validateAmount = () => {
+    const val = parseFloat(customAmount);
+    const max = parseFloat(amountDue);
+    if (!customAmount || isNaN(val) || val <= 0) {
+      setFormError("Please enter a valid amount.");
+      return false;
+    }
+    if (val > max) {
+      setFormError(`Maximum you can contribute is $${max}.`);
+      return false;
+    }
+    setFormError("");
+    return true;
+  };
+
   const handleSelectSaved = (method) => {
+    if (!validateAmount()) return;
     setSelectedMethod({ saved: true, ...method });
     setStep("confirm");
   };
 
   const handleSelectNewType = (typeEntry) => {
+    if (!validateAmount()) return;
     setSelectedType(typeEntry);
     if (typeEntry.type === "card") setStep("new_card");
     else if (typeEntry.type === "paypal") setStep("new_wallet");
@@ -193,7 +214,7 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
     setStep("processing");
 
     try {
-      const payload = { amount: issue.remainingFundingAmount ?? issue.funding_goal - issue.funding_raised };
+      const payload = { amount: parseFloat(customAmount) };
 
       if (selectedMethod.saved) {
         payload.payment_method_id = selectedMethod.id;
@@ -230,8 +251,29 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
   // ─── Render steps ────────────────────────────────────────────────────────
   const renderMethod = () => (
     <View style={s.body}>
-      <Text style={s.amountLabel}>Amount due</Text>
-      <Text style={s.amountValue}>${amountDue}</Text>
+      <Text style={s.amountLabel}>How much would you like to contribute?</Text>
+      <View style={s.amountInputRow}>
+        <Text style={s.amountDollar}>$</Text>
+        <TextInput
+          style={s.amountInput}
+          value={customAmount}
+          onChangeText={(v) => {
+            setFormError("");
+            setCustomAmount(v.replace(/[^0-9.]/g, ""));
+          }}
+          keyboardType="decimal-pad"
+          placeholder={amountDue}
+          placeholderTextColor={C.muted}
+        />
+      </View>
+      <Text style={s.amountHint}>Remaining to fund: ${amountDue}</Text>
+
+      {!!formError && (
+        <View style={s.formErrorBox}>
+          <Ionicons name="alert-circle-outline" size={14} color={C.red} />
+          <Text style={s.formErrorText}>{formError}</Text>
+        </View>
+      )}
 
       {loadingMethods ? (
         <ActivityIndicator color={C.navy} style={{ marginVertical: 16 }} />
@@ -398,12 +440,12 @@ export default function PaymentModal({ visible, onClose, issue, onSuccess }) {
 
       <View style={s.confirmAmountRow}>
         <Text style={s.confirmAmountLabel}>Total</Text>
-        <Text style={s.confirmAmountValue}>${amountDue}</Text>
+        <Text style={s.confirmAmountValue}>${parseFloat(customAmount).toFixed(2)}</Text>
       </View>
 
       <Pressable style={[s.primaryBtn, { backgroundColor: C.green }]} onPress={handlePay}>
         <Ionicons name="lock-closed" size={14} color="#fff" style={{ marginRight: 6 }} />
-        <Text style={s.primaryText}>Pay ${amountDue}</Text>
+        <Text style={s.primaryText}>Pay ${parseFloat(customAmount).toFixed(2)}</Text>
       </Pressable>
     </View>
   );
@@ -525,8 +567,11 @@ const s = StyleSheet.create({
   body: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   centered: { alignItems: "center", paddingVertical: 32 },
 
-  amountLabel: { fontSize: 12, fontWeight: "700", color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 },
-  amountValue: { fontSize: 32, fontWeight: "900", color: C.navy, marginBottom: 16 },
+  amountLabel: { fontSize: 12, fontWeight: "700", color: C.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 },
+  amountInputRow: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 14, backgroundColor: C.bg, marginBottom: 6 },
+  amountDollar: { fontSize: 24, fontWeight: "900", color: C.navy, marginRight: 4 },
+  amountInput: { flex: 1, height: 56, fontSize: 28, fontWeight: "900", color: C.navy },
+  amountHint: { fontSize: 12, color: C.muted, fontWeight: "600", marginBottom: 10 },
 
   sectionLabel: { fontSize: 10, fontWeight: "800", color: C.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
 
