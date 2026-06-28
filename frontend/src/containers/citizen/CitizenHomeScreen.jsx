@@ -133,6 +133,21 @@ export default function CitizenHomeScreen({ navigation, route }) {
   const pendingRefreshRef = useRef(false);
   const communityModeRef = useRef(communityMode);
   useEffect(() => { communityModeRef.current = communityMode; }, [communityMode]);
+  // Tracks whichever municipality the GPS-fallback path last resolved to —
+  // only meaningful when no default municipality is set, since that case
+  // has its own direct getDefaultMunicipality() check instead.
+  const resolvedMunicipalityRef = useRef(null);
+  // Mirrors selectedFilter/userRegion so fetchIssues — including its own
+  // recursive retry call — always reads the latest value instead of
+  // whatever was captured in the closure of the invocation that started it.
+  const selectedFilterRef = useRef(selectedFilter);
+  const userRegionRef = useRef(userRegion);
+  useEffect(() => { selectedFilterRef.current = selectedFilter; }, [selectedFilter]);
+  useEffect(() => { userRegionRef.current = userRegion; }, [userRegion]);
+  // Bumped synchronously on every tab/filter tap. A fetch response is only
+  // applied if its captured version still matches — anything superseded
+  // by a later tap gets silently discarded instead of overwriting the screen.
+  const queryVersionRef = useRef(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -224,7 +239,12 @@ export default function CitizenHomeScreen({ navigation, route }) {
     issueChannel.bind("issue.created", (issue) => {
       if (!communityMode) return;
       const muni = getDefaultMunicipality();
-      if (muni && issue.municipality_en !== muni) return;
+      if (muni) {
+        if (issue.municipality_en !== muni) return;
+      } else {
+        const resolved = resolvedMunicipalityRef.current;
+        if (resolved && issue.municipality_en && issue.municipality_en !== resolved) return;
+      }
       setIssues((prev) => {
         if (prev.some((i) => i.id === issue.id)) return prev;
         return [issue, ...prev];
@@ -240,6 +260,7 @@ export default function CitizenHomeScreen({ navigation, route }) {
     }
     fetchingRef.current = true;
     pendingRefreshRef.current = false;
+    const myQueryVersion = queryVersionRef.current;
     try {
       if (!silent) setLoading(true);
       const params = {};
@@ -247,23 +268,35 @@ export default function CitizenHomeScreen({ navigation, route }) {
         const muni = getDefaultMunicipality();
         if (muni) {
           params.municipality = muni;
-        } else if (!userRegion) {
+        } else if (!userRegionRef.current) {
           if (!silent) setLoading(false);
           return;
         } else {
-          params.lat = userRegion.latitude;
-          params.lng = userRegion.longitude;
+          params.lat = userRegionRef.current.latitude;
+          params.lng = userRegionRef.current.longitude;
         }
       } else {
         params.mine = 1;
       }
-      if (selectedFilter !== "All") params.category = selectedFilter;
+      if (selectedFilterRef.current !== "All") params.category = selectedFilterRef.current;
       const { data } = await api.get("/issues", { params });
+      // A newer tab/filter tap superseded this request while it was in
+      // flight — discard the response instead of overwriting the screen.
+      if (myQueryVersion !== queryVersionRef.current) return;
       setIssues(data.data || []);
+      if (communityModeRef.current) {
+        resolvedMunicipalityRef.current = data.resolved_municipality || null;
+      }
     } catch (err) {
       console.error("Failed to fetch issues:", err);
     } finally {
-      setLoading(false);
+      // Only clear loading if this is still the current request AND nothing
+      // is queued behind it — otherwise the pending retry below owns the
+      // loading state from here, and clearing it now would let stale/empty
+      // content flash as "done" before the real data has actually arrived.
+      if (myQueryVersion === queryVersionRef.current && !pendingRefreshRef.current) {
+        setLoading(false);
+      }
       fetchingRef.current = false;
       // A second trigger arrived while we were fetching — run one final refresh
       if (pendingRefreshRef.current) {
@@ -371,13 +404,29 @@ export default function CitizenHomeScreen({ navigation, route }) {
         {/* Community / My Issues tab */}
         <View style={styles.modeTabs}>
           <Pressable
-            onPress={() => setCommunityMode(false)}
+            onPress={() => {
+              if (!communityMode) return; // already on My Issues — no-op, matches pre-fix behavior
+              queryVersionRef.current += 1;
+              setSelectedMarker(null);
+              setIssues([]);
+              resolvedMunicipalityRef.current = null;
+              setLoading(true);
+              setCommunityMode(false);
+            }}
             style={[styles.modeTab, !communityMode && styles.modeTabActive]}
           >
             <Text style={[styles.modeTabText, !communityMode && styles.modeTabTextActive]}>My Issues</Text>
           </Pressable>
           <Pressable
-            onPress={() => setCommunityMode(true)}
+            onPress={() => {
+              if (communityMode) return; // already on Community — no-op, matches pre-fix behavior
+              queryVersionRef.current += 1;
+              setSelectedMarker(null);
+              setIssues([]);
+              resolvedMunicipalityRef.current = null;
+              setLoading(true);
+              setCommunityMode(true);
+            }}
             style={[styles.modeTab, communityMode && styles.modeTabActive]}
           >
             <Ionicons name="people-outline" size={14} color={communityMode ? "#fff" : COLORS.navy} />
@@ -410,7 +459,15 @@ export default function CitizenHomeScreen({ navigation, route }) {
             return (
               <Pressable
                 key={filter}
-                onPress={() => setSelectedFilter(filter)}
+                onPress={() => {
+                  if (active) return; // already the selected filter — no-op, matches pre-fix behavior
+                  queryVersionRef.current += 1;
+                  setSelectedMarker(null);
+                  setIssues([]);
+                  resolvedMunicipalityRef.current = null;
+                  setLoading(true);
+                  setSelectedFilter(filter);
+                }}
                 style={[styles.filterChip, active && styles.filterChipActive]}
               >
                 <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{filter}</Text>
@@ -453,7 +510,7 @@ export default function CitizenHomeScreen({ navigation, route }) {
                 }
               }}
             >
-              {issuesWithCoords.map((issue) =>
+              {!loading && issuesWithCoords.map((issue) =>
                 issue.coords ? (
                   <Marker
                     key={issue.id}
@@ -486,7 +543,9 @@ export default function CitizenHomeScreen({ navigation, route }) {
             )}
 
             <View style={styles.mapFooter}>
-              <Text style={styles.mapFooterText}>{issuesWithCoords.length} open issues</Text>
+              {!loading && (
+                <Text style={styles.mapFooterText}>{issuesWithCoords.length} open issues</Text>
+              )}
               <Text style={styles.mapFooterText}>{locationStatus === "granted" ? "Your location" : "Lebanon"}</Text>
             </View>
           </View>
